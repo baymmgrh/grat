@@ -565,6 +565,124 @@ class ProductionApproval(db.Model):
         }
 
 
+class WeeklyProductionPlan(db.Model):
+    """Weekly Production Plan - Rencana produksi mingguan dari PPIC"""
+    __tablename__ = 'weekly_production_plans'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    
+    # Periode minggu
+    week_number = db.Column(db.Integer, nullable=False)  # 1-52
+    year = db.Column(db.Integer, nullable=False)
+    week_start = db.Column(db.Date, nullable=False)
+    week_end = db.Column(db.Date, nullable=False)
+    
+    # Status
+    status = db.Column(db.String(30), default='draft')  # draft, submitted, approved, in_progress, completed, cancelled
+    
+    # Approval
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    
+    # Notes
+    notes = db.Column(db.Text, nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    creator = db.relationship('User', foreign_keys=[created_by], backref='created_weekly_plans')
+    approver = db.relationship('User', foreign_keys=[approved_by], backref='approved_weekly_plans')
+    items = db.relationship('WeeklyProductionPlanItem', backref='plan', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def to_dict(self, include_items=True):
+        result = {
+            'id': self.id,
+            'plan_number': self.plan_number,
+            'week_number': self.week_number,
+            'year': self.year,
+            'week_start': self.week_start.isoformat() if self.week_start else None,
+            'week_end': self.week_end.isoformat() if self.week_end else None,
+            'status': self.status,
+            'created_by': self.created_by,
+            'creator_name': self.creator.full_name if self.creator else None,
+            'approved_by': self.approved_by,
+            'approver_name': self.approver.full_name if self.approver else None,
+            'approved_at': self.approved_at.isoformat() if self.approved_at else None,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'total_items': self.items.count(),
+            'total_quantity': sum(float(item.planned_quantity or 0) for item in self.items.all())
+        }
+        if include_items:
+            result['items'] = [item.to_dict() for item in self.items.all()]
+        return result
+
+
+class WeeklyProductionPlanItem(db.Model):
+    """Item dalam Weekly Production Plan"""
+    __tablename__ = 'weekly_production_plan_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    plan_id = db.Column(db.Integer, db.ForeignKey('weekly_production_plans.id'), nullable=False)
+    
+    # Produk yang akan diproduksi
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    
+    # Quantity
+    planned_quantity = db.Column(db.Numeric(15, 2), nullable=False)
+    uom = db.Column(db.String(20), default='pcs')
+    
+    # Priority
+    priority = db.Column(db.Integer, default=1)  # 1=highest
+    
+    # Tanggal produksi yang direncanakan dalam minggu
+    planned_date = db.Column(db.Date, nullable=True)
+    
+    # Machine yang direncanakan (optional)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
+    
+    # Material check status
+    material_status = db.Column(db.String(30), default='pending')  # pending, available, shortage
+    shortage_items = db.Column(db.Text, nullable=True)  # JSON string of shortage materials
+    
+    # Work Order yang dibuat dari item ini
+    work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=True)
+    
+    # Notes
+    notes = db.Column(db.Text, nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product = db.relationship('Product', backref='weekly_plan_items')
+    machine = db.relationship('Machine', backref='weekly_plan_items')
+    work_order = db.relationship('WorkOrder', backref='weekly_plan_item')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'plan_id': self.plan_id,
+            'product_id': self.product_id,
+            'product_code': self.product.code if self.product else None,
+            'product_name': self.product.name if self.product else None,
+            'planned_quantity': float(self.planned_quantity or 0),
+            'uom': self.uom,
+            'priority': self.priority,
+            'planned_date': self.planned_date.isoformat() if self.planned_date else None,
+            'machine_id': self.machine_id,
+            'machine_name': self.machine.name if self.machine else None,
+            'material_status': self.material_status,
+            'shortage_items': self.shortage_items,
+            'work_order_id': self.work_order_id,
+            'wo_number': self.work_order.wo_number if self.work_order else None,
+            'notes': self.notes
+        }
+
+
 class ProductChangeover(db.Model):
     """Product Changeover - Ganti produk di tengah produksi"""
     __tablename__ = 'product_changeovers'

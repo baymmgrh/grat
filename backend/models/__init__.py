@@ -10,7 +10,7 @@ from .product_excel_schema import ProductNew, ProductVersion
 from .warehouse import WarehouseZone, WarehouseLocation, Inventory, InventoryMovement
 from .sales import Customer, SalesOrder, SalesOrderItem, SalesForecast
 from .purchasing import Supplier, PurchaseOrder, PurchaseOrderItem, GoodsReceivedNote, GRNItem
-from .production import Machine, WorkOrder, ProductionRecord, BillOfMaterials, BOMItem, ProductionSchedule, ShiftProduction, DowntimeRecord
+from .production import Machine, WorkOrder, ProductionRecord, BillOfMaterials, BOMItem, ProductionSchedule, ShiftProduction, DowntimeRecord, WeeklyProductionPlan, WeeklyProductionPlanItem, ProductChangeover
 from .quality import QualityTest, QualityInspection, CAPA, QualityStandard
 from .shipping import ShippingOrder, ShippingItem, DeliveryTracking, LogisticsProvider
 from .returns import CustomerReturn, ReturnItem, ReturnQCRecord, ReturnDisposition
@@ -75,7 +75,7 @@ __all__ = [
     # Purchasing models
     'Supplier', 'PurchaseOrder', 'PurchaseOrderItem', 'GoodsReceivedNote', 'GRNItem',
     # Production models
-    'Machine', 'WorkOrder', 'ProductionRecord', 'BillOfMaterials', 'BOMItem', 'ProductionSchedule', 'ShiftProduction', 'DowntimeRecord',
+    'Machine', 'WorkOrder', 'ProductionRecord', 'BillOfMaterials', 'BOMItem', 'ProductionSchedule', 'ShiftProduction', 'DowntimeRecord', 'WeeklyProductionPlan', 'WeeklyProductionPlanItem', 'ProductChangeover',
     # Quality models
     'QualityTest', 'QualityInspection', 'CAPA', 'QualityStandard',
     # Shipping models

@@ -101,6 +101,8 @@ import ProductionApprovalList from './pages/Production/ProductionApprovalList'
 import ProductionApprovalDetail from './pages/Production/ProductionApprovalDetail'
 import ProductChangeover from './pages/Production/ProductChangeover'
 import ChangeoverList from './pages/Production/ChangeoverList'
+import WeeklyProductionPlan from './pages/Production/WeeklyProductionPlan'
+import WeeklyPlanDetail from './pages/Production/WeeklyPlanDetail'
 import QualityTestList from './pages/Quality/QualityTestList'
 import QualityTestForm from './pages/Quality/QualityTestForm'
 import QualityDashboardEnhanced from './pages/Quality/QualityDashboardEnhanced'
@@ -547,7 +549,8 @@ function App() {
         <Route path="production/work-orders/:id" element={<WorkOrderDetail />} />
         <Route path="production/work-orders/:id/edit" element={<WorkOrderEdit />} />
         <Route path="production/work-orders/:id/input" element={<WorkOrderProductionInput />} />
-        <Route path="production/scheduling" element={<ProductionScheduling />} />
+        <Route path="production/scheduling" element={<WeeklyProductionPlan />} />
+        <Route path="production/weekly-plans/:id" element={<WeeklyPlanDetail />} />
         <Route path="production/schedules/new" element={<Navigate to="/app/production/scheduling?new=true" replace />} />
         <Route path="production/records" element={<ProductionRecords />} />
         <Route path="production/records/new" element={<ProductionRecordForm />} />
