@@ -379,47 +379,71 @@ const UserManual: React.FC = () => {
       return (
         <div className="max-w-4xl mx-auto">
           {/* Breadcrumb */}
-          <nav className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-6">
-            <button onClick={() => navigate('/app/manual')} className="hover:text-blue-600 flex items-center gap-1">
+          <nav className="flex items-center gap-2 text-sm mb-6 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+            <button onClick={() => navigate('/app/manual')} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium">
               <HomeIcon className="h-4 w-4" />
               Manual
             </button>
-            <ChevronRightIcon className="h-4 w-4" />
-            <span>{currentArticle.category_name}</span>
-            <ChevronRightIcon className="h-4 w-4" />
-            <span className="text-gray-900 dark:text-white">{currentArticle.title}</span>
+            <ChevronRightIcon className="h-4 w-4 text-gray-400" />
+            <span className="text-gray-500">{currentArticle.category_name}</span>
+            <ChevronRightIcon className="h-4 w-4 text-gray-400" />
+            <span className="text-gray-900 dark:text-white font-medium">{currentArticle.title}</span>
           </nav>
 
           {/* Article Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+          <div className="mb-8 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-8 text-white shadow-xl">
+            <h1 className="text-3xl font-bold mb-4">
               {currentArticle.title}
             </h1>
             {currentArticle.summary && (
-              <p className="text-lg text-gray-600 dark:text-gray-400 mb-4">
+              <p className="text-lg text-blue-100 mb-6">
                 {currentArticle.summary}
               </p>
             )}
-            <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-              <span className="flex items-center gap-1">
+            <div className="flex items-center gap-6 text-sm text-blue-200">
+              <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-full">
                 <EyeIcon className="h-4 w-4" />
                 {currentArticle.view_count} views
               </span>
-              <span className="flex items-center gap-1">
+              <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1.5 rounded-full">
                 <ClockIcon className="h-4 w-4" />
                 {new Date(currentArticle.updated_at).toLocaleDateString('id-ID')}
               </span>
               {currentArticle.author && (
-                <span>Oleh: {currentArticle.author}</span>
+                <span className="bg-white/10 px-3 py-1.5 rounded-full">Oleh: {currentArticle.author}</span>
               )}
             </div>
           </div>
 
           {/* Article Content */}
-          <div className="prose prose-lg dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {currentArticle.content || ''}
-            </ReactMarkdown>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-100 dark:border-gray-700">
+            <div className="prose prose-lg dark:prose-invert max-w-none
+              prose-headings:scroll-mt-20
+              prose-h1:text-3xl prose-h1:font-extrabold prose-h1:text-gray-900 prose-h1:border-b-2 prose-h1:border-blue-500 prose-h1:pb-3 prose-h1:mb-6
+              prose-h2:text-2xl prose-h2:font-bold prose-h2:text-gray-800 prose-h2:border-b prose-h2:border-gray-200 prose-h2:pb-2 prose-h2:mt-8 prose-h2:mb-4
+              prose-h3:text-xl prose-h3:font-semibold prose-h3:text-gray-700 prose-h3:mt-6 prose-h3:mb-3
+              prose-h4:text-lg prose-h4:font-semibold prose-h4:text-gray-600
+              prose-p:text-gray-600 prose-p:leading-relaxed
+              prose-a:text-blue-600 prose-a:font-medium prose-a:no-underline hover:prose-a:underline
+              prose-strong:text-gray-900 prose-strong:font-semibold
+              prose-code:text-red-600 prose-code:bg-red-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-medium prose-code:before:content-none prose-code:after:content-none
+              prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-xl prose-pre:shadow-lg prose-pre:border prose-pre:border-gray-700
+              prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:rounded-r-lg prose-blockquote:py-3 prose-blockquote:px-4 prose-blockquote:not-italic prose-blockquote:text-blue-800
+              prose-ul:list-disc prose-ul:pl-6
+              prose-ol:list-decimal prose-ol:pl-6
+              prose-li:text-gray-600 prose-li:my-1
+              prose-table:border prose-table:border-gray-200 prose-table:rounded-lg prose-table:overflow-hidden
+              prose-thead:bg-gradient-to-r prose-thead:from-blue-600 prose-thead:to-indigo-600
+              prose-th:text-white prose-th:font-semibold prose-th:px-4 prose-th:py-3 prose-th:text-left
+              prose-td:px-4 prose-td:py-3 prose-td:border-b prose-td:border-gray-100
+              prose-tr:hover:bg-gray-50
+              prose-hr:border-gray-200 prose-hr:my-8
+              prose-img:rounded-lg prose-img:shadow-md
+            ">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {currentArticle.content || ''}
+              </ReactMarkdown>
+            </div>
           </div>
         </div>
       );
@@ -428,26 +452,41 @@ const UserManual: React.FC = () => {
     // Home view - show all categories
     return (
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <BookOpenIcon className="h-16 w-16 text-blue-600 mx-auto mb-4" />
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-4">
-            User Manual
-          </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-400">
-            Dokumentasi lengkap untuk sistem ERP PT. Gratia Makmur Sentosa
-          </p>
+        {/* Hero Section */}
+        <div className="text-center mb-12 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 rounded-3xl p-12 text-white shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full opacity-10">
+            <div className="absolute top-10 left-10 w-32 h-32 bg-white rounded-full blur-3xl"></div>
+            <div className="absolute bottom-10 right-10 w-40 h-40 bg-white rounded-full blur-3xl"></div>
+            <div className="absolute top-1/2 left-1/2 w-24 h-24 bg-white rounded-full blur-2xl"></div>
+          </div>
+          <div className="relative z-10">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-white/20 rounded-2xl mb-6 backdrop-blur-sm shadow-lg">
+              <BookOpenIcon className="h-10 w-10 text-white" />
+            </div>
+            <h1 className="text-4xl font-extrabold mb-4">
+              User Manual
+            </h1>
+            <p className="text-xl text-blue-100 max-w-2xl mx-auto">
+              Dokumentasi lengkap untuk sistem ERP PT. Gratia Makmur Sentosa
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-4 text-sm">
+              <span className="bg-white/20 px-4 py-2 rounded-full">{categories.length} Kategori</span>
+              <span className="bg-white/20 px-4 py-2 rounded-full">{articles.length} Artikel</span>
+              <span className="bg-white/20 px-4 py-2 rounded-full">{faqs.length} FAQ</span>
+            </div>
+          </div>
         </div>
 
         {/* Quick Search */}
-        <div className="max-w-2xl mx-auto mb-12">
+        <div className="max-w-2xl mx-auto mb-12 -mt-6 relative z-20">
           <div className="relative">
-            <MagnifyingGlassIcon className="absolute left-4 top-1/2 transform -translate-y-1/2 h-6 w-6 text-gray-400" />
+            <MagnifyingGlassIcon className="absolute left-5 top-1/2 transform -translate-y-1/2 h-6 w-6 text-blue-500" />
             <input
               type="text"
               placeholder="Cari panduan, tutorial, atau FAQ..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-lg shadow-sm"
+              className="w-full pl-14 pr-6 py-5 bg-white border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 text-lg shadow-xl transition-all"
             />
           </div>
         </div>
