@@ -338,7 +338,12 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
                   <tr key={wo.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{wo.wo_number}</div>
+                        <Link 
+                          to={`/app/production/work-orders/${wo.id}`}
+                          className="text-sm font-semibold text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                        >
+                          {wo.wo_number}
+                        </Link>
                         {wo.batch_number && (
                           <div className="text-xs text-gray-500 flex items-center mt-1">
                             <TagIcon className="h-3 w-3 mr-1" />
