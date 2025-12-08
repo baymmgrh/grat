@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import axios from '../../lib/axios';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   ArrowPathIcon,
   ExclamationTriangleIcon,
@@ -65,13 +65,13 @@ const ProductChangeover: React.FC = () => {
       setLoading(true);
       
       // Fetch current work order
-      const woResponse = await axios.get(`/api/production/work-orders/${woId}`);
+      const woResponse = await axiosInstance.get(`/api/production/work-orders/${woId}`);
       setCurrentWO(woResponse.data.work_order || woResponse.data);
       
       // Fetch available work orders for changeover
       if (woResponse.data.work_order?.machine_id || woResponse.data.machine_id) {
         const machineId = woResponse.data.work_order?.machine_id || woResponse.data.machine_id;
-        const availableResponse = await axios.get(`/api/production/machines/${machineId}/available-work-orders`);
+        const availableResponse = await axiosInstance.get(`/api/production/machines/${machineId}/available-work-orders`);
         setAvailableWOs(availableResponse.data.available_work_orders || []);
       }
       
@@ -94,7 +94,7 @@ const ProductChangeover: React.FC = () => {
       setSubmitting(true);
       setError(null);
       
-      const response = await axios.post(`/api/production/work-orders/${woId}/changeover`, {
+      const response = await axiosInstance.post(`/api/production/work-orders/${woId}/changeover`, {
         reason: form.reason,
         reason_detail: form.reason_detail,
         to_work_order_id: form.to_work_order_id,

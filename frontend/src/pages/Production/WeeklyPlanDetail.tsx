@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import axios from '../../lib/axios';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   CalendarDaysIcon,
   PlusIcon,
@@ -106,9 +106,9 @@ const WeeklyPlanDetail: React.FC = () => {
     try {
       setLoading(true);
       const [planRes, productsRes, machinesRes] = await Promise.all([
-        axios.get(`/api/production/weekly-plans/${id}`),
-        axios.get('/api/products'),
-        axios.get('/api/production/machines'),
+        axiosInstance.get(`/api/production/weekly-plans/${id}`),
+        axiosInstance.get('/api/products'),
+        axiosInstance.get('/api/production/machines'),
       ]);
       
       setPlan(planRes.data.weekly_plan);
@@ -128,7 +128,7 @@ const WeeklyPlanDetail: React.FC = () => {
         return;
       }
       
-      await axios.post(`/api/production/weekly-plans/${id}/items`, {
+      await axiosInstance.post(`/api/production/weekly-plans/${id}/items`, {
         product_id: parseInt(formData.product_id),
         planned_quantity: parseFloat(formData.planned_quantity),
         priority: formData.priority,
@@ -156,7 +156,7 @@ const WeeklyPlanDetail: React.FC = () => {
     if (!confirm('Hapus item ini?')) return;
     
     try {
-      await axios.delete(`/api/production/weekly-plans/${id}/items/${itemId}`);
+      await axiosInstance.delete(`/api/production/weekly-plans/${id}/items/${itemId}`);
       fetchData();
     } catch (error: any) {
       alert(error.response?.data?.error || 'Gagal menghapus item');
@@ -166,7 +166,7 @@ const WeeklyPlanDetail: React.FC = () => {
   const handleCheckMaterials = async () => {
     try {
       setCheckingMaterials(true);
-      const response = await axios.post(`/api/production/weekly-plans/${id}/check-materials`);
+      const response = await axiosInstance.post(`/api/production/weekly-plans/${id}/check-materials`);
       alert(`Material check selesai!\n\nTersedia: ${response.data.summary.available}\nKurang: ${response.data.summary.shortage}\nTanpa BOM: ${response.data.summary.no_bom}`);
       fetchData();
     } catch (error: any) {
@@ -178,7 +178,7 @@ const WeeklyPlanDetail: React.FC = () => {
 
   const handleSubmit = async () => {
     try {
-      await axios.post(`/api/production/weekly-plans/${id}/submit`);
+      await axiosInstance.post(`/api/production/weekly-plans/${id}/submit`);
       fetchData();
     } catch (error: any) {
       alert(error.response?.data?.error || 'Gagal submit');
@@ -187,7 +187,7 @@ const WeeklyPlanDetail: React.FC = () => {
 
   const handleApprove = async () => {
     try {
-      await axios.post(`/api/production/weekly-plans/${id}/approve`);
+      await axiosInstance.post(`/api/production/weekly-plans/${id}/approve`);
       fetchData();
     } catch (error: any) {
       alert(error.response?.data?.error || 'Gagal approve');
@@ -199,7 +199,7 @@ const WeeklyPlanDetail: React.FC = () => {
     
     try {
       setGeneratingWO(true);
-      const response = await axios.post(`/api/production/weekly-plans/${id}/generate-work-orders`);
+      const response = await axiosInstance.post(`/api/production/weekly-plans/${id}/generate-work-orders`);
       alert(`${response.data.work_orders.length} Work Order berhasil dibuat!`);
       fetchData();
     } catch (error: any) {
@@ -213,7 +213,7 @@ const WeeklyPlanDetail: React.FC = () => {
     if (!confirm('Hapus rencana produksi ini?')) return;
     
     try {
-      await axios.delete(`/api/production/weekly-plans/${id}`);
+      await axiosInstance.delete(`/api/production/weekly-plans/${id}`);
       navigate('/app/production/scheduling');
     } catch (error: any) {
       alert(error.response?.data?.error || 'Gagal menghapus');

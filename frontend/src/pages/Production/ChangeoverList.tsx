@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import axios from '../../lib/axios';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   ArrowPathIcon,
   CheckCircleIcon,
@@ -55,7 +55,7 @@ const ChangeoverList: React.FC = () => {
       const params = new URLSearchParams();
       if (statusFilter) params.append('status', statusFilter);
       
-      const response = await axios.get(`/api/production/changeovers?${params}`);
+      const response = await axiosInstance.get(`/api/production/changeovers?${params}`);
       setChangeovers(response.data.changeovers || []);
       setSummary(response.data.summary || { in_progress: 0, completed_today: 0 });
     } catch (error) {

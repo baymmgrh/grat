@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from '../../lib/axios';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   CalendarDaysIcon,
   PlusIcon,
@@ -65,7 +65,7 @@ const WeeklyProductionPlan: React.FC = () => {
 
   const fetchCurrentWeek = async () => {
     try {
-      const response = await axios.get('/api/production/current-week');
+      const response = await axiosInstance.get('/api/production/current-week');
       setCurrentWeek(response.data);
       setNewPlanWeek(response.data.week_number);
     } catch (error) {
@@ -76,7 +76,7 @@ const WeeklyProductionPlan: React.FC = () => {
   const fetchPlans = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`/api/production/weekly-plans?year=${selectedYear}`);
+      const response = await axiosInstance.get(`/api/production/weekly-plans?year=${selectedYear}`);
       setPlans(response.data.weekly_plans || []);
     } catch (error) {
       console.error('Error fetching plans:', error);
@@ -88,7 +88,7 @@ const WeeklyProductionPlan: React.FC = () => {
   const handleCreatePlan = async () => {
     try {
       setCreating(true);
-      const response = await axios.post('/api/production/weekly-plans', {
+      const response = await axiosInstance.post('/api/production/weekly-plans', {
         year: selectedYear,
         week_number: newPlanWeek,
       });
