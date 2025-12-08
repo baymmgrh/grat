@@ -417,29 +417,7 @@ const UserManual: React.FC = () => {
 
           {/* Article Content */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-100 dark:border-gray-700">
-            <div className="prose prose-lg dark:prose-invert max-w-none
-              prose-headings:scroll-mt-20
-              prose-h1:text-3xl prose-h1:font-extrabold prose-h1:text-gray-900 prose-h1:border-b-2 prose-h1:border-blue-500 prose-h1:pb-3 prose-h1:mb-6
-              prose-h2:text-2xl prose-h2:font-bold prose-h2:text-gray-800 prose-h2:border-b prose-h2:border-gray-200 prose-h2:pb-2 prose-h2:mt-8 prose-h2:mb-4
-              prose-h3:text-xl prose-h3:font-semibold prose-h3:text-gray-700 prose-h3:mt-6 prose-h3:mb-3
-              prose-h4:text-lg prose-h4:font-semibold prose-h4:text-gray-600
-              prose-p:text-gray-600 prose-p:leading-relaxed
-              prose-a:text-blue-600 prose-a:font-medium prose-a:no-underline hover:prose-a:underline
-              prose-strong:text-gray-900 prose-strong:font-semibold
-              prose-code:text-red-600 prose-code:bg-red-50 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm prose-code:font-medium prose-code:before:content-none prose-code:after:content-none
-              prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:rounded-xl prose-pre:shadow-lg prose-pre:border prose-pre:border-gray-700
-              prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:bg-blue-50 prose-blockquote:rounded-r-lg prose-blockquote:py-3 prose-blockquote:px-4 prose-blockquote:not-italic prose-blockquote:text-blue-800
-              prose-ul:list-disc prose-ul:pl-6
-              prose-ol:list-decimal prose-ol:pl-6
-              prose-li:text-gray-600 prose-li:my-1
-              prose-table:border prose-table:border-gray-200 prose-table:rounded-lg prose-table:overflow-hidden
-              prose-thead:bg-gradient-to-r prose-thead:from-blue-600 prose-thead:to-indigo-600
-              prose-th:text-white prose-th:font-semibold prose-th:px-4 prose-th:py-3 prose-th:text-left
-              prose-td:px-4 prose-td:py-3 prose-td:border-b prose-td:border-gray-100
-              prose-tr:hover:bg-gray-50
-              prose-hr:border-gray-200 prose-hr:my-8
-              prose-img:rounded-lg prose-img:shadow-md
-            ">
+            <div className="manual-content">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {currentArticle.content || ''}
               </ReactMarkdown>
