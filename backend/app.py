@@ -164,6 +164,10 @@ def create_app(config_class=Config):
     from routes.weekly_production_plan import weekly_plan_bp
     app.register_blueprint(weekly_plan_bp, url_prefix='/api/production')
     
+    # Import and register Schedule Grid blueprint
+    from routes.schedule_grid import schedule_grid_bp
+    app.register_blueprint(schedule_grid_bp, url_prefix='/api/production')
+    
     # Import and register KPI Targets blueprint
     from routes.kpi_targets import kpi_targets_bp
     app.register_blueprint(kpi_targets_bp, url_prefix='/api/kpi-targets')
