@@ -791,7 +791,9 @@ function App() {
         {/* User Manual */}
         <Route path="manual" element={<UserManual />} />
         <Route path="manual/faq" element={<FAQPage />} />
+        <Route path="manual/article" element={<UserManual />} />
         <Route path="manual/article/:articleSlug" element={<UserManual />} />
+        <Route path="manual/category/:categorySlug" element={<UserManual />} />
         <Route path="manual/admin" element={<AdminRoute><ManualAdmin /></AdminRoute>} />
         
         {/* Group Chat */}
