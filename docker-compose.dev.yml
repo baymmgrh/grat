@@ -1,0 +1,78 @@
+version: '3.8'
+
+# Development Docker Compose with hot-reload
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:15-alpine
+    container_name: erp_database_dev
+    environment:
+      POSTGRES_DB: erp_database_dev
+      POSTGRES_USER: erp_user
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - erp_network_dev
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: erp_redis_dev
+    command: redis-server --requirepass dev_redis_password
+    ports:
+      - "6379:6379"
+    networks:
+      - erp_network_dev
+
+  # Flask Backend (Development with hot-reload)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: erp_backend_dev
+    environment:
+      DATABASE_URL: postgresql://erp_user:dev_password@database:5432/erp_database_dev
+      REDIS_URL: redis://:dev_redis_password@redis:6379/0
+      FLASK_ENV: development
+      FLASK_DEBUG: 1
+      SECRET_KEY: dev-secret-key
+      JWT_SECRET_KEY: dev-jwt-secret-key
+    volumes:
+      - ./backend:/app
+    ports:
+      - "5000:5000"
+    depends_on:
+      - database
+      - redis
+    networks:
+      - erp_network_dev
+    command: flask run --host=0.0.0.0 --port=5000 --reload
+
+  # React Frontend (Development with hot-reload)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: erp_frontend_dev
+    environment:
+      - VITE_API_URL=http://localhost:5000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - erp_network_dev
+    command: npm run dev -- --host
+
+volumes:
+  postgres_data_dev:
+
+networks:
+  erp_network_dev:
+    driver: bridge

@@ -1,0 +1,194 @@
+PROPRIETARY SOFTWARE LICENSE AGREEMENT
+
+ERP Flask - Enterprise Resource Planning System
+Copyright (c) 2024-2025 Bayu Adhie. All Rights Reserved.
+Developed for PT. Gratia Makmur Sentosa
+
+================================================================================
+
+IMPORTANT: READ CAREFULLY BEFORE USING THIS SOFTWARE
+
+This Proprietary Software License Agreement ("Agreement") is a legal agreement 
+between you (either an individual or a single entity, referred to herein as 
+"Licensee" or "You") and PT. Gratia Makmur Sentosa ("Licensor", "We", "Us", or 
+"Company") for the ERP Flask software product, which includes computer software 
+and may include associated media, printed materials, and online or electronic 
+documentation ("Software").
+
+BY INSTALLING, COPYING, OR OTHERWISE USING THE SOFTWARE, YOU AGREE TO BE BOUND 
+BY THE TERMS OF THIS AGREEMENT. IF YOU DO NOT AGREE TO THE TERMS OF THIS 
+AGREEMENT, DO NOT INSTALL OR USE THE SOFTWARE.
+
+================================================================================
+
+1. GRANT OF LICENSE
+
+Subject to the terms and conditions of this Agreement, Licensor grants Licensee 
+a limited, non-exclusive, non-transferable license to:
+
+   a) EVALUATION LICENSE (Free)
+      - View and evaluate the source code
+      - Run the software for evaluation purposes only
+      - Duration: 30 days from first use
+      - NOT for production or commercial use
+
+   b) COMMERCIAL LICENSE (Paid)
+      - Use the software for commercial purposes
+      - Deploy in production environments
+      - Receive technical support and updates
+      - Requires separate commercial license agreement
+
+================================================================================
+
+2. RESTRICTIONS
+
+Licensee shall NOT:
+
+   a) Sell, sublicense, rent, lease, or lend the Software to any third party
+   
+   b) Modify, adapt, translate, reverse engineer, decompile, disassemble, or 
+      create derivative works based on the Software without prior written 
+      consent from Licensor
+   
+   c) Remove or alter any proprietary notices, labels, or marks on the Software
+   
+   d) Use the Software to develop a competing product or service
+   
+   e) Use the Software in any way that violates applicable laws or regulations
+   
+   f) Distribute, publish, or make the Software available to third parties 
+      without explicit written permission from Licensor
+   
+   g) Use the Software for any illegal, harmful, or unethical purposes
+   
+   h) Claim ownership of the Software or any part thereof
+
+================================================================================
+
+3. INTELLECTUAL PROPERTY
+
+   a) The Software is protected by copyright laws and international treaty 
+      provisions. Licensor retains all intellectual property rights in the 
+      Software.
+   
+   b) This Agreement does not grant Licensee any rights to trademarks, service 
+      marks, or trade names of Licensor.
+   
+   c) All title and copyrights in and to the Software, including but not 
+      limited to any images, photographs, animations, video, audio, music, 
+      text, and "applets" incorporated into the Software, are owned by 
+      Licensor.
+
+================================================================================
+
+4. CONFIDENTIALITY
+
+   a) Licensee acknowledges that the Software contains trade secrets and 
+      proprietary information of Licensor.
+   
+   b) Licensee agrees to maintain the confidentiality of the Software and not 
+      to disclose any part of it to third parties without prior written 
+      consent from Licensor.
+   
+   c) This confidentiality obligation shall survive the termination of this 
+      Agreement.
+
+================================================================================
+
+5. WARRANTY DISCLAIMER
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR 
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER 
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, 
+OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
+SOFTWARE.
+
+================================================================================
+
+6. LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, 
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
+OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING 
+IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY 
+OF SUCH DAMAGE.
+
+================================================================================
+
+7. TERMINATION
+
+   a) This Agreement is effective until terminated.
+   
+   b) Licensor may terminate this Agreement immediately if Licensee breaches 
+      any provision of this Agreement.
+   
+   c) Upon termination, Licensee must destroy all copies of the Software in 
+      their possession.
+   
+   d) Sections 3, 4, 5, 6, and 8 shall survive termination of this Agreement.
+
+================================================================================
+
+8. GOVERNING LAW
+
+This Agreement shall be governed by and construed in accordance with the laws 
+of the Republic of Indonesia, without regard to its conflict of law provisions. 
+Any disputes arising under this Agreement shall be resolved in the courts of 
+Tangerang, Banten, Indonesia.
+
+================================================================================
+
+9. COMMERCIAL LICENSING
+
+For commercial use, please contact us to obtain a commercial license:
+
+   Company  : PT. Gratia Makmur Sentosa
+   Email    : licensing@gratiamakmursentosa.com
+   Website  : https://gratiamakmursentosa.com
+   Address  : Tangerang, Banten, Indonesia
+
+Commercial licenses include:
+   - Single Server License
+   - Multi-Server License  
+   - Enterprise License (Unlimited)
+   - SaaS/Cloud License
+   - OEM License
+
+================================================================================
+
+10. ENTIRE AGREEMENT
+
+This Agreement constitutes the entire agreement between the parties with 
+respect to the use of the Software and supersedes all prior or contemporaneous 
+understandings regarding such subject matter.
+
+================================================================================
+
+11. AMENDMENTS
+
+Licensor reserves the right to modify this Agreement at any time. Continued use 
+of the Software after any such changes shall constitute Licensee's consent to 
+such changes.
+
+================================================================================
+
+12. CONTACT INFORMATION
+
+PT. Gratia Makmur Sentosa
+Tangerang, Banten, Indonesia
+
+General Inquiries  : info@gratiamakmursentosa.com
+Licensing          : licensing@gratiamakmursentosa.com
+Technical Support  : support@gratiamakmursentosa.com
+Website            : https://gratiamakmursentosa.com
+
+================================================================================
+
+Copyright (c) 2024-2025 Bayu Adhie. All Rights Reserved.
+
+Last Updated: December 2025

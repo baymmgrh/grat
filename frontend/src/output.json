@@ -1,0 +1,577 @@
+[
+  {
+    "file": "pages\\Finance\\BudgetForm.tsx",
+    "lineNumber": 396,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Finance\\BudgetForm.tsx",
+    "lineNumber": 500,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Finance\\BudgetForm.tsx",
+    "lineNumber": 508,
+    "line": "<Building className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Finance\\ExpenseForm.tsx",
+    "lineNumber": 317,
+    "line": "<Receipt className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Finance\\ExpenseForm.tsx",
+    "lineNumber": 333,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Finance\\ExpenseForm.tsx",
+    "lineNumber": 350,
+    "line": "<Building className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Finance\\ExpenseForm.tsx",
+    "lineNumber": 591,
+    "line": "<Upload className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\AppraisalForm.tsx",
+    "lineNumber": 283,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\AppraisalForm.tsx",
+    "lineNumber": 390,
+    "line": "<MessageSquare className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\AppraisalForm.tsx",
+    "lineNumber": 465,
+    "line": "<Target className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\AttendanceForm.tsx",
+    "lineNumber": 321,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\AttendanceForm.tsx",
+    "lineNumber": 445,
+    "line": "<Timer className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\LeaveForm.tsx",
+    "lineNumber": 395,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\PayrollForm.tsx",
+    "lineNumber": 345,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\HR\\PayrollForm.tsx",
+    "lineNumber": 557,
+    "line": "<Minus className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceAnalyticsForm.tsx",
+    "lineNumber": 339,
+    "line": "<Wrench className=\"h-8 w-8 text-blue-600\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 230,
+    "line": "<RefreshCw className=\"h-4 w-4 inline mr-2\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 244,
+    "line": "<Wrench className=\"h-6 w-6 text-blue-600\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 261,
+    "line": "<Activity className=\"h-6 w-6 text-green-600\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 265,
+    "line": "<ArrowUpRight className=\"h-4 w-4 text-green-500 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 281,
+    "line": "<ArrowDownRight className=\"h-4 w-4 text-green-500 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 351,
+    "line": "<AlertTriangle className=\"h-5 w-5 text-gray-400\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 383,
+    "line": "<Settings className=\"h-5 w-5 text-gray-400\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 388,
+    "line": "<Calendar className=\"mx-auto h-12 w-12 text-gray-400 mb-4\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 454,
+    "line": "<Activity className=\"mx-auto h-12 w-12 text-gray-400 mb-4\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceDashboardEnhanced.tsx",
+    "lineNumber": 508,
+    "line": "<AlertTriangle className=\"h-5 w-5 text-gray-400 mr-2\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenancePartsForm.tsx",
+    "lineNumber": 255,
+    "line": "<AlertTriangle className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenancePartsForm.tsx",
+    "lineNumber": 427,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceRequestForm.tsx",
+    "lineNumber": 318,
+    "line": "<AlertTriangle className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceRequestForm.tsx",
+    "lineNumber": 326,
+    "line": "<Settings className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceRequestForm.tsx",
+    "lineNumber": 354,
+    "line": "<Wrench className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceRequestForm.tsx",
+    "lineNumber": 374,
+    "line": "<AlertTriangle className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceRequestForm.tsx",
+    "lineNumber": 394,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceWorkOrderForm.tsx",
+    "lineNumber": 257,
+    "line": "<AlertTriangle className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceWorkOrderForm.tsx",
+    "lineNumber": 265,
+    "line": "<Settings className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceWorkOrderForm.tsx",
+    "lineNumber": 499,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Maintenance\\MaintenanceWorkOrderForm.tsx",
+    "lineNumber": 550,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Materials\\MaterialsDashboard.tsx",
+    "lineNumber": 173,
+    "line": "<AlertTriangle className=\"h-5 w-5 text-yellow-600\" />"
+  },
+  {
+    "file": "pages\\Materials\\MaterialsDashboard.tsx",
+    "lineNumber": 189,
+    "line": "<Activity className=\"h-5 w-5 text-purple-600\" />"
+  },
+  {
+    "file": "pages\\Materials\\MaterialsDashboard.tsx",
+    "lineNumber": 319,
+    "line": "<AlertTriangle className=\"h-8 w-8 text-yellow-600 mb-2\" />"
+  },
+  {
+    "file": "pages\\Materials\\MaterialsList.tsx",
+    "lineNumber": 162,
+    "line": "<Search className=\"absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Materials\\MaterialsList.tsx",
+    "lineNumber": 264,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 218,
+    "line": "<Alert className={message.type === 'success' ? 'border-green-500 bg-green-50' : 'border-red-500 bg-red-50'}>"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 230,
+    "line": "<CardTitle className=\"flex items-center gap-2\">"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 231,
+    "line": "<Factory className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 235,
+    "line": "<CardContent className=\"space-y-4\">"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 313,
+    "line": "<CardTitle className=\"flex items-center gap-2\">"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 318,
+    "line": "<CardContent className=\"space-y-4\">"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 378,
+    "line": "<CardTitle className=\"flex items-center gap-2\">"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 379,
+    "line": "<AlertTriangle className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 383,
+    "line": "<CardContent className=\"space-y-4\">"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 411,
+    "line": "<CardTitle className=\"flex items-center gap-2\">"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 412,
+    "line": "<Wrench className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Production\\DowntimeInput.tsx",
+    "lineNumber": 416,
+    "line": "<CardContent className=\"space-y-4\">"
+  },
+  {
+    "file": "pages\\Production\\ProductionInput.tsx",
+    "lineNumber": 307,
+    "line": "<Factory className=\"h-8 w-8 text-blue-600\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionInput.tsx",
+    "lineNumber": 315,
+    "line": "<AlertTriangle className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionInput.tsx",
+    "lineNumber": 338,
+    "line": "{message.type === 'warning' && <AlertTriangle className=\"h-5 w-5\" />}"
+  },
+  {
+    "file": "pages\\Production\\ProductionInput.tsx",
+    "lineNumber": 351,
+    "line": "<Calendar className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionInput.tsx",
+    "lineNumber": 454,
+    "line": "<Target className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionInput.tsx",
+    "lineNumber": 783,
+    "line": "<RefreshCw className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionInput.tsx",
+    "lineNumber": 806,
+    "line": "<RefreshCw className=\"h-4 w-4 animate-spin\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionScheduleForm.tsx",
+    "lineNumber": 283,
+    "line": "<Settings className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionScheduleForm.tsx",
+    "lineNumber": 354,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Production\\ProductionScheduleForm.tsx",
+    "lineNumber": 370,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Production\\QualityCheckForm.tsx",
+    "lineNumber": 227,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Production\\QualityCheckForm.tsx",
+    "lineNumber": 413,
+    "line": "{formData.result === 'rework' && <AlertTriangle className=\"h-5 w-5 text-orange-600\" />}"
+  },
+  {
+    "file": "pages\\Products\\BOMForm.tsx",
+    "lineNumber": 413,
+    "line": "<Layers className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Products\\BOMForm.tsx",
+    "lineNumber": 476,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Products\\BOMForm.tsx",
+    "lineNumber": 556,
+    "line": "<Settings className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Products\\BOMForm.tsx",
+    "lineNumber": 724,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\GRNForm.tsx",
+    "lineNumber": 338,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\GRNForm.tsx",
+    "lineNumber": 370,
+    "line": "<Truck className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\GRNForm.tsx",
+    "lineNumber": 428,
+    "line": "{isPartialReceived && <AlertTriangle className=\"h-5 w-5 text-yellow-500\" />}"
+  },
+  {
+    "file": "pages\\Purchasing\\RFQForm.tsx",
+    "lineNumber": 296,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\RFQForm.tsx",
+    "lineNumber": 311,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\RFQForm.tsx",
+    "lineNumber": 355,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\SupplierQuoteForm.tsx",
+    "lineNumber": 338,
+    "line": "<Building className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\SupplierQuoteForm.tsx",
+    "lineNumber": 381,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Purchasing\\SupplierQuoteForm.tsx",
+    "lineNumber": 497,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\RD\\ProjectDetailsForm.tsx",
+    "lineNumber": 337,
+    "line": "<AlertTriangle className=\"h-5 w-5\" />"
+  },
+  {
+    "file": "pages\\RD\\ProjectDetailsForm.tsx",
+    "lineNumber": 345,
+    "line": "<Beaker className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\RD\\ProjectDetailsForm.tsx",
+    "lineNumber": 530,
+    "line": "<Target className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\RD\\ProjectDetailsForm.tsx",
+    "lineNumber": 552,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\RD\\ResearchReportsForm.tsx",
+    "lineNumber": 371,
+    "line": "<Beaker className=\"h-8 w-8 text-blue-600\" />"
+  },
+  {
+    "file": "pages\\Reports\\Reports.tsx",
+    "lineNumber": 292,
+    "line": "<IconComponent className=\"h-6 w-6 text-green-600\" />"
+  },
+  {
+    "file": "pages\\Reports\\Reports.tsx",
+    "lineNumber": 330,
+    "line": "<IconComponent className=\"h-6 w-6 text-primary-600\" />"
+  },
+  {
+    "file": "pages\\Reports\\ReportsFixed.tsx",
+    "lineNumber": 254,
+    "line": "<IconComponent className=\"h-6 w-6 text-green-600\" />"
+  },
+  {
+    "file": "pages\\Reports\\ReportsFixed.tsx",
+    "lineNumber": 292,
+    "line": "<IconComponent className=\"h-6 w-6 text-primary-600\" />"
+  },
+  {
+    "file": "pages\\Sales\\InvoiceForm.tsx",
+    "lineNumber": 396,
+    "line": "<Building className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Sales\\InvoiceForm.tsx",
+    "lineNumber": 449,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Sales\\InvoiceForm.tsx",
+    "lineNumber": 540,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Settings\\AdvancedSystemConfig.tsx",
+    "lineNumber": 258,
+    "line": "<IconComponent className=\"h-5 w-5 mr-3\" />"
+  },
+  {
+    "file": "pages\\Settings\\SettingsMain.tsx",
+    "lineNumber": 138,
+    "line": "<IconComponent className=\"h-6 w-6 text-blue-600\" />"
+  },
+  {
+    "file": "pages\\Settings\\SettingsMain.tsx",
+    "lineNumber": 176,
+    "line": "<IconComponent className=\"h-6 w-6 text-purple-600\" />"
+  },
+  {
+    "file": "pages\\Shipping\\ShippingOrderDetails.tsx",
+    "lineNumber": 282,
+    "line": "<Trash2 className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Shipping\\ShippingOrderDetails.tsx",
+    "lineNumber": 302,
+    "line": "<Calendar className=\"h-4 w-4 text-gray-400\" />"
+  },
+  {
+    "file": "pages\\Shipping\\ShippingOrderDetails.tsx",
+    "lineNumber": 339,
+    "line": "<Truck className=\"h-4 w-4 text-gray-400\" />"
+  },
+  {
+    "file": "pages\\Shipping\\ShippingTrackingForm.tsx",
+    "lineNumber": 292,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Shipping\\ShippingTrackingForm.tsx",
+    "lineNumber": 322,
+    "line": "<Truck className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\AdjustmentForm.tsx",
+    "lineNumber": 547,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\InventoryForm.tsx",
+    "lineNumber": 355,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />{t('production.production_date')}</label>"
+  },
+  {
+    "file": "pages\\Warehouse\\InventoryForm.tsx",
+    "lineNumber": 367,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\LocationForm.tsx",
+    "lineNumber": 195,
+    "line": "<Building className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\LocationForm.tsx",
+    "lineNumber": 239,
+    "line": "<Layers className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\MovementForm.tsx",
+    "lineNumber": 286,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\MovementList.tsx",
+    "lineNumber": 201,
+    "line": "<Search className=\"absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\MovementList.tsx",
+    "lineNumber": 377,
+    "line": "<Calendar className=\"h-4 w-4 text-gray-400 mr-2\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\ReorderList.tsx",
+    "lineNumber": 214,
+    "line": "<RefreshCw className=\"inline h-4 w-4 mr-2\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\ReorderList.tsx",
+    "lineNumber": 221,
+    "line": "<ShoppingCart className=\"inline h-4 w-4 mr-2\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\ReorderList.tsx",
+    "lineNumber": 239,
+    "line": "<AlertTriangle className=\"h-5 w-5 text-red-600 mr-2\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\ReorderList.tsx",
+    "lineNumber": 260,
+    "line": "<Search className=\"absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\ReorderList.tsx",
+    "lineNumber": 471,
+    "line": "<ShoppingCart className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\TransferForm.tsx",
+    "lineNumber": 403,
+    "line": "<AlertTriangle className=\"h-4 w-4\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\TransferForm.tsx",
+    "lineNumber": 498,
+    "line": "<Calendar className=\"inline h-4 w-4 mr-1\" />"
+  },
+  {
+    "file": "pages\\Warehouse\\TransferForm.tsx",
+    "lineNumber": 515,
+    "line": "<Truck className=\"inline h-4 w-4 mr-1\" />"
+  }
+]

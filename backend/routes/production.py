@@ -1,0 +1,1345 @@
+from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from models import db, Machine, WorkOrder, ProductionRecord, BillOfMaterials, BOMItem, ProductionSchedule, Product, Employee
+from utils.i18n import success_response, error_response, get_message
+from utils import generate_number
+from datetime import datetime, timedelta
+from sqlalchemy import func, and_, or_
+
+production_bp = Blueprint('production', __name__)
+
+# ============= MACHINES =============
+@production_bp.route('/machines', methods=['GET'])
+@jwt_required()
+def get_machines():
+    try:
+        machines = Machine.query.filter_by(is_active=True).all()
+        return jsonify({
+            'machines': [{
+                'id': m.id,
+                'code': m.code,
+                'name': m.name,
+                'machine_type': m.machine_type,
+                'manufacturer': m.manufacturer,
+                'model': m.model,
+                'serial_number': m.serial_number,
+                'status': m.status,
+                'location': m.location,
+                'department': m.department,
+                'capacity_per_hour': float(m.capacity_per_hour) if m.capacity_per_hour else None,
+                'capacity_uom': m.capacity_uom,
+                'efficiency': float(m.efficiency) if m.efficiency else 100,
+                'availability': float(m.availability) if m.availability else 100,
+                'last_maintenance': m.last_maintenance.isoformat() if m.last_maintenance else None,
+                'next_maintenance': m.next_maintenance.isoformat() if m.next_maintenance else None,
+                'installation_date': m.installation_date.isoformat() if m.installation_date else None,
+                'notes': m.notes,
+                'created_at': m.created_at.isoformat(),
+                'updated_at': m.updated_at.isoformat()
+            } for m in machines]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/machines/<int:id>', methods=['GET', 'PUT'])
+@jwt_required()
+def get_or_update_machine(id):
+    try:
+        machine = Machine.query.get(id)
+        if not machine:
+            return jsonify(error_response('api.error', error_code=404)), 404
+        
+        # Handle PUT request - update machine
+        if request.method == 'PUT':
+            data = request.get_json()
+            print(f"=== UPDATE MACHINE {id} ===")
+            print(f"Received data: {data}")
+            
+            if 'name' in data:
+                machine.name = data['name']
+            if 'code' in data:
+                machine.code = data['code']
+            if 'machine_type' in data:
+                machine.machine_type = data['machine_type']
+            if 'manufacturer' in data:
+                machine.manufacturer = data['manufacturer']
+            if 'model' in data:
+                machine.model = data['model']
+            if 'serial_number' in data:
+                machine.serial_number = data['serial_number']
+            if 'status' in data:
+                machine.status = data['status']
+            if 'location' in data:
+                machine.location = data['location']
+            if 'department' in data:
+                machine.department = data['department']
+            # Handle both capacity and capacity_per_hour - prefer 'capacity' from form
+            if 'capacity' in data and data['capacity']:
+                machine.capacity_per_hour = data['capacity']
+            elif 'capacity_per_hour' in data and data['capacity_per_hour']:
+                machine.capacity_per_hour = data['capacity_per_hour']
+            # Handle both uom and capacity_uom - prefer 'uom' from form
+            if 'uom' in data and data['uom']:
+                machine.capacity_uom = data['uom']
+            elif 'capacity_uom' in data and data['capacity_uom']:
+                machine.capacity_uom = data['capacity_uom']
+            if 'notes' in data:
+                machine.notes = data['notes']
+            if 'specifications' in data:
+                machine.specifications = data['specifications']
+            if 'is_active' in data:
+                machine.is_active = data['is_active']
+            if 'maintenance_schedule' in data:
+                machine.maintenance_schedule = data['maintenance_schedule']
+            
+            if data.get('installation_date'):
+                try:
+                    date_str = data['installation_date']
+                    if isinstance(date_str, str):
+                        if 'T' in date_str:
+                            machine.installation_date = datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+                        else:
+                            machine.installation_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                except:
+                    pass
+            
+            db.session.commit()
+            
+            # Debug: show what was saved
+            print(f"=== SAVED MACHINE {id} ===")
+            print(f"name: {machine.name}")
+            print(f"code: {machine.code}")
+            print(f"machine_type: {machine.machine_type}")
+            print(f"capacity_per_hour: {machine.capacity_per_hour}")
+            print(f"location: {machine.location}")
+            print(f"notes: {machine.notes}")
+            
+            return jsonify({'message': 'Machine updated successfully', 'machine_id': machine.id}), 200
+            
+        # Handle GET request - return machine details
+        return jsonify({
+            'machine': {
+                'id': machine.id,
+                'code': machine.code,
+                'name': machine.name,
+                'machine_type': machine.machine_type,
+                'manufacturer': machine.manufacturer,
+                'model': machine.model,
+                'serial_number': machine.serial_number,
+                'status': machine.status,
+                'location': machine.location,
+                'department': machine.department,
+                # Include both field names for compatibility
+                'capacity_per_hour': float(machine.capacity_per_hour) if machine.capacity_per_hour else 0,
+                'capacity': float(machine.capacity_per_hour) if machine.capacity_per_hour else 0,
+                'capacity_uom': machine.capacity_uom,
+                'uom': machine.capacity_uom,
+                'specifications': machine.specifications,
+                'efficiency': float(machine.efficiency) if machine.efficiency else 100,
+                'availability': float(machine.availability) if machine.availability else 100,
+                'last_maintenance': machine.last_maintenance.isoformat() if machine.last_maintenance else None,
+                'next_maintenance': machine.next_maintenance.isoformat() if machine.next_maintenance else None,
+                'installation_date': machine.installation_date.isoformat() if machine.installation_date else None,
+                'maintenance_schedule': machine.maintenance_schedule,
+                'notes': machine.notes,
+                'is_active': machine.is_active if machine.is_active is not None else True,
+                'created_at': machine.created_at.isoformat() if machine.created_at else None,
+                'updated_at': machine.updated_at.isoformat() if machine.updated_at else None
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/machines', methods=['POST'])
+@jwt_required()
+def create_machine():
+    try:
+        data = request.get_json()
+        machine = Machine(
+            code=data['code'],
+            name=data['name'],
+            machine_type=data['machine_type'],
+            manufacturer=data.get('manufacturer'),
+            model=data.get('model'),
+            serial_number=data.get('serial_number'),
+            status='idle',
+            location=data.get('location'),
+            capacity_per_hour=data.get('capacity_per_hour')
+        )
+        db.session.add(machine)
+        db.session.commit()
+        return jsonify({'message': 'Machine created', 'machine_id': machine.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/machines/<int:id>/update', methods=['PUT'])
+@jwt_required()
+def update_machine(id):
+    try:
+        machine = Machine.query.get(id)
+        if not machine:
+            return jsonify(error_response('api.error', error_code=404)), 404
+            
+        data = request.get_json()
+        
+        # Update machine fields
+        if 'name' in data:
+            machine.name = data['name']
+        if 'machine_type' in data:
+            machine.machine_type = data['machine_type']
+        if 'manufacturer' in data:
+            machine.manufacturer = data['manufacturer']
+        if 'model' in data:
+            machine.model = data['model']
+        if 'serial_number' in data:
+            machine.serial_number = data['serial_number']
+        if 'status' in data:
+            machine.status = data['status']
+        if 'location' in data:
+            machine.location = data['location']
+        if 'department' in data:
+            machine.department = data['department']
+        if 'capacity_per_hour' in data:
+            machine.capacity_per_hour = data['capacity_per_hour']
+        if 'capacity_uom' in data:
+            machine.capacity_uom = data['capacity_uom']
+        if 'efficiency' in data:
+            machine.efficiency = data['efficiency']
+        if 'availability' in data:
+            machine.availability = data['availability']
+        if 'last_maintenance' in data:
+            machine.last_maintenance = datetime.fromisoformat(data['last_maintenance']).date() if data['last_maintenance'] else None
+        if 'next_maintenance' in data:
+            machine.next_maintenance = datetime.fromisoformat(data['next_maintenance']).date() if data['next_maintenance'] else None
+        if 'notes' in data:
+            machine.notes = data['notes']
+        if 'is_active' in data:
+            machine.is_active = data['is_active']
+            
+        machine.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        return jsonify(success_response('api.success')), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/machines/<int:id>/efficiency', methods=['GET'])
+@jwt_required()
+def get_machine_efficiency(id):
+    """Get machine efficiency data for specific time period"""
+    try:
+        machine = Machine.query.get(id)
+        if not machine:
+            return jsonify(error_response('api.error', error_code=404)), 404
+            
+        start_date = request.args.get('start_date', (datetime.now() - timedelta(days=30)).isoformat())
+        end_date = request.args.get('end_date', datetime.now().isoformat())
+        
+        start_dt = datetime.fromisoformat(start_date)
+        end_dt = datetime.fromisoformat(end_date)
+        
+        # Get production records for the period
+        records = ProductionRecord.query.filter(
+            ProductionRecord.machine_id == id,
+            ProductionRecord.production_date.between(start_dt, end_dt)
+        ).all()
+        
+        # Calculate efficiency metrics
+        total_produced = sum(float(r.quantity_produced) for r in records)
+        total_good = sum(float(r.quantity_good) for r in records)
+        total_scrap = sum(float(r.quantity_scrap) for r in records)
+        total_downtime = sum(r.downtime_minutes for r in records)
+        
+        # Calculate efficiency percentages
+        quality_rate = (total_good / total_produced * 100) if total_produced > 0 else 0
+        scrap_rate = (total_scrap / total_produced * 100) if total_produced > 0 else 0
+        
+        # Theoretical capacity calculation (assume 8 hours per day)
+        days_in_period = (end_dt - start_dt).days + 1
+        theoretical_hours = days_in_period * 8 * 60  # in minutes
+        actual_runtime = theoretical_hours - total_downtime
+        availability_rate = (actual_runtime / theoretical_hours * 100) if theoretical_hours > 0 else 0
+        
+        # Overall Equipment Effectiveness (OEE)
+        oee = (availability_rate * quality_rate * float(machine.efficiency or 100)) / 10000
+        
+        return jsonify({
+            'machine_id': id,
+            'machine_name': machine.name,
+            'period': {
+                'start': start_date,
+                'end': end_date,
+                'days': days_in_period
+            },
+            'production': {
+                'total_produced': total_produced,
+                'total_good': total_good,
+                'total_scrap': total_scrap,
+                'quality_rate': round(quality_rate, 2),
+                'scrap_rate': round(scrap_rate, 2)
+            },
+            'availability': {
+                'theoretical_hours': theoretical_hours / 60,  # convert to hours
+                'total_downtime_hours': total_downtime / 60,
+                'actual_runtime_hours': actual_runtime / 60,
+                'availability_rate': round(availability_rate, 2)
+            },
+            'efficiency': {
+                'performance_rate': float(machine.efficiency or 100),
+                'oee': round(oee, 2)
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============= WORK ORDERS =============
+@production_bp.route('/work-orders', methods=['GET'])
+@jwt_required()
+def get_work_orders():
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        status = request.args.get('status')
+        
+        query = WorkOrder.query
+        if status:
+            query = query.filter_by(status=status)
+        
+        wos = query.order_by(WorkOrder.created_at.desc()).paginate(page=page, per_page=per_page)
+        
+        return jsonify({
+            'work_orders': [{
+                'id': wo.id,
+                'wo_number': wo.wo_number,
+                'product_name': wo.product.name if wo.product else 'Unknown Product',
+                'quantity': float(wo.quantity) if wo.quantity else 0,
+                'quantity_produced': float(wo.quantity_produced) if wo.quantity_produced else 0,
+                'status': wo.status,
+                'machine': wo.machine.name if wo.machine else None,
+                'scheduled_start_date': wo.scheduled_start_date.isoformat() if wo.scheduled_start_date else None
+            } for wo in wos.items],
+            'total': wos.total,
+            'page': page,
+            'per_page': per_page
+        }), 200
+    except Exception as e:
+        print(f"Work orders error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>', methods=['GET'])
+@jwt_required()
+def get_work_order(id):
+    """Get single work order detail"""
+    try:
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        # Get pack_per_carton from BOM if available
+        pack_per_carton = 0
+        if wo.product_id:
+            from models.production import BillOfMaterials
+            active_bom = BillOfMaterials.query.filter_by(
+                product_id=wo.product_id, 
+                is_active=True
+            ).first()
+            if active_bom and active_bom.pack_per_carton:
+                pack_per_carton = active_bom.pack_per_carton
+        
+        # Build response safely
+        response_data = {
+            'id': wo.id,
+            'wo_number': wo.wo_number,
+            'product_id': wo.product_id,
+            'product_name': wo.product.name if wo.product else 'Unknown Product',
+            'product_code': wo.product.code if wo.product else None,
+            'quantity': float(wo.quantity) if wo.quantity else 0,
+            'quantity_produced': float(wo.quantity_produced) if wo.quantity_produced else 0,
+            'quantity_good': float(wo.quantity_good) if wo.quantity_good else 0,
+            'quantity_scrap': float(wo.quantity_scrap) if wo.quantity_scrap else 0,
+            'uom': wo.uom,
+            'status': wo.status,
+            'priority': wo.priority,
+            'batch_number': getattr(wo, 'batch_number', None),
+            'machine_id': wo.machine_id,
+            'machine_name': wo.machine.name if wo.machine else None,
+            'pack_per_carton': pack_per_carton,
+            'scheduled_start_date': wo.scheduled_start_date.isoformat() if wo.scheduled_start_date else None,
+            'scheduled_end_date': wo.scheduled_end_date.isoformat() if wo.scheduled_end_date else None,
+            'actual_start_date': wo.actual_start_date.isoformat() if wo.actual_start_date else None,
+            'actual_end_date': wo.actual_end_date.isoformat() if wo.actual_end_date else None,
+            'notes': wo.notes,
+            'created_at': wo.created_at.isoformat() if wo.created_at else None
+        }
+        
+        # Add supervisor info safely
+        if hasattr(wo, 'supervisor_id'):
+            response_data['supervisor_id'] = wo.supervisor_id
+            response_data['supervisor_name'] = wo.supervisor.name if wo.supervisor else None
+        
+        return jsonify({'work_order': response_data}), 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders', methods=['POST'])
+@jwt_required()
+def create_work_order():
+    try:
+        data = request.get_json()
+        user_id = get_jwt_identity()
+        
+        wo_number = generate_number('WO', WorkOrder, 'wo_number')
+        
+        # Get UOM from data or from product
+        uom = data.get('uom')
+        if not uom:
+            from models.product import Product
+            product = Product.query.get(data['product_id'])
+            uom = product.primary_uom if product else 'pcs'
+        
+        wo = WorkOrder(
+            wo_number=wo_number,
+            product_id=data['product_id'],
+            quantity=data['quantity'],
+            uom=uom,
+            status='planned',
+            priority=data.get('priority', 'normal'),
+            machine_id=data.get('machine_id'),
+            scheduled_start_date=datetime.fromisoformat(data['scheduled_start_date']) if data.get('scheduled_start_date') else None,
+            scheduled_end_date=datetime.fromisoformat(data['scheduled_end_date']) if data.get('scheduled_end_date') else None,
+            notes=data.get('notes'),
+            created_by=user_id
+        )
+        
+        db.session.add(wo)
+        db.session.commit()
+        
+        return jsonify({'message': 'Work order created', 'wo_id': wo.id, 'wo_number': wo_number}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>', methods=['PUT'])
+@jwt_required()
+def update_work_order(id):
+    """Update work order"""
+    try:
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        data = request.get_json()
+        force = data.get('force', False)
+        
+        # Only allow editing if status is planned or released, unless force
+        if wo.status not in ['planned', 'released', 'in_progress'] and not force:
+            return jsonify({'error': 'Cannot edit work order in current status'}), 400
+        
+        if 'product_id' in data:
+            wo.product_id = data['product_id']
+        if 'quantity' in data:
+            wo.quantity = data['quantity']
+        if 'priority' in data:
+            wo.priority = data['priority']
+        if 'machine_id' in data:
+            wo.machine_id = data['machine_id']
+        if 'uom' in data:
+            wo.uom = data['uom']
+        if 'scheduled_start_date' in data:
+            wo.scheduled_start_date = datetime.fromisoformat(data['scheduled_start_date']) if data['scheduled_start_date'] else None
+        if 'scheduled_end_date' in data:
+            wo.scheduled_end_date = datetime.fromisoformat(data['scheduled_end_date']) if data['scheduled_end_date'] else None
+        if 'notes' in data:
+            wo.notes = data['notes']
+        if 'status' in data:
+            wo.status = data['status']
+        
+        # Reset production counts if requested
+        if data.get('reset_production'):
+            wo.quantity_produced = 0
+            wo.quantity_good = 0
+            wo.quantity_scrap = 0
+        
+        db.session.commit()
+        return jsonify({'message': 'Work order updated'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_work_order(id):
+    """Delete work order"""
+    try:
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        force = request.args.get('force', 'false').lower() == 'true'
+        
+        # Check if there are production records
+        has_production = ProductionRecord.query.filter_by(work_order_id=id).first() is not None
+        
+        # Check ShiftProduction too
+        from models.production import ShiftProduction
+        has_shift_production = ShiftProduction.query.filter_by(work_order_id=id).first() is not None
+        
+        if (has_production or has_shift_production) and not force:
+            return jsonify({
+                'error': 'Work order has production records. Use force=true to delete anyway.',
+                'has_production': True
+            }), 400
+        
+        # Delete related records first if force
+        if force:
+            ProductionRecord.query.filter_by(work_order_id=id).delete()
+            ShiftProduction.query.filter_by(work_order_id=id).delete()
+        
+        db.session.delete(wo)
+        db.session.commit()
+        return jsonify({'message': 'Work order deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>/status', methods=['PUT'])
+@jwt_required()
+def update_work_order_status(id):
+    """Update work order status"""
+    try:
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        data = request.get_json()
+        new_status = data.get('status')
+        
+        valid_statuses = ['planned', 'released', 'in_progress', 'completed', 'cancelled']
+        if new_status not in valid_statuses:
+            return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
+        
+        # Update status
+        wo.status = new_status
+        
+        # Set timestamps based on status
+        if new_status == 'in_progress' and not wo.actual_start_date:
+            wo.actual_start_date = datetime.utcnow()
+            if wo.machine:
+                wo.machine.status = 'running'
+        elif new_status == 'completed' and not wo.actual_end_date:
+            wo.actual_end_date = datetime.utcnow()
+            if wo.machine:
+                wo.machine.status = 'idle'
+        
+        db.session.commit()
+        return jsonify({'message': f'Work order status updated to {new_status}'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>/production-records', methods=['GET'])
+@jwt_required()
+def get_work_order_production_records(id):
+    """Get production records for a specific work order"""
+    try:
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        records = ProductionRecord.query.filter_by(work_order_id=id).order_by(ProductionRecord.production_date.desc()).all()
+        
+        return jsonify({
+            'records': [{
+                'id': r.id,
+                'production_date': r.production_date.isoformat() if r.production_date else None,
+                'shift': r.shift,
+                'quantity_produced': float(r.quantity_produced) if r.quantity_produced else 0,
+                'quantity_good': float(r.quantity_good) if r.quantity_good else 0,
+                'quantity_reject': float(r.quantity_scrap) if r.quantity_scrap else 0,  # Model uses quantity_scrap
+                'downtime_minutes': r.downtime_minutes or 0,
+                'operator_name': r.operator.name if r.operator else None,
+                'notes': r.notes
+            } for r in records]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>/production-records', methods=['POST'])
+@jwt_required()
+def create_work_order_production_record(id):
+    """Create production record for a work order and ShiftProduction for OEE tracking"""
+    try:
+        from models.production import ShiftProduction
+        from models.wip_job_costing import WIPBatch, JobCostEntry, WIPWorkflowIntegration
+        
+        user_id = get_jwt_identity()
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        data = request.get_json()
+        
+        # Build downtime notes from entries
+        downtime_entries = data.get('downtime_entries', [])
+        downtime_notes = ''
+        if downtime_entries:
+            downtime_notes = '; '.join([
+                f"{e.get('duration_minutes', 0)} menit - {e.get('reason', '')} [{e.get('category', 'others')}]" 
+                for e in downtime_entries
+            ])
+        
+        # Parse production date
+        production_date = datetime.fromisoformat(data['production_date']).date() if data.get('production_date') else datetime.utcnow().date()
+        
+        # Create production record
+        record = ProductionRecord(
+            work_order_id=id,
+            machine_id=wo.machine_id,
+            production_date=datetime.fromisoformat(data['production_date']) if data.get('production_date') else datetime.utcnow(),
+            shift=data.get('shift', '1'),
+            quantity_produced=data.get('quantity_produced', 0),
+            quantity_good=data.get('quantity_good', 0),
+            quantity_scrap=data.get('quantity_reject', 0),  # Model uses quantity_scrap
+            downtime_minutes=data.get('downtime_minutes', 0),
+            operator_id=data.get('operator_id'),
+            notes=data.get('notes'),
+            uom=data.get('uom', 'pcs')
+        )
+        
+        # Store downtime entries as JSON in notes if needed
+        if downtime_notes:
+            record.notes = f"{data.get('notes', '')}\n\n[Downtime Details]\n{downtime_notes}".strip()
+        
+        db.session.add(record)
+        
+        # Get downtime by category from request
+        downtime_mesin = int(data.get('downtime_mesin', 0))
+        downtime_operator = int(data.get('downtime_operator', 0))
+        downtime_material = int(data.get('downtime_material', 0))
+        downtime_design = int(data.get('downtime_design', 0))
+        downtime_others = int(data.get('downtime_others', 0))
+        total_downtime = int(data.get('downtime_minutes', 0))
+        
+        # Calculate planned and actual runtime
+        planned_runtime = int(data.get('planned_runtime', 480))
+        actual_runtime = int(data.get('actual_runtime', planned_runtime - total_downtime))
+        
+        # Calculate quality rate
+        actual_qty = float(data.get('quantity_produced', 0))
+        good_qty = float(data.get('quantity_good', 0))
+        quality_rate = (good_qty / actual_qty * 100) if actual_qty > 0 else 100
+        
+        # Calculate efficiency rate (100% - total loss from downtime)
+        efficiency_rate = float(data.get('efficiency_rate', 100))
+        
+        # Calculate OEE score
+        oee_score = (efficiency_rate * quality_rate) / 100
+        
+        # Calculate loss percentages
+        def calc_loss(downtime_min, planned_min):
+            return round((downtime_min / planned_min * 100), 2) if planned_min > 0 else 0
+        
+        loss_mesin = calc_loss(downtime_mesin, planned_runtime)
+        loss_operator = calc_loss(downtime_operator, planned_runtime)
+        loss_material = calc_loss(downtime_material, planned_runtime)
+        loss_design = calc_loss(downtime_design, planned_runtime)
+        loss_others = calc_loss(downtime_others, planned_runtime)
+        
+        # Shift times based on shift number
+        shift_key = f"shift_{data.get('shift', '1')}"
+        shift_times = {
+            'shift_1': ('07:00', '15:00'),
+            'shift_2': ('15:00', '23:00'),
+            'shift_3': ('23:00', '07:00'),
+            '1': ('07:00', '15:00'),
+            '2': ('15:00', '23:00'),
+            '3': ('23:00', '07:00')
+        }
+        shift_start_str, shift_end_str = shift_times.get(shift_key, shift_times.get(data.get('shift', '1'), ('07:00', '15:00')))
+        shift_start = datetime.strptime(shift_start_str, '%H:%M').time()
+        shift_end = datetime.strptime(shift_end_str, '%H:%M').time()
+        
+        # Create or update ShiftProduction for OEE tracking
+        shift_production = ShiftProduction(
+            production_date=production_date,
+            shift=shift_key if shift_key.startswith('shift_') else f"shift_{data.get('shift', '1')}",
+            shift_start=shift_start,
+            shift_end=shift_end,
+            machine_id=wo.machine_id,
+            product_id=wo.product_id,
+            work_order_id=id,
+            target_quantity=wo.quantity,
+            actual_quantity=actual_qty,
+            good_quantity=good_qty,
+            reject_quantity=float(data.get('quantity_reject', 0)),
+            rework_quantity=float(data.get('quantity_rework', 0)),
+            uom=data.get('uom', 'pcs'),
+            planned_runtime=planned_runtime,
+            actual_runtime=actual_runtime,
+            downtime_minutes=total_downtime,
+            # Downtime by category
+            downtime_mesin=downtime_mesin,
+            downtime_operator=downtime_operator,
+            downtime_material=downtime_material,
+            downtime_design=downtime_design,
+            downtime_others=downtime_others,
+            # Loss percentages
+            loss_mesin=loss_mesin,
+            loss_operator=loss_operator,
+            loss_material=loss_material,
+            loss_design=loss_design,
+            loss_others=loss_others,
+            # Rates
+            quality_rate=round(quality_rate, 2),
+            efficiency_rate=round(efficiency_rate, 2),
+            oee_score=round(oee_score, 2),
+            operator_id=data.get('operator_id'),
+            notes=data.get('notes'),
+            issues=downtime_notes if downtime_notes else None,
+            status='completed',
+            created_by=user_id
+        )
+        
+        db.session.add(shift_production)
+        
+        # Update work order quantities
+        wo.quantity_produced = (wo.quantity_produced or 0) + float(data.get('quantity_produced', 0))
+        wo.quantity_good = (wo.quantity_good or 0) + float(data.get('quantity_good', 0))
+        wo.quantity_scrap = (wo.quantity_scrap or 0) + float(data.get('quantity_reject', 0))
+        
+        # Calculate buffer stock (production exceeding target)
+        buffer_stock_qty = 0
+        if wo.quantity_good > wo.quantity:
+            buffer_stock_qty = float(wo.quantity_good) - float(wo.quantity)
+        
+        # Add buffer stock to inventory as finished goods
+        if buffer_stock_qty > 0:
+            from models.warehouse import Inventory, InventoryMovement, WarehouseLocation
+            
+            # Find or create inventory for this product
+            # First try to find existing inventory for this product
+            inventory = Inventory.query.filter_by(
+                product_id=wo.product_id,
+                stock_status='released'
+            ).first()
+            
+            if not inventory:
+                # Find a suitable location for finished goods
+                fg_location = WarehouseLocation.query.filter(
+                    WarehouseLocation.material_type.in_(['finished_goods', 'all'])
+                ).first()
+                
+                if fg_location:
+                    inventory = Inventory(
+                        product_id=wo.product_id,
+                        location_id=fg_location.id,
+                        quantity_on_hand=0,
+                        quantity_reserved=0,
+                        quantity_available=0,
+                        stock_status='released',
+                        is_active=True,
+                        created_by=user_id
+                    )
+                    db.session.add(inventory)
+                    db.session.flush()
+            
+            if inventory:
+                # Add buffer stock to inventory
+                inventory.quantity_on_hand += buffer_stock_qty
+                inventory.quantity_available += buffer_stock_qty
+                inventory.updated_at = datetime.utcnow()
+                
+                # Create inventory movement for buffer stock
+                buffer_movement = InventoryMovement(
+                    inventory_id=inventory.id,
+                    movement_type='stock_in',
+                    movement_date=production_date,
+                    quantity=buffer_stock_qty,
+                    reference_number=wo.wo_number,
+                    reference_type='buffer_stock',
+                    notes=f'Buffer stock dari WO {wo.wo_number} - produksi melebihi target',
+                    created_by=user_id
+                )
+                db.session.add(buffer_movement)
+        
+        # Auto-complete if target reached
+        if wo.quantity_produced >= wo.quantity:
+            wo.status = 'completed'
+            wo.actual_end_date = datetime.utcnow()
+        
+        # Update machine efficiency and availability based on latest production
+        if wo.machine:
+            wo.machine.efficiency = round(efficiency_rate, 2)
+            wo.machine.availability = round((actual_runtime / planned_runtime * 100) if planned_runtime > 0 else 100, 2)
+            wo.machine.status = 'running' if wo.status == 'in_progress' else wo.machine.status
+        
+        # ============= JOB COSTING INTEGRATION =============
+        # Get or create WIP batch for this work order
+        wip_batch = WIPBatch.query.filter_by(work_order_id=id).first()
+        if not wip_batch:
+            wip_batch = WIPBatch(
+                wip_batch_no=f"WIP-{wo.wo_number}",
+                work_order_id=id,
+                product_id=wo.product_id,
+                current_stage='production',
+                qty_started=float(wo.quantity),
+                qty_in_process=float(wo.quantity),
+                status='in_progress',
+                machine_id=wo.machine_id,
+                shift=data.get('shift', '1'),
+                created_by=int(user_id)
+            )
+            db.session.add(wip_batch)
+            db.session.flush()
+        
+        # Update WIP batch quantities
+        wip_batch.qty_completed = float(wo.quantity_good or 0)
+        wip_batch.qty_rejected = float(wo.quantity_scrap or 0)
+        wip_batch.qty_in_process = float(wo.quantity) - wip_batch.qty_completed - wip_batch.qty_rejected
+        
+        # Calculate labor cost (based on actual runtime and labor rate)
+        labor_rate_per_hour = float(data.get('labor_rate', 25000))  # Default Rp 25.000/jam
+        labor_hours = actual_runtime / 60
+        labor_cost = labor_hours * labor_rate_per_hour
+        
+        # Calculate overhead cost (machine cost per hour)
+        overhead_rate_per_hour = float(data.get('overhead_rate', 50000))  # Default Rp 50.000/jam
+        overhead_cost = labor_hours * overhead_rate_per_hour
+        
+        # Create job cost entry for labor
+        if labor_cost > 0:
+            labor_job_cost = JobCostEntry(
+                job_cost_no=generate_number('JC', JobCostEntry, 'job_cost_no'),
+                wip_batch_id=wip_batch.id,
+                work_order_id=id,
+                cost_type='labor',
+                cost_category='direct_labor',
+                description=f'Labor cost - Shift {data.get("shift", "1")} - {production_date}',
+                quantity=labor_hours,
+                unit_cost=labor_rate_per_hour,
+                total_cost=labor_cost,
+                allocation_basis='per_hour',
+                allocation_rate=labor_rate_per_hour,
+                cost_date=datetime.utcnow(),
+                production_stage='production',
+                shift=f'shift_{data.get("shift", "1")}',
+                created_by=int(user_id)
+            )
+            db.session.add(labor_job_cost)
+            wip_batch.labor_cost += labor_cost
+        
+        # Create job cost entry for overhead
+        if overhead_cost > 0:
+            overhead_job_cost = JobCostEntry(
+                job_cost_no=generate_number('JC', JobCostEntry, 'job_cost_no'),
+                wip_batch_id=wip_batch.id,
+                work_order_id=id,
+                cost_type='overhead',
+                cost_category='machine_overhead',
+                description=f'Machine overhead - {wo.machine.name if wo.machine else "N/A"} - {production_date}',
+                quantity=labor_hours,
+                unit_cost=overhead_rate_per_hour,
+                total_cost=overhead_cost,
+                allocation_basis='per_hour',
+                allocation_rate=overhead_rate_per_hour,
+                cost_date=datetime.utcnow(),
+                production_stage='production',
+                shift=f'shift_{data.get("shift", "1")}',
+                created_by=int(user_id)
+            )
+            db.session.add(overhead_job_cost)
+            wip_batch.overhead_cost += overhead_cost
+        
+        # Update total WIP value
+        wip_batch.update_wip_value()
+        
+        # Mark WIP as completed if work order is completed
+        if wo.status == 'completed':
+            wip_batch.status = 'completed'
+            wip_batch.completed_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Production record created',
+            'record_id': record.id,
+            'shift_production_id': shift_production.id,
+            'work_order_progress': {
+                'quantity_produced': float(wo.quantity_produced),
+                'quantity_good': float(wo.quantity_good),
+                'quantity_scrap': float(wo.quantity_scrap),
+                'target_quantity': float(wo.quantity),
+                'status': wo.status
+            },
+            'buffer_stock': {
+                'quantity': buffer_stock_qty,
+                'added_to_inventory': buffer_stock_qty > 0,
+                'message': f'{buffer_stock_qty} unit ditambahkan ke stok barang jadi' if buffer_stock_qty > 0 else None
+            },
+            'oee_data': {
+                'efficiency_rate': round(efficiency_rate, 2),
+                'quality_rate': round(quality_rate, 2),
+                'oee_score': round(oee_score, 2),
+                'downtime_breakdown': {
+                    'mesin': {'minutes': downtime_mesin, 'loss_pct': loss_mesin},
+                    'operator': {'minutes': downtime_operator, 'loss_pct': loss_operator},
+                    'material': {'minutes': downtime_material, 'loss_pct': loss_material},
+                    'design': {'minutes': downtime_design, 'loss_pct': loss_design},
+                    'others': {'minutes': downtime_others, 'loss_pct': loss_others}
+                }
+            },
+            'job_costing': {
+                'wip_batch_id': wip_batch.id,
+                'wip_batch_no': wip_batch.wip_batch_no,
+                'labor_cost': round(labor_cost, 2),
+                'overhead_cost': round(overhead_cost, 2),
+                'total_wip_value': round(wip_batch.total_wip_value, 2),
+                'material_cost': round(wip_batch.material_cost, 2)
+            }
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>/start', methods=['PUT'])
+@jwt_required()
+def start_work_order(id):
+    try:
+        from models.material_issue import MaterialIssue, MaterialIssueItem
+        from models.warehouse import Inventory, InventoryMovement
+        from models.production import BillOfMaterials
+        from models.wip_job_costing import WIPBatch, JobCostEntry
+        from models.product import Material
+        
+        user_id = int(get_jwt_identity())
+        total_material_cost = 0  # Track total material cost
+        
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify(error_response('api.error', error_code=404)), 404
+        
+        # Auto-issue materials from BOM
+        bom = BillOfMaterials.query.filter_by(product_id=wo.product_id, is_active=True).first()
+        
+        if bom:
+            # Check if material issue already exists
+            existing_mi = MaterialIssue.query.filter_by(
+                work_order_id=id,
+                status='issued'
+            ).first()
+            
+            if not existing_mi:
+                # Create and auto-issue materials
+                issue_number = generate_number('MI', MaterialIssue, 'issue_number')
+                
+                mi = MaterialIssue(
+                    issue_number=issue_number,
+                    work_order_id=id,
+                    issue_date=datetime.utcnow(),
+                    requested_by=user_id,
+                    approved_by=user_id,
+                    issued_by=user_id,
+                    status='issued',
+                    priority='normal',
+                    issue_type='production',
+                    approved_date=datetime.utcnow(),
+                    issued_date=datetime.utcnow(),
+                    notes=f'Auto-issued when starting Work Order {wo.wo_number}'
+                )
+                db.session.add(mi)
+                db.session.flush()
+                
+                # Issue materials from BOM
+                for idx, bom_item in enumerate(bom.items, 1):
+                    required_qty = float(bom_item.quantity) * float(wo.quantity)
+                    
+                    # Find inventory with stock
+                    inventories = Inventory.query.filter(
+                        Inventory.material_id == bom_item.material_id,
+                        Inventory.quantity_on_hand > 0,
+                        Inventory.is_active == True
+                    ).order_by(Inventory.expiry_date.asc().nullslast()).all()
+                    
+                    remaining_to_issue = required_qty
+                    
+                    for inv in inventories:
+                        if remaining_to_issue <= 0:
+                            break
+                        
+                        issue_qty = min(float(inv.quantity_on_hand), remaining_to_issue)
+                        
+                        # Deduct from inventory
+                        inv.quantity_on_hand -= issue_qty
+                        if inv.quantity_available >= issue_qty:
+                            inv.quantity_available -= issue_qty
+                        inv.updated_at = datetime.utcnow()
+                        
+                        # Create movement record
+                        movement = InventoryMovement(
+                            inventory_id=inv.id,
+                            movement_type='stock_out',
+                            movement_date=datetime.utcnow().date(),
+                            quantity=issue_qty,
+                            reference_number=issue_number,
+                            reference_type='material_issue',
+                            batch_number=inv.batch_number,
+                            notes=f'Issued for WO {wo.wo_number}',
+                            created_by=user_id
+                        )
+                        db.session.add(movement)
+                        
+                        remaining_to_issue -= issue_qty
+                    
+                    # Calculate material cost
+                    issued_qty = required_qty - remaining_to_issue
+                    material = Material.query.get(bom_item.material_id)
+                    unit_cost = float(material.unit_cost) if material and material.unit_cost else 0
+                    item_cost = issued_qty * unit_cost
+                    total_material_cost += item_cost
+                    
+                    # Create material issue item
+                    item = MaterialIssueItem(
+                        material_issue_id=mi.id,
+                        line_number=idx,
+                        material_id=bom_item.material_id,
+                        description=bom_item.material.name if bom_item.material else '',
+                        required_quantity=required_qty,
+                        issued_quantity=issued_qty,
+                        uom=bom_item.uom,
+                        unit_cost=unit_cost,
+                        total_cost=item_cost,
+                        status='issued' if remaining_to_issue <= 0 else 'partial'
+                    )
+                    db.session.add(item)
+        
+        wo.status = 'in_progress'
+        wo.actual_start_date = datetime.utcnow()
+        
+        if wo.machine:
+            wo.machine.status = 'running'
+        
+        # ============= CREATE WIP BATCH WITH MATERIAL COST =============
+        wip_batch = WIPBatch.query.filter_by(work_order_id=id).first()
+        if not wip_batch:
+            wip_batch = WIPBatch(
+                wip_batch_no=f"WIP-{wo.wo_number}",
+                work_order_id=id,
+                product_id=wo.product_id,
+                current_stage='production',
+                qty_started=float(wo.quantity),
+                qty_in_process=float(wo.quantity),
+                material_cost=total_material_cost,
+                status='in_progress',
+                machine_id=wo.machine_id,
+                created_by=user_id
+            )
+            wip_batch.update_wip_value()
+            db.session.add(wip_batch)
+            db.session.flush()
+            
+            # Create job cost entry for material
+            if total_material_cost > 0:
+                material_job_cost = JobCostEntry(
+                    job_cost_no=generate_number('JC', JobCostEntry, 'job_cost_no'),
+                    wip_batch_id=wip_batch.id,
+                    work_order_id=id,
+                    cost_type='material',
+                    cost_category='raw_material',
+                    description=f'Material cost for WO {wo.wo_number}',
+                    quantity=float(wo.quantity),
+                    unit_cost=total_material_cost / float(wo.quantity) if wo.quantity > 0 else 0,
+                    total_cost=total_material_cost,
+                    allocation_basis='per_batch',
+                    cost_date=datetime.utcnow(),
+                    production_stage='material_issue',
+                    created_by=user_id
+                )
+                db.session.add(material_job_cost)
+        
+        db.session.commit()
+        return jsonify({
+            'success': True,
+            'message': 'Work order started and materials issued',
+            'material_cost': round(total_material_cost, 2),
+            'wip_batch_no': wip_batch.wip_batch_no if wip_batch else None
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/work-orders/<int:id>/complete', methods=['PUT'])
+@jwt_required()
+def complete_work_order(id):
+    try:
+        wo = WorkOrder.query.get(id)
+        if not wo:
+            return jsonify(error_response('api.error', error_code=404)), 404
+        
+        wo.status = 'completed'
+        wo.actual_end_date = datetime.utcnow()
+        
+        if wo.machine:
+            wo.machine.status = 'idle'
+        
+        db.session.commit()
+        return jsonify(success_response('api.success')), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/production-records', methods=['GET'])
+@jwt_required()
+def get_production_records():
+    """Get production records"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 50, type=int)
+        
+        records = ProductionRecord.query.order_by(ProductionRecord.production_date.desc()).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        
+        return jsonify({
+            'records': [{
+                'id': r.id,
+                'work_order_id': r.work_order_id,
+                'work_order_number': r.work_order.wo_number if r.work_order else '',
+                'machine_id': r.machine_id,
+                'machine_name': r.machine.name if r.machine else '',
+                'production_date': r.production_date.isoformat(),
+                'shift': r.shift,
+                'quantity_produced': r.quantity_produced,
+                'quantity_good': r.quantity_good,
+                'quantity_scrap': r.quantity_scrap,
+                'uom': r.uom,
+                'downtime_minutes': r.downtime_minutes,
+                'efficiency': (r.quantity_good / r.quantity_produced * 100) if r.quantity_produced > 0 else 0
+            } for r in records.items],
+            'total': records.total,
+            'pages': records.pages
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/production-records', methods=['POST'])
+@jwt_required()
+def create_production_record():
+    try:
+        data = request.get_json()
+        
+        record = ProductionRecord(
+            work_order_id=data['work_order_id'],
+            machine_id=data.get('machine_id'),
+            operator_id=data.get('operator_id'),
+            production_date=datetime.utcnow(),
+            shift=data.get('shift'),
+            quantity_produced=data['quantity_produced'],
+            quantity_good=data['quantity_good'],
+            quantity_scrap=data.get('quantity_scrap', 0),
+            uom=data['uom'],
+            downtime_minutes=data.get('downtime_minutes', 0),
+            notes=data.get('notes')
+        )
+        
+        db.session.add(record)
+        
+        # Update work order quantities
+        wo = WorkOrder.query.get(data['work_order_id'])
+        wo.quantity_produced += data['quantity_produced']
+        wo.quantity_good += data['quantity_good']
+        wo.quantity_scrap += data.get('quantity_scrap', 0)
+        
+        db.session.commit()
+        return jsonify({'message': 'Production record created', 'record_id': record.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/bom', methods=['GET'])
+@jwt_required()
+def get_boms():
+    try:
+        boms = BillOfMaterials.query.filter_by(is_active=True).all()
+        return jsonify({
+            'boms': [{
+                'id': b.id,
+                'bom_number': b.bom_number,
+                'product_name': b.product.name,
+                'version': b.version,
+                'batch_size': float(b.batch_size),
+                'item_count': len(b.items)
+            } for b in boms]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/bom', methods=['POST'])
+@jwt_required()
+def create_bom():
+    try:
+        data = request.get_json()
+        user_id = get_jwt_identity()
+        
+        bom_number = generate_number('BOM', BillOfMaterials, 'bom_number')
+        
+        bom = BillOfMaterials(
+            bom_number=bom_number,
+            product_id=data['product_id'],
+            version=data.get('version', '1.0'),
+            batch_size=data['batch_size'],
+            batch_uom=data['batch_uom'],
+            notes=data.get('notes'),
+            created_by=user_id
+        )
+        
+        db.session.add(bom)
+        db.session.flush()
+        
+        for idx, item_data in enumerate(data.get('items', []), 1):
+            bom_item = BOMItem(
+                bom_id=bom.id,
+                line_number=idx,
+                material_id=item_data['material_id'],
+                quantity=item_data['quantity'],
+                uom=item_data['uom'],
+                scrap_percent=item_data.get('scrap_percent', 0)
+            )
+            db.session.add(bom_item)
+        
+        db.session.commit()
+        return jsonify({'message': 'BOM created', 'bom_id': bom.id, 'bom_number': bom_number}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/schedules', methods=['GET'])
+@jwt_required()
+def get_schedules():
+    try:
+        schedules = ProductionSchedule.query.order_by(ProductionSchedule.scheduled_start).all()
+        return jsonify({
+            'schedules': [{
+                'id': s.id,
+                'schedule_number': s.schedule_number,
+                'wo_number': s.work_order.wo_number,
+                'machine_name': s.machine.name,
+                'scheduled_start': s.scheduled_start.isoformat(),
+                'scheduled_end': s.scheduled_end.isoformat(),
+                'status': s.status
+            } for s in schedules]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============= ADVANCED SCHEDULING =============
+@production_bp.route('/schedules', methods=['POST'])
+@jwt_required()
+def create_schedule():
+    try:
+        data = request.get_json()
+        user_id = get_jwt_identity()
+        
+        schedule_number = generate_number('SCH', ProductionSchedule, 'schedule_number')
+        
+        schedule = ProductionSchedule(
+            schedule_number=schedule_number,
+            work_order_id=data['work_order_id'],
+            machine_id=data['machine_id'],
+            scheduled_start=datetime.fromisoformat(data['scheduled_start']),
+            scheduled_end=datetime.fromisoformat(data['scheduled_end']),
+            status='scheduled',
+            shift=data.get('shift'),
+            notes=data.get('notes'),
+            created_by=user_id
+        )
+        
+        db.session.add(schedule)
+        db.session.commit()
+        
+        return jsonify({'message': 'Schedule created', 'schedule_id': schedule.id, 'schedule_number': schedule_number}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/traceability/<batch_number>', methods=['GET'])
+@jwt_required()
+def get_traceability(batch_number):
+    """Get complete traceability information for a batch"""
+    try:
+        # Find work order by batch number
+        work_order = WorkOrder.query.filter_by(batch_number=batch_number).first()
+        if not work_order:
+            return jsonify(error_response('api.error', error_code=404)), 404
+        
+        # Get production records
+        production_records = ProductionRecord.query.filter_by(work_order_id=work_order.id).all()
+        
+        return jsonify({
+            'batch_number': batch_number,
+            'work_order': {
+                'id': work_order.id,
+                'wo_number': work_order.wo_number,
+                'product_name': work_order.product.name,
+                'quantity': float(work_order.quantity),
+                'quantity_produced': float(work_order.quantity_produced),
+                'status': work_order.status,
+                'machine_name': work_order.machine.name if work_order.machine else None
+            },
+            'production_records': [{
+                'id': record.id,
+                'production_date': record.production_date.isoformat(),
+                'shift': record.shift,
+                'machine_name': record.machine.name if record.machine else None,
+                'operator_name': record.operator.full_name if record.operator else None,
+                'quantity_produced': float(record.quantity_produced),
+                'quantity_good': float(record.quantity_good),
+                'quantity_scrap': float(record.quantity_scrap),
+                'downtime_minutes': record.downtime_minutes,
+                'notes': record.notes
+            } for record in production_records]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/dashboard/summary', methods=['GET'])
+@jwt_required()
+def get_production_dashboard():
+    """Get production dashboard summary"""
+    try:
+        # Work Orders Summary
+        total_wos = WorkOrder.query.count()
+        active_wos = WorkOrder.query.filter(WorkOrder.status.in_(['planned', 'released', 'in_progress'])).count()
+        completed_wos = WorkOrder.query.filter_by(status='completed').count()
+        
+        # Machine Status
+        machines = Machine.query.filter_by(is_active=True).all()
+        machine_status = {}
+        for machine in machines:
+            status = machine.status
+            machine_status[status] = machine_status.get(status, 0) + 1
+        
+        return jsonify({
+            'work_orders': {
+                'total': total_wos,
+                'active': active_wos,
+                'completed': completed_wos
+            },
+            'machines': {
+                'total_active': len(machines),
+                'status_breakdown': machine_status
+            }
+        }), 200
+    except Exception as e:
+        print(f"Production dashboard error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500

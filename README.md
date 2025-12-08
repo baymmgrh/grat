@@ -1,0 +1,646 @@
+# 🏭 SISTEM ERP PT. GRATIA MAKMUR SENTOSA
+
+> **Sistem Manajemen Perusahaan Lengkap untuk Manufaktur Nonwoven**
+
+[![CI/CD](https://github.com/baymngrh/grat/actions/workflows/ci.yml/badge.svg)](https://github.com/baymngrh/grat/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/baymngrh/grat/branch/main/graph/badge.svg)](https://codecov.io/gh/baymngrh/grat)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.0+-green.svg)](https://flask.palletsprojects.com/)
+[![React](https://img.shields.io/badge/React-18.2+-61dafb.svg)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.2+-3178c6.svg)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
+
+## 📋 Daftar Isi
+
+- [Tentang Sistem](#tentang-sistem)
+- [Fitur Utama](#fitur-utama)
+- [Arsitektur Sistem](#arsitektur-sistem)
+- [Teknologi yang Dipakai](#teknologi-yang-dipakai)
+- [Modul-Modul](#modul-modul)
+- [Integrasi Workflow](#integrasi-workflow)
+- [Cara Install](#cara-install)
+- [Testing](#testing)
+- [Dokumentasi API](#dokumentasi-api)
+- [AI Assistant](#ai-assistant)
+
+---
+
+## 🎯 Tentang Sistem
+
+**Sistem ERP Nonwoven** adalah aplikasi manajemen perusahaan yang terintegrasi penuh, didesain khusus buat industri manufaktur nonwoven. Sistem ini ngatur semua proses bisnis dari penjualan, produksi, quality control, sampai keuangan dalam satu platform yang terpadu.
+
+### 🌟 Keunggulan
+
+- ✅ **Arsitektur Modern Full-Stack** - Flask REST API + React TypeScript
+- ✅ **AI Assistant Terintegrasi** - Query data ERP dengan bahasa natural Indonesia
+- ✅ **Sinkronisasi Data Real-time** - Update langsung di semua modul
+- ✅ **Otomasi Workflow Lengkap** - Sales → MRP → Produksi → Quality → Shipping → Finance
+- ✅ **Multi-bahasa** - Indonesia & English (i18n)
+- ✅ **Kontrol Akses Berbasis Role** - Sistem permission yang detail
+- ✅ **Responsive Mobile** - Jalan di desktop, tablet, dan mobile
+- ✅ **15+ Business Workflows** - Semua proses bisnis terintegrasi
+- ✅ **Arsitektur Scalable** - Desain siap microservices
+
+---
+
+## 🚀 Fitur Utama
+
+### 🤖 AI Assistant
+- **Query Natural Language** - Tanya data ERP pakai bahasa Indonesia
+- **Multi-Module Support** - Akses semua modul: Sales, Production, Quality, HR, Finance, dll
+- **Smart Intent Detection** - Deteksi otomatis maksud pertanyaan user
+- **Quick Links** - Navigasi langsung ke halaman terkait
+- **Playful Responses** - Jawaban santai dan informatif
+
+### 📊 Business Intelligence
+- **🎯 Executive Dashboard** - Halaman utama dengan advanced analytics & KPI real-time
+- **Dashboard Real-time** - 20+ metrik bisnis dengan trend 12 bulan
+- **Performance Scorecard** - 5 KPI utama dengan target & achievement tracking
+- **Top Performers** - Ranking customers & products terbaik
+- **Critical Alerts** - Notifikasi issue penting untuk executive
+- **Reporting Canggih** - Report custom dengan export (PDF, Excel)
+- **Analisa Data** - Trend penjualan, metrik produksi, analisa keuangan
+- **Predictive Analytics** - Forecasting demand dan optimasi inventory
+
+### 🏭 Manufaktur Excellence
+- **Planning Produksi** - Work order, scheduling, capacity planning
+- **Tracking OEE** - Monitoring efektivitas equipment
+- **Quality Control** - Workflow inspeksi, tracking defect, CAPA
+- **Manajemen Maintenance** - Preventive dan corrective maintenance
+
+### 💼 Operasional Bisnis
+- **Sales & CRM** - Order, quotation, manajemen customer
+- **Purchasing** - Manajemen supplier, otomasi PO
+- **Manajemen Inventory** - Tracking stock real-time, operasi gudang
+- **Finance & Accounting** - GL, AP, AR, budgeting, cost accounting
+
+### 👥 Human Resources
+- **Manajemen Karyawan** - Profile, absensi, cuti
+- **Sistem Payroll** - Kalkulasi gaji, potongan, pajak
+- **Performance Appraisal** - Tracking KPI, review
+- **Training & Development** - Tracking skill, manajemen sertifikasi
+
+### 🔬 R&D & Inovasi
+- **Manajemen Project** - Project R&D, tracking eksperimen
+- **Pengembangan Produk** - Formulasi produk baru, testing
+- **Riset Material** - Testing dan analisa material
+
+---
+
+## 🏗️ Arsitektur Sistem
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Frontend Layer                          │
+│  React 18 + TypeScript + Redux Toolkit + React Router      │
+│  Tailwind CSS + Recharts + React Beautiful DND             │
+└─────────────────────────────────────────────────────────────┘
+                            ↕ REST API
+┌─────────────────────────────────────────────────────────────┐
+│                     Backend Layer                           │
+│  Flask 3.0 + SQLAlchemy + Flask-JWT-Extended               │
+│  Flask-CORS + Flask-Migrate + Bcrypt                       │
+└─────────────────────────────────────────────────────────────┘
+                            ↕ ORM
+┌─────────────────────────────────────────────────────────────┐
+│                   Database Layer                            │
+│  SQLite (Development) / PostgreSQL (Production)            │
+│  Alembic Migrations + Database Indexing                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 💻 Teknologi yang Dipakai
+
+### Backend
+| Teknologi | Versi | Kegunaan |
+|-----------|-------|----------|
+| Python | 3.10+ | Bahasa utama |
+| Flask | 3.0+ | Web framework |
+| SQLAlchemy | 2.0+ | ORM |
+| Flask-JWT-Extended | 4.6+ | Authentication |
+| Flask-CORS | 4.0+ | Cross-origin support |
+| Flask-Migrate | 4.0+ | Database migrations |
+| Pytest | 7.4+ | Testing framework |
+| Bcrypt | 4.1+ | Password hashing |
+
+### Frontend
+| Teknologi | Versi | Kegunaan |
+|-----------|-------|----------|
+| React | 18.2+ | UI framework |
+| TypeScript | 5.2+ | Type safety |
+| Redux Toolkit | 2.0+ | State management |
+| React Router | 6.20+ | Routing |
+| Tailwind CSS | 3.3+ | Styling |
+| Recharts | 2.15+ | Visualisasi data |
+| Vitest | 4.0+ | Testing framework |
+| Axios | 1.6+ | HTTP client |
+
+---
+
+## 📦 Modul-Modul
+
+### 1️⃣ **Modul Sales & Marketing**
+
+**Fitur:**
+- Manajemen Customer (CRM)
+- Sales Order & Quotation
+- Forecasting Penjualan
+- Price List & Diskon
+- Proses Return Customer
+
+**API Endpoints:**
+```
+GET    /api/sales/customers
+POST   /api/sales/customers
+GET    /api/sales/orders
+POST   /api/sales/orders
+GET    /api/sales/forecasts
+POST   /api/sales/quotations
+```
+
+---
+
+### 2️⃣ **Modul Produksi**
+
+**Fitur:**
+- Manajemen Work Order
+- Scheduling Produksi
+- Input Produksi Per Shift (Manual)
+- Recording & Analisa Downtime
+- Kalkulasi OEE (Availability × Performance × Quality)
+- Manajemen Mesin
+- Manajemen Buffer Produksi
+
+**Input Produksi Per Shift:**
+- Entry data per shift (Shift 1, 2, 3)
+- Tracking target vs actual quantity
+- Quantity Good, Reject, Rework
+- Runtime dan downtime (menit)
+- Assignment operator dan supervisor
+- Kalkulasi OEE otomatis
+
+**Kategori Downtime:**
+- Planned: Maintenance, Setup, Changeover
+- Unplanned: Breakdown, Kekurangan material, Masalah quality
+
+---
+
+### 3️⃣ **Modul Quality Control**
+
+**Fitur:**
+- Quality Inspection (Incoming, In-process, Final)
+- Tracking & Analisa Defect
+- CAPA (Corrective & Preventive Actions)
+- Metrik & KPI Quality
+- Alert & Notifikasi Quality
+- Audit Quality
+- Manajemen Training & Kompetensi
+
+**Workflow Quality:**
+```
+Produksi Selesai → Auto Trigger QC → 
+Inspeksi → Pass/Fail → Rework/Disposal → 
+Update Metrik Quality
+```
+
+---
+
+### 4️⃣ **Modul Warehouse & Inventory**
+
+**Fitur:**
+- Tracking Inventory Real-time
+- Stock Movement (Receipt, Issue, Transfer)
+- Manajemen Lokasi Gudang
+- Alert Stock (Level Min/Max)
+- Valuasi Inventory (FIFO, LIFO, Average)
+- Cycle Counting
+- Support Barcode/QR Code
+
+---
+
+### 5️⃣ **Modul Purchasing**
+
+**Fitur:**
+- Manajemen Supplier
+- Purchase Requisition
+- Purchase Order
+- Goods Receipt Note
+- Tracking Performa Supplier
+- Perbandingan Harga
+- Evaluasi Vendor
+
+---
+
+### 6️⃣ **Modul Finance & Accounting**
+
+**Fitur:**
+- General Ledger (GL)
+- Accounts Payable (AP)
+- Accounts Receivable (AR)
+- Chart of Accounts
+- Journal Entry
+- Planning & Analisa Variance Budget
+- Manajemen Cash Flow
+- Report Keuangan (P&L, Balance Sheet, Cash Flow)
+- Cost Accounting (WIP, COGM, COGS)
+
+**WIP Accounting:**
+- WIP Ledger per Work Order
+- Tracking cost Material, Labor, Overhead
+- Analisa Variance (Material, Labor, Overhead, Yield)
+- Auto-posting ke GL
+- Flow COGM → Finished Goods → COGS
+
+---
+
+### 7️⃣ **Modul HR & Payroll**
+
+**Fitur:**
+- Manajemen Karyawan
+- Manajemen Absensi & Cuti
+- Proses Payroll
+- Performance Appraisal
+- Training & Development
+- Manajemen Roster Shift
+- Portal Self-Service Karyawan
+
+**Integrasi Roster:**
+- Data karyawan dari modul HR
+- Data mesin dari modul Produksi
+- Assignment berbasis shift
+- Interface drag & drop
+- View roster mingguan
+
+---
+
+### 8️⃣ **Modul Maintenance**
+
+**Fitur:**
+- Scheduling Preventive Maintenance
+- Tracking Corrective Maintenance
+- Manajemen Work Order
+- Inventory Spare Parts
+- History Equipment
+- Tracking Cost Maintenance
+
+---
+
+### 9️⃣ **Modul MRP (Material Requirements Planning)**
+
+**Fitur:**
+- Forecasting Demand
+- Kalkulasi Kebutuhan Material
+- Planning Produksi
+- Planning Kapasitas
+- Alert Kekurangan Material
+- Planning Timeline
+
+**Workflow MRP:**
+```
+Sales Order Confirmed → Analisa MRP → 
+Cek Stock → Shortage Teridentifikasi → 
+Purchase Order / Work Order Dibuat
+```
+
+---
+
+### 🔟 **Modul R&D**
+
+**Fitur:**
+- Manajemen Project R&D
+- Tracking Eksperimen
+- Testing Material
+- Pengembangan Produk
+- Manajemen Formulasi
+- Analisa Hasil Test
+
+---
+
+### Modul Tambahan
+
+- **Shipping & Logistics** - Manajemen delivery, tracking, carriers
+- **Waste Management** - Tracking waste, analytics, compliance
+- **Manajemen BOM** - Multi-level BOM, versioning, kalkulasi cost
+- **Dashboard & Analytics** - KPI real-time, custom reports
+- **Tracking OEE** - Monitoring efektivitas equipment
+- **Notifikasi** - Alert dan notifikasi real-time
+- **Settings** - Konfigurasi sistem, preferensi
+- **Backup & Restore** - Backup dan recovery data
+
+---
+
+## 🔄 Integrasi Workflow
+
+### Flow Bisnis Lengkap
+
+```
+SALES → MRP → PURCHASING/PRODUCTION → WAREHOUSE → 
+QUALITY → SHIPPING → FINANCE
+```
+
+### Workflow Otomatis
+
+#### Sales Order ke Produksi
+```
+Sales Order Confirmed → 
+  Auto Analisa MRP → 
+    Kekurangan Material? → 
+      Ya: Buat Purchase Order
+      Tidak: Buat Work Order → 
+        Produksi Selesai → 
+          Auto Quality Inspection → 
+            Pass: Pindah ke Finished Goods
+            Fail: Rework/Disposal
+```
+
+#### Produksi ke Finance
+```
+Produksi Start → 
+  Buat WIP Ledger → 
+    Akumulasi Cost (Material + Labor + Overhead) → 
+      Produksi Selesai → 
+        COGM Transfer (WIP → FG) → 
+          Auto GL Posting → 
+            Produk Terjual → 
+              COGS Posting → 
+                Kalkulasi Gross Profit
+```
+
+---
+
+## 🛠️ Cara Install
+
+### Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- npm atau yarn
+- Git
+
+### Setup Backend
+
+```bash
+# Clone repository
+git clone https://github.com/baymngrh/grat.git
+cd grat/backend
+
+# Buat virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Setup environment variables
+cp .env.example .env
+
+# Initialize database
+flask db upgrade
+
+# Jalankan development server
+python app.py
+```
+
+Backend jalan di `http://localhost:5000`
+
+### Setup Frontend
+
+```bash
+cd ../frontend
+
+# Install dependencies
+npm install
+
+# Setup environment variables
+cp .env.example .env
+
+# Jalankan development server
+npm run dev
+```
+
+Frontend jalan di `http://localhost:5173`
+
+---
+
+## 🧪 Testing
+
+### Backend Testing (Pytest)
+
+```bash
+cd backend
+
+# Jalankan semua test
+pytest tests/ -v
+
+# Jalankan dengan coverage
+pytest tests/ --cov=. --cov-report=html
+
+# Jalankan test file tertentu
+pytest tests/test_auth.py -v
+```
+
+
+
+### Frontend Testing (Vitest)
+
+```bash
+cd frontend
+
+# Jalankan test
+npm test
+
+# Jalankan dengan UI
+npm test:ui
+
+# Jalankan dengan coverage
+npm test:coverage
+```
+
+---
+
+## 📚 Dokumentasi API
+
+### Authentication
+
+```http
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "password"
+}
+```
+
+### Pakai Token
+
+```http
+GET /api/products
+Authorization: Bearer <your-jwt-token>
+```
+
+### Format Response Umum
+
+**Success:**
+```json
+{
+  "success": true,
+  "message": "Operasi berhasil",
+  "data": { ... }
+}
+```
+
+**Error:**
+```json
+{
+  "success": false,
+  "error": "Pesan error"
+}
+```
+
+---
+
+## 🗂️ Struktur Project
+
+```
+erp-flask/
+├── backend/
+│   ├── app.py
+│   ├── config.py
+│   ├── models/
+│   ├── routes/
+│   ├── utils/
+│   └── tests/
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── pages/
+│   │   ├── services/
+│   │   ├── store/
+│   │   └── tests/
+│   ├── package.json
+│   └── vite.config.ts
+└── README.md
+```
+
+---
+
+## 🔐 Fitur Keamanan
+
+- ✅ JWT Authentication
+- ✅ Password Hashing (Bcrypt)
+- ✅ CORS Protection
+- ✅ SQL Injection Prevention
+- ✅ XSS Protection
+- ✅ Role-based Access Control
+- ✅ Audit Trail
+
+---
+
+## 🌐 Internationalization
+
+Support:
+- 🇮🇩 Bahasa Indonesia
+- 🇬🇧 English
+
+---
+
+## 📝 License
+
+**PROPRIETARY SOFTWARE**
+
+Copyright (c) 2024-2025 **Bayu Adhie**. All Rights Reserved.
+
+This software is proprietary and confidential. Unauthorized copying, distribution, modification, public display, or public performance of this software is strictly prohibited.
+
+See [LICENSE](LICENSE) for full terms.
+
+---
+
+## 👨‍💻 Author
+
+**Bayu Adhie**
+- GitHub: [@baymngrh](https://github.com/baymngrh)
+- Email: baymngrh@gmail.com
+
+---
+
+## 👥 Support
+
+Untuk support teknis: baymngrh@gmail.com
+
+---
+
+## 🤖 AI Assistant
+
+AI Assistant adalah fitur chatbot terintegrasi yang memungkinkan user untuk query data ERP menggunakan bahasa natural Indonesia.
+
+### Contoh Query
+
+```
+📦 Inventory & Warehouse
+- "stok POLYESTER"
+- "material yang hampir habis"
+- "BOM produk ANDALAN"
+
+🛒 Sales & Purchasing
+- "PO pending"
+- "revenue bulan ini"
+- "invoice belum lunas"
+
+� Production
+- "WO hari ini"
+- "OEE mesin"
+- "downtime kemarin"
+
+📊 Quality
+- "QC hari ini"
+- "defect rate"
+
+👥 HR
+- "karyawan aktif"
+- "absensi hari ini"
+
+🚚 Shipping
+- "pengiriman hari ini"
+- "tracking [nomor]"
+```
+
+### Cara Pakai
+
+1. Klik icon chat di pojok kanan bawah
+2. Ketik pertanyaan dalam bahasa Indonesia
+3. AI akan memberikan jawaban beserta link navigasi
+
+---
+
+## �🎯 Roadmap
+
+### Selesai ✅
+- Implementasi modul core (15+ modul)
+- Authentication & authorization
+- Otomasi workflow (10+ trigger otomatis)
+- AI Assistant terintegrasi
+- Executive Dashboard
+- Machine Detail dengan OEE Analytics
+- R&D Module lengkap
+
+### Sedang Dikerjakan 🚧
+- Mobile responsive optimization
+- Advanced reporting
+
+### Direncanakan 📋
+- AI/ML predictive analytics
+- Integrasi IoT
+- Mobile app (React Native)
+
+---
+
+<div align="center">
+
+
+⭐ Star repository ini kalau bermanfaat!
+
+</div>

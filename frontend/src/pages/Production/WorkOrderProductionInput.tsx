@@ -1,0 +1,953 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeftIcon, CheckCircleIcon, ClockIcon, CogIcon, UserIcon, CubeIcon, PaintBrushIcon, EllipsisHorizontalCircleIcon, PlusIcon, TrashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import axiosInstance from '../../utils/axiosConfig';
+import { toast } from 'react-hot-toast';
+
+interface WorkOrder {
+  id: number;
+  wo_number: string;
+  product_id: number;
+  product_name: string;
+  product_code: string;
+  quantity: number;
+  quantity_produced: number;
+  uom: string;
+  machine_id: number;
+  machine_name: string;
+  status: string;
+  pack_per_carton: number;
+}
+
+interface Employee {
+  id: number;
+  employee_id: string;
+  name: string;
+}
+
+interface DowntimeEntry {
+  id: number;
+  reason: string;
+  category: string;
+  duration_minutes: string;
+  pic: string;
+}
+
+// Downtime categories with PIC and limits
+const DOWNTIME_CATEGORIES = {
+  mesin: { 
+    label: 'Mesin', 
+    pic: 'MTC', 
+    maxPercent: 15,
+    color: 'red',
+    bgColor: 'bg-red-50',
+    borderColor: 'border-red-300',
+    textColor: 'text-red-700',
+    icon: CogIcon
+  },
+  operator: { 
+    label: 'Operator', 
+    pic: 'Supervisor Produksi', 
+    maxPercent: 7,
+    color: 'orange',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-300',
+    textColor: 'text-orange-700',
+    icon: UserIcon
+  },
+  material: { 
+    label: 'Raw Material', 
+    pic: 'Warehouse', 
+    maxPercent: 0, // No limit, all counted
+    color: 'yellow',
+    bgColor: 'bg-yellow-50',
+    borderColor: 'border-yellow-300',
+    textColor: 'text-yellow-700',
+    icon: CubeIcon
+  },
+  design: { 
+    label: 'Design Change', 
+    pic: 'Supervisor Produksi', 
+    maxPercent: 8,
+    color: 'blue',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-300',
+    textColor: 'text-blue-700',
+    icon: PaintBrushIcon
+  },
+  others: { 
+    label: 'Others', 
+    pic: 'Supervisor Produksi', 
+    maxPercent: 10,
+    color: 'gray',
+    bgColor: 'bg-gray-50',
+    borderColor: 'border-gray-300',
+    textColor: 'text-gray-700',
+    icon: EllipsisHorizontalCircleIcon
+  }
+};
+
+// Keywords untuk auto-detect kategori dari alasan downtime
+// Berdasarkan standar OEE dan referensi lokal pabrik
+// PENTING: Urutan pengecekan = mesin -> material -> design -> operator -> others
+const CATEGORY_KEYWORDS = {
+  // MESIN (Machine/Equipment): Semua masalah teknis mesin dan komponen
+  // Referensi: seal bocor, pisau tumpul, belt putus, sensor error, dll
+  mesin: [
+    // Seal & Sealer
+    'seal', 'sealer', 'seal bocor', 'seal samping bocor', 'seal bawah bocor',
+    'seal tidak ngeseal', 'seal bawah tdk ngeseal', 'sealer rusak',
+    // Pisau & Cutter
+    'pisau', 'pisau tumpul', 'pisau folding tumpul', 'pisau folding kotor',
+    'cutter', 'cutter tumpul', 'blade', 'blade aus',
+    // Belt & Conveyor
+    'belt', 'belt putus', 'round belt putus', 'vanbelt', 'vanbelt putus',
+    'conveyor', 'conveyor macet', 'conveyor slip',
+    // Folding & Lipatan
+    'folding', 'lipatan', 'lipat', 'kain keluar lajur folding',
+    'tumpukan kain tdk rapih', 'tumpukan kain tidak rapi',
+    // Selang & Pneumatic
+    'selang', 'selang bocor', 'selang angin bocor',
+    'pneumatic', 'pneumatic error', 'hidrolik', 'hidrolik bocor',
+    // Metal Detector
+    'metal detector', 'metal detektor', 'detector putus',
+    // Temperature & Suhu
+    'temperature', 'temperatur', 'suhu', 'overheat', 'panas berlebih',
+    'low temperature', 'suhu rendah',
+    // Motor & Bearing
+    'motor', 'motor rusak', 'motor mati', 'bearing', 'bearing aus',
+    'gear', 'gear rusak',
+    // Sensor & Elektrik
+    'sensor', 'sensor error', 'sensor rusak',
+    // Pompa & Kompresor
+    'pompa', 'pompa rusak', 'kompresor', 'kompresor mati',
+    // Heater & Cooling
+    'heater', 'heater rusak', 'cooling', 'cooling error',
+    // Nozzle & Valve
+    'nozzle', 'nozzle mampet', 'valve', 'valve bocor',
+    'cylinder', 'cylinder bocor',
+    // General mesin
+    'mesin rusak', 'mesin error', 'mesin mati', 'mesin macet', 'mesin trouble',
+    'breakdown', 'break down', 'kerusakan mesin', 'gangguan mesin',
+    'press error', 'sparepart', 'maintenance', 'perbaikan mesin',
+    'kalibrasi', 'service mesin'
+  ],
+  // MATERIAL (Raw Material): Masalah bahan baku
+  material: [
+    'kain rusak', 'kain cacat', 'kain sobek', 'kain kotor', 'kain belang',
+    'kain jelek', 'kain reject', 'kain defect', 'kain tidak bagus',
+    'bahan rusak', 'bahan cacat', 'bahan jelek', 'bahan reject',
+    'material rusak', 'material cacat', 'material reject', 'material defect',
+    'benang putus', 'benang kusut', 'roll rusak', 'roll cacat',
+    'tunggu material', 'tunggu bahan', 'tunggu kain', 'material habis',
+    'bahan habis', 'kain habis', 'shortage material', 'material shortage',
+    'terlambat material', 'kurang material', 'tidak sesuai spec material',
+    'fabric defect', 'yarn defect', 'raw material'
+  ],
+  // DESIGN CHANGE: Pergantian produk (kata "ganti"), sanitasi, cleaning
+  // Kata kunci utama: "ganti" = design change
+  design: [
+    // Ganti (semua yang ada kata "ganti" masuk design change)
+    'ganti', 'ganti order', 'ganti produk', 'ganti artikel', 'ganti model',
+    'ganti size', 'ganti warna', 'ganti stiker', 'ganti label', 
+    'ganti packaging', 'ganti kemasan', 'ganti design', 'ganti desain',
+    'ganti mixing', 'pergantian produk', 'pergantian artikel',
+    // Sanitasi
+    'sanitasi', 'persiapan & sanitasi', 'sterilisasi',
+    // Persiapan
+    'persiapan produksi',
+    // Obat habis
+    'obat habis',
+    // Changeover
+    'changeover', 'change over',
+    // Cleaning
+    'cleaning', 'cuci mesin', 'bersih-bersih',
+    // Warmup
+    'warmup', 'pemanasan', 'warm up',
+    // Repack
+    'repack', 'repacking'
+  ],
+  // OPERATOR: Kesalahan manusia, setting, training
+  // Kata kunci utama: "setting" = operator
+  operator: [
+    // Setting (semua yang ada kata "setting" masuk operator)
+    'setting', 'setting mc', 'setting mesin', 'setting ulang', 'salah setting',
+    'setup produk', 'setup mesin',
+    // Kesalahan operator
+    'kesalahan operator', 'operator salah', 'human error',
+    'salah parameter', 'salah input', 'salah prosedur', 'kelalaian operator',
+    'adjust parameter', 'trial error', 'trial produk',
+    // Pergantian/Training operator
+    'pergantian operator', 'operator baru', 'training operator',
+    'briefing operator', 'operator tidak hadir', 'operator sakit',
+    'operator izin', 'kurang operator', 'shortage operator'
+  ],
+  // OTHERS: Istirahat, ibadah, utilitas, banjir, tunggu air
+  // Referensi: istirahat makan, istirahat sholat, sanitasi ruangan (banjir), tunggu air
+  others: [
+    // Istirahat
+    'istirahat', 'istirahat makan', 'istirahat sholat', 'istirahat shalat',
+    'break', 'makan', 'minum',
+    // Ibadah
+    'sholat', 'shalat', 'jumatan', 'ibadah',
+    // Listrik
+    'listrik mati', 'listrik padam', 'mati lampu', 'power failure',
+    // Air
+    'air mati', 'air habis', 'tunggu air', 'air panas',
+    // Sanitasi Ruangan
+    'sanitasi ruangan', 'banjir',
+    // Toilet
+    'toilet', 'wc',
+    // Meeting
+    'meeting', 'rapat', 'briefing', 'koordinasi',
+    // Lainnya
+    'lainnya', 'other', 'dll', 'etc'
+  ]
+};
+
+// Function to auto-detect category from reason text
+// Urutan pengecekan: mesin -> material -> design -> operator -> others
+// MESIN dicek duluan karena paling banyak keyword spesifik (pisau, seal, belt, dll)
+const detectCategory = (reason: string): string => {
+  const lowerReason = reason.toLowerCase();
+  
+  // Urutan prioritas pengecekan - MESIN DULUAN karena paling spesifik
+  const categoryOrder = ['mesin', 'material', 'design', 'operator', 'others'];
+  
+  for (const category of categoryOrder) {
+    const keywords = CATEGORY_KEYWORDS[category as keyof typeof CATEGORY_KEYWORDS];
+    for (const keyword of keywords) {
+      if (lowerReason.includes(keyword.toLowerCase())) {
+        return category;
+      }
+    }
+  }
+  
+  // Default to 'others' if no match
+  return 'others';
+};
+
+export default function WorkOrderProductionInput() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  
+  const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Default planned runtime per shift (8 hours = 480 minutes)
+  const DEFAULT_RUNTIME = 480;
+  
+  const [formData, setFormData] = useState({
+    production_date: new Date().toISOString().split('T')[0],
+    shift: '1',
+    quantity_produced: '',
+    quantity_good: '',
+    quantity_reject: '0',
+    quantity_rework: '0',
+    operator_id: '',
+    notes: '',
+    planned_runtime: '480', // Bisa diubah manual
+  });
+
+  // Downtime entries list
+  const [downtimeEntries, setDowntimeEntries] = useState<DowntimeEntry[]>([]);
+  const [nextEntryId, setNextEntryId] = useState(1);
+
+  useEffect(() => {
+    fetchData();
+  }, [id]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [woRes, empRes] = await Promise.all([
+        axiosInstance.get(`/api/production/work-orders/${id}`),
+        axiosInstance.get('/api/hr/employees')
+      ]);
+      
+      setWorkOrder(woRes.data.work_order);
+      setEmployees(empRes.data.employees || []);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast.error('Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (field: string, value: string) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-calculate good quantity
+      if (field === 'quantity_produced' || field === 'quantity_reject' || field === 'quantity_rework') {
+        const produced = parseFloat(field === 'quantity_produced' ? value : updated.quantity_produced) || 0;
+        const reject = parseFloat(field === 'quantity_reject' ? value : updated.quantity_reject) || 0;
+        const rework = parseFloat(field === 'quantity_rework' ? value : updated.quantity_rework) || 0;
+        updated.quantity_good = Math.max(0, produced - reject - rework).toString();
+      }
+      
+      return updated;
+    });
+  };
+
+  // Downtime entry handlers
+  const addDowntimeEntry = () => {
+    setDowntimeEntries(prev => [...prev, {
+      id: nextEntryId,
+      reason: '',
+      category: '',
+      duration_minutes: '',
+      pic: ''
+    }]);
+    setNextEntryId(prev => prev + 1);
+  };
+
+  const removeDowntimeEntry = (entryId: number) => {
+    setDowntimeEntries(prev => prev.filter(e => e.id !== entryId));
+  };
+
+  const updateDowntimeEntry = (entryId: number, field: keyof DowntimeEntry, value: string) => {
+    setDowntimeEntries(prev => prev.map(entry => {
+      if (entry.id !== entryId) return entry;
+      
+      const updated = { ...entry, [field]: value };
+      
+      // Auto-detect category and PIC when reason text changes
+      if (field === 'reason') {
+        const detectedCategory = detectCategory(value);
+        updated.category = detectedCategory;
+        updated.pic = DOWNTIME_CATEGORIES[detectedCategory as keyof typeof DOWNTIME_CATEGORIES]?.pic || '';
+      }
+      
+      return updated;
+    }));
+  };
+
+  // Calculate downtime by category
+  const getDowntimeByCategory = () => {
+    const result: Record<string, number> = {
+      mesin: 0,
+      operator: 0,
+      material: 0,
+      design: 0,
+      others: 0
+    };
+    
+    downtimeEntries.forEach(entry => {
+      if (entry.category && entry.duration_minutes) {
+        result[entry.category] += parseInt(entry.duration_minutes) || 0;
+      }
+    });
+    
+    return result;
+  };
+
+  // Get planned runtime from form
+  const getPlannedRuntime = () => {
+    return parseInt(formData.planned_runtime) || DEFAULT_RUNTIME;
+  };
+
+  // Calculate total downtime
+  const getTotalDowntime = () => {
+    return downtimeEntries.reduce((sum, e) => sum + (parseInt(e.duration_minutes) || 0), 0);
+  };
+
+  // Get actual runtime
+  const getActualRuntime = () => {
+    return Math.max(0, getPlannedRuntime() - getTotalDowntime());
+  };
+
+  // Get downtime percentage for a category
+  const getDowntimePercentage = (minutes: number) => {
+    const runtime = getPlannedRuntime();
+    return runtime > 0 ? (minutes / runtime * 100) : 0;
+  };
+
+  // Check if any category exceeds limit
+  const getCategoryStatus = () => {
+    const byCategory = getDowntimeByCategory();
+    const status: Record<string, { minutes: number; percent: number; overLimit: boolean }> = {};
+    
+    Object.entries(DOWNTIME_CATEGORIES).forEach(([key, config]) => {
+      const minutes = byCategory[key] || 0;
+      const percent = getDowntimePercentage(minutes);
+      const overLimit = config.maxPercent > 0 && percent > config.maxPercent;
+      status[key] = { minutes, percent, overLimit };
+    });
+    
+    return status;
+  };
+
+  // Check if any category is over limit
+  const hasOverLimit = () => {
+    const status = getCategoryStatus();
+    return Object.values(status).some(s => s.overLimit);
+  };
+
+  // Calculate efficiency: 100% - (total downtime / planned runtime * 100)
+  const getEfficiency = () => {
+    const totalDowntime = getTotalDowntime();
+    const runtime = getPlannedRuntime();
+    const efficiency = runtime > 0 ? 100 - (totalDowntime / runtime * 100) : 0;
+    return Math.max(0, Math.min(100, efficiency));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.quantity_produced || parseFloat(formData.quantity_produced) <= 0) {
+      toast.error('Quantity produced harus lebih dari 0');
+      return;
+    }
+    
+    try {
+      setSubmitting(true);
+      
+      const byCategory = getDowntimeByCategory();
+      
+      const payload = {
+        work_order_id: parseInt(id || '0'),
+        production_date: formData.production_date,
+        shift: formData.shift,
+        quantity_produced: parseFloat(formData.quantity_produced),
+        quantity_good: parseFloat(formData.quantity_good),
+        quantity_reject: parseFloat(formData.quantity_reject),
+        quantity_rework: parseFloat(formData.quantity_rework),
+        planned_runtime: getPlannedRuntime(),
+        actual_runtime: getActualRuntime(),
+        downtime_minutes: getTotalDowntime(),
+        // Downtime by category
+        downtime_mesin: byCategory.mesin,
+        downtime_operator: byCategory.operator,
+        downtime_material: byCategory.material,
+        downtime_design: byCategory.design,
+        downtime_others: byCategory.others,
+        efficiency_rate: getEfficiency(),
+        has_over_limit: hasOverLimit(),
+        downtime_entries: downtimeEntries.filter(e => e.reason && e.duration_minutes).map(e => ({
+          reason: e.reason,
+          category: e.category,
+          duration_minutes: parseInt(e.duration_minutes),
+          pic: e.pic
+        })),
+        operator_id: formData.operator_id ? parseInt(formData.operator_id) : null,
+        notes: formData.notes,
+      };
+      
+      const response = await axiosInstance.post(`/api/production/work-orders/${id}/production-records`, payload);
+      
+      // Show job costing info if available
+      const data = response.data;
+      let successMessage = 'Data produksi berhasil disimpan!';
+      
+      if (data.buffer_stock?.added_to_inventory) {
+        successMessage += ` ${data.buffer_stock.message}`;
+      }
+      
+      if (data.job_costing) {
+        const jc = data.job_costing;
+        const totalCost = jc.labor_cost + jc.overhead_cost;
+        successMessage += ` | Biaya: Rp ${totalCost.toLocaleString('id-ID')}`;
+      }
+      
+      toast.success(successMessage);
+      navigate(`/app/production/work-orders/${id}`);
+    } catch (error: any) {
+      console.error('Error saving production data:', error);
+      toast.error(error.response?.data?.error || 'Gagal menyimpan data produksi');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!workOrder) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <p className="text-red-800">Work Order tidak ditemukan</p>
+      </div>
+    );
+  }
+
+  const remaining = workOrder.quantity - (workOrder.quantity_produced || 0);
+  const qualityRate = formData.quantity_produced && parseFloat(formData.quantity_produced) > 0
+    ? (parseFloat(formData.quantity_good) / parseFloat(formData.quantity_produced) * 100).toFixed(1)
+    : '0';
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center space-x-4">
+        <Link
+          to={`/app/production/work-orders/${id}`}
+          className="p-2 hover:bg-gray-100 rounded-lg"
+        >
+          <ArrowLeftIcon className="h-5 w-5" />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Input Produksi</h1>
+          <p className="text-gray-600">{workOrder.wo_number} - {workOrder.product_name}</p>
+        </div>
+      </div>
+
+      {/* Work Order Summary */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div>
+            <p className="text-sm text-blue-600">Target</p>
+            <p className="text-lg font-bold text-blue-800">{workOrder.quantity.toLocaleString()} {workOrder.uom}</p>
+            {workOrder.pack_per_carton > 0 && (
+              <p className="text-xs text-blue-500">
+                = {(workOrder.quantity / workOrder.pack_per_carton).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Karton
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-blue-600">Sudah Diproduksi</p>
+            <p className="text-lg font-bold text-blue-800">{(workOrder.quantity_produced || 0).toLocaleString()} {workOrder.uom}</p>
+            {workOrder.pack_per_carton > 0 && (
+              <p className="text-xs text-blue-500">
+                = {((workOrder.quantity_produced || 0) / workOrder.pack_per_carton).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Karton
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-blue-600">Sisa</p>
+            <p className="text-lg font-bold text-blue-800">{remaining.toLocaleString()} {workOrder.uom}</p>
+            {workOrder.pack_per_carton > 0 && (
+              <p className="text-xs text-blue-500">
+                = {(remaining / workOrder.pack_per_carton).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Karton
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-blue-600">Pack/Karton</p>
+            <p className="text-lg font-bold text-blue-800">{workOrder.pack_per_carton || '-'}</p>
+          </div>
+          <div>
+            <p className="text-sm text-blue-600">Mesin</p>
+            <p className="text-lg font-bold text-blue-800">{workOrder.machine_name || 'N/A'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Form */}
+      <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-6">
+        {/* Date & Shift */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Tanggal Produksi *
+            </label>
+            <input
+              type="date"
+              value={formData.production_date}
+              onChange={(e) => handleChange('production_date', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Shift *
+            </label>
+            <select
+              value={formData.shift}
+              onChange={(e) => handleChange('shift', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              <option value="1">Shift 1 (07:00 - 15:00)</option>
+              <option value="2">Shift 2 (15:00 - 23:00)</option>
+              <option value="3">Shift 3 (23:00 - 07:00)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Runtime (menit)
+            </label>
+            <input
+              type="number"
+              value={formData.planned_runtime}
+              onChange={(e) => handleChange('planned_runtime', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="480"
+              min="0"
+            />
+          </div>
+        </div>
+
+        {/* Quantity Section */}
+        <div className="border-t pt-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Hasil Produksi</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Qty Diproduksi *
+              </label>
+              <input
+                type="number"
+                value={formData.quantity_produced}
+                onChange={(e) => handleChange('quantity_produced', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="0"
+                min="0"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Qty Good
+              </label>
+              <input
+                type="number"
+                value={formData.quantity_good}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-green-800 font-medium"
+                readOnly
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Qty Reject
+              </label>
+              <input
+                type="number"
+                value={formData.quantity_reject}
+                onChange={(e) => handleChange('quantity_reject', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Qty Rework
+              </label>
+              <input
+                type="number"
+                value={formData.quantity_rework}
+                onChange={(e) => handleChange('quantity_rework', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+          </div>
+          
+          {/* Quality Rate Indicator */}
+          <div className="mt-4 flex items-center gap-2">
+            <span className="text-sm text-gray-600">Quality Rate:</span>
+            <span className={`px-2 py-1 rounded text-sm font-medium ${
+              parseFloat(qualityRate) >= 95 ? 'bg-green-100 text-green-800' :
+              parseFloat(qualityRate) >= 85 ? 'bg-yellow-100 text-yellow-800' :
+              'bg-red-100 text-red-800'
+            }`}>
+              {qualityRate}%
+            </span>
+          </div>
+        </div>
+
+        {/* Downtime Section */}
+        <div className="border-t pt-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-gray-900 flex items-center">
+              <ClockIcon className="h-5 w-5 mr-2 text-orange-600" />
+              Input Downtime
+              {hasOverLimit() && (
+                <span className="ml-2 px-2 py-1 bg-red-100 text-red-700 text-xs rounded-full flex items-center gap-1">
+                  <ExclamationTriangleIcon className="h-3 w-3" />
+                  Ada kategori melebihi limit!
+                </span>
+              )}
+            </h3>
+            <div className="flex items-center gap-3">
+              {/* Planned Runtime Input */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Runtime:</label>
+                <input
+                  type="number"
+                  value={formData.planned_runtime}
+                  onChange={(e) => handleChange('planned_runtime', e.target.value)}
+                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                  min="1"
+                />
+                <span className="text-sm text-gray-500">menit</span>
+              </div>
+              <button
+                type="button"
+                onClick={addDowntimeEntry}
+                className="inline-flex items-center px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-sm font-medium"
+              >
+                <PlusIcon className="h-4 w-4 mr-1" />
+                Tambah Downtime
+              </button>
+            </div>
+          </div>
+          
+          {/* Downtime Entries */}
+          {downtimeEntries.length === 0 ? (
+            <div className="text-center py-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 mb-6">
+              <ClockIcon className="h-10 w-10 mx-auto text-gray-400 mb-2" />
+              <p className="text-gray-500">Tidak ada downtime</p>
+              <button
+                type="button"
+                onClick={addDowntimeEntry}
+                className="mt-2 text-orange-600 hover:text-orange-800 text-sm font-medium"
+              >
+                + Tambah downtime jika ada
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3 mb-6">
+              {downtimeEntries.map((entry, index) => {
+                const categoryConfig = entry.category ? DOWNTIME_CATEGORIES[entry.category as keyof typeof DOWNTIME_CATEGORIES] : null;
+                const Icon = categoryConfig?.icon || ClockIcon;
+                
+                return (
+                  <div key={entry.id} className={`p-4 rounded-lg border-2 ${categoryConfig ? categoryConfig.bgColor : 'bg-gray-50'} ${categoryConfig ? categoryConfig.borderColor : 'border-gray-200'}`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${categoryConfig ? `${categoryConfig.bgColor} ${categoryConfig.textColor}` : 'bg-gray-200 text-gray-600'}`}>
+                        {index + 1}
+                      </div>
+                      
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3">
+                        {/* Reason Text Input - Auto detect category */}
+                        <div className="md:col-span-2">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Alasan Downtime <span className="text-gray-400">(ketik bebas, kategori otomatis)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={entry.reason}
+                            onChange={(e) => updateDowntimeEntry(entry.id, 'reason', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 text-sm"
+                            placeholder="Contoh: pisau folding tumpul, setting mesin, kain habis..."
+                          />
+                        </div>
+                        
+                        {/* Duration */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Durasi (menit)
+                          </label>
+                          <input
+                            type="number"
+                            value={entry.duration_minutes}
+                            onChange={(e) => updateDowntimeEntry(entry.id, 'duration_minutes', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 text-sm text-center"
+                            placeholder="0"
+                            min="1"
+                          />
+                        </div>
+                        
+                        {/* Auto Category & PIC */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Kategori & PIC
+                          </label>
+                          {entry.category ? (
+                            <div className={`px-3 py-2 rounded-lg text-sm ${categoryConfig?.bgColor} ${categoryConfig?.textColor} border ${categoryConfig?.borderColor}`}>
+                              <div className="flex items-center gap-1 font-medium">
+                                <Icon className="h-4 w-4" />
+                                {categoryConfig?.label}
+                              </div>
+                              <div className="text-xs opacity-75">PIC: {entry.pic}</div>
+                            </div>
+                          ) : (
+                            <div className="px-3 py-2 rounded-lg text-sm bg-gray-100 text-gray-500 border border-gray-200">
+                              <div className="italic">Pilih alasan dulu</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => removeDowntimeEntry(entry.id)}
+                        className="flex-shrink-0 p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                        title="Hapus"
+                      >
+                        <TrashIcon className="h-5 w-5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Keyword Info */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <p className="text-xs text-blue-800 font-medium mb-2">Kategori otomatis berdasarkan keyword:</p>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2 text-xs text-blue-700">
+              <div><span className="font-medium text-red-600">Mesin:</span> mesin, pisau, cutter, macet, rusak, error, maintenance...</div>
+              <div><span className="font-medium text-orange-600">Operator:</span> setting, adjust, parameter, trial, training...</div>
+              <div><span className="font-medium text-yellow-600">Material:</span> kain, bahan, benang, habis, cacat, tunggu...</div>
+              <div><span className="font-medium text-blue-600">Design:</span> sanitasi, ganti stiker/produk/packaging, repack, cleaning...</div>
+              <div><span className="font-medium text-gray-600">Others:</span> istirahat, sholat, makan, meeting, listrik...</div>
+            </div>
+          </div>
+
+          {/* Category Summary */}
+          {getTotalDowntime() > 0 && (
+            <div className="bg-white border rounded-lg p-4 mb-6">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">Ringkasan per Kategori</h4>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                {Object.entries(DOWNTIME_CATEGORIES).map(([key, config]) => {
+                  const status = getCategoryStatus()[key];
+                  const Icon = config.icon;
+                  
+                  return (
+                    <div key={key} className={`p-3 rounded-lg border-2 ${status.overLimit ? 'bg-red-50 border-red-400' : config.bgColor + ' ' + config.borderColor}`}>
+                      <div className="flex items-center gap-1 mb-1">
+                        <Icon className={`h-4 w-4 ${status.overLimit ? 'text-red-600' : config.textColor}`} />
+                        <span className={`text-xs font-medium ${status.overLimit ? 'text-red-600' : config.textColor}`}>
+                          {config.label}
+                        </span>
+                        {status.overLimit && (
+                          <ExclamationTriangleIcon className="h-3 w-3 text-red-600" />
+                        )}
+                      </div>
+                      <div className={`text-lg font-bold ${status.overLimit ? 'text-red-600' : config.textColor}`}>
+                        {status.minutes} menit
+                      </div>
+                      <div className={`text-xs ${status.overLimit ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                        {status.percent.toFixed(1)}% 
+                        {config.maxPercent > 0 && (
+                          <span className={status.overLimit ? 'text-red-600' : 'text-gray-400'}>
+                            {' '}(max {config.maxPercent}%)
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        PIC: {config.pic}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Summary Box */}
+          <div className={`rounded-lg p-4 ${hasOverLimit() ? 'bg-red-50 border-2 border-red-300' : 'bg-gray-100'}`}>
+            {hasOverLimit() && (
+              <div className="flex items-center gap-2 mb-4 text-red-700">
+                <ExclamationTriangleIcon className="h-5 w-5" />
+                <span className="font-medium">Perhatian: Ada kategori downtime yang melebihi limit!</span>
+              </div>
+            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {/* Total Downtime */}
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Total Downtime</p>
+                <p className="text-2xl font-bold text-orange-600">{getTotalDowntime()} menit</p>
+                <p className="text-xs text-gray-500">
+                  ({getDowntimePercentage(getTotalDowntime()).toFixed(1)}% dari {getPlannedRuntime()}m)
+                </p>
+              </div>
+              
+              {/* Actual Runtime */}
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Actual Runtime</p>
+                <p className="text-2xl font-bold text-blue-600">{getActualRuntime()} menit</p>
+              </div>
+              
+              {/* Efficiency */}
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Efisiensi</p>
+                <p className={`text-3xl font-bold ${getEfficiency() >= 60 ? 'text-green-600' : 'text-red-600'}`}>
+                  {getEfficiency().toFixed(1)}%
+                </p>
+              </div>
+              
+              {/* Status */}
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Status</p>
+                <span className={`inline-block mt-1 px-4 py-2 rounded-full text-sm font-bold ${
+                  getEfficiency() >= 60 
+                    ? 'bg-green-100 text-green-800 border-2 border-green-500' 
+                    : 'bg-red-100 text-red-800 border-2 border-red-500'
+                }`}>
+                  {getEfficiency() >= 60 ? '✓ BAIK' : '✗ PERLU PERBAIKAN'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Operator & Notes */}
+        <div className="border-t pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Operator
+              </label>
+              <select
+                value={formData.operator_id}
+                onChange={(e) => handleChange('operator_id', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">-- Pilih Operator --</option>
+                {employees.map(emp => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.employee_id} - {emp.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Catatan
+              </label>
+              <textarea
+                value={formData.notes}
+                onChange={(e) => handleChange('notes', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                rows={2}
+                placeholder="Catatan tambahan..."
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Submit Buttons */}
+        <div className="border-t pt-6 flex justify-end gap-3">
+          <Link
+            to={`/app/production/work-orders/${id}`}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+          >
+            Batal
+          </Link>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center"
+          >
+            {submitting ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Menyimpan...
+              </>
+            ) : (
+              <>
+                <CheckCircleIcon className="h-5 w-5 mr-2" />
+                Simpan Data Produksi
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
