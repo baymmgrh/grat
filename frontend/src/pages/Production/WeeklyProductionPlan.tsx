@@ -7,10 +7,12 @@ import {
   ChevronRightIcon,
   TrashIcon,
   PrinterIcon,
-  DocumentArrowDownIcon,
-  PencilIcon,
-  CheckIcon,
+  CalendarDaysIcon,
+  Cog6ToothIcon,
+  DocumentTextIcon,
   XMarkIcon,
+  PencilSquareIcon,
+  ClipboardDocumentListIcon,
 } from '@heroicons/react/24/outline';
 
 interface ScheduleItem {
@@ -251,198 +253,297 @@ const WeeklyProductionPlan: React.FC = () => {
   }, {} as { [key: string]: ScheduleItem[] });
 
   return (
-    <div className="p-4 bg-white min-h-screen print:p-0">
-      {/* Header */}
-      <div className="text-center mb-4 print:mb-2">
-        <h1 className="text-xl font-bold text-gray-800 tracking-wider">PRODUCTION SCHEDULE</h1>
+    <div className="p-6 bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen print:p-2 print:bg-white">
+      {/* Header Card */}
+      <div className="bg-white rounded-2xl shadow-lg mb-6 overflow-hidden print:shadow-none print:rounded-none">
+        {/* Top Banner */}
+        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 px-6 py-4 print:py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-xl">
+                <CalendarDaysIcon className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-wide">Production Schedule</h1>
+                <p className="text-blue-100 text-sm">Jadwal Produksi Mingguan - PPIC</p>
+              </div>
+            </div>
+            <div className="text-right print:hidden">
+              <p className="text-white/80 text-sm">PT. Gratia Makmur Sentosa</p>
+              <p className="text-white font-semibold">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Info Bar */}
+        <div className="px-6 py-4 bg-gradient-to-r from-slate-50 to-white border-b">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            {/* Week Navigation */}
+            <div className="flex items-center gap-3 print:hidden">
+              <button
+                onClick={() => navigateWeek(-1)}
+                className="p-2 rounded-xl bg-white border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all shadow-sm"
+              >
+                <ChevronLeftIcon className="h-5 w-5 text-slate-600" />
+              </button>
+              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-md">
+                Week {weekNumber}
+              </div>
+              <button
+                onClick={() => navigateWeek(1)}
+                className="p-2 rounded-xl bg-white border-2 border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all shadow-sm"
+              >
+                <ChevronRightIcon className="h-5 w-5 text-slate-600" />
+              </button>
+            </div>
+            
+            {/* Period Info */}
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Periode</p>
+                <p className="font-bold text-slate-800">{getWeekPeriod()}</p>
+              </div>
+              <div className="h-8 w-px bg-slate-200"></div>
+              <div className="text-center">
+                <p className="text-xs text-slate-500 uppercase tracking-wider">Tanggal</p>
+                <p className="font-bold text-blue-600">{formatDateRange()}</p>
+              </div>
+            </div>
+            
+            {/* Actions */}
+            <div className="flex gap-2 print:hidden">
+              <button
+                onClick={() => { resetForm(); setShowAddModal(true); }}
+                className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl hover:from-emerald-600 hover:to-green-700 flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Tambah Jadwal
+              </button>
+              <button
+                onClick={handlePrint}
+                className="px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 flex items-center gap-2 font-medium transition-all"
+              >
+                <PrinterIcon className="h-5 w-5 text-slate-600" />
+                Print
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Info Header */}
-      <div className="grid grid-cols-2 gap-4 mb-4 text-sm border-b pb-3">
-        <div className="space-y-1">
-          <div className="flex">
-            <span className="w-24 font-semibold">Revision</span>
-            <span>: 1</span>
-          </div>
-          <div className="flex">
-            <span className="w-24 font-semibold">Create Date</span>
-            <span>: {new Date().toLocaleDateString('id-ID')}</span>
-          </div>
-          <div className="flex">
-            <span className="w-24 font-semibold">Periode</span>
-            <span>: {getWeekPeriod()}</span>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-4 gap-4 mb-6 print:hidden">
+        <div className="bg-white rounded-xl p-4 shadow-md border-l-4 border-blue-500">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <Cog6ToothIcon className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800">{Object.keys(groupedByMachine).length}</p>
+              <p className="text-xs text-slate-500">Mesin Aktif</p>
+            </div>
           </div>
         </div>
-        <div className="text-right">
-          <p className="font-semibold text-red-700">{formatDateRange()}</p>
+        <div className="bg-white rounded-xl p-4 shadow-md border-l-4 border-emerald-500">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-100 p-2 rounded-lg">
+              <ClipboardDocumentListIcon className="h-6 w-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800">{scheduleItems.length}</p>
+              <p className="text-xs text-slate-500">Total Jadwal</p>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* Week Navigation - Hide on print */}
-      <div className="flex items-center justify-between mb-4 print:hidden">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigateWeek(-1)}
-            className="p-2 rounded-lg border hover:bg-gray-50"
-          >
-            <ChevronLeftIcon className="h-5 w-5" />
-          </button>
-          <span className="font-semibold px-4">Week {weekNumber}</span>
-          <button
-            onClick={() => navigateWeek(1)}
-            className="p-2 rounded-lg border hover:bg-gray-50"
-          >
-            <ChevronRightIcon className="h-5 w-5" />
-          </button>
+        <div className="bg-white rounded-xl p-4 shadow-md border-l-4 border-amber-500">
+          <div className="flex items-center gap-3">
+            <div className="bg-amber-100 p-2 rounded-lg">
+              <DocumentTextIcon className="h-6 w-6 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800">{scheduleItems.reduce((sum, i) => sum + (i.order_ctn || 0), 0).toLocaleString()}</p>
+              <p className="text-xs text-slate-500">Total CTN</p>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => { resetForm(); setShowAddModal(true); }}
-            className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Tambah Jadwal
-          </button>
-          <button
-            onClick={handlePrint}
-            className="px-3 py-2 border rounded-lg hover:bg-gray-50 flex items-center gap-1 text-sm"
-          >
-            <PrinterIcon className="h-4 w-4" />
-            Print
-          </button>
+        <div className="bg-white rounded-xl p-4 shadow-md border-l-4 border-purple-500">
+          <div className="flex items-center gap-3">
+            <div className="bg-purple-100 p-2 rounded-lg">
+              <CalendarDaysIcon className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-slate-800">5</p>
+              <p className="text-xs text-slate-500">Hari Kerja</p>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* Target Info */}
-      <div className="mb-3 text-sm italic text-gray-600">
-        Target efisiensi mesin : 50%
       </div>
 
       {/* Schedule Table */}
-      <div className="overflow-x-auto border rounded-lg">
-        <table className="min-w-full text-xs">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-2 py-2 text-left font-semibold w-16" rowSpan={2}>MESIN</th>
-              <th className="border px-2 py-2 text-left font-semibold w-48" rowSpan={2}>PRODUCT</th>
-              <th className="border px-2 py-2 text-center font-semibold w-20" rowSpan={2}>ORDER (CTN)</th>
-              <th className="border px-2 py-2 text-center font-semibold w-16" rowSpan={2}>Q/CTN</th>
-              <th className="border px-2 py-2 text-center font-semibold w-20" rowSpan={2}>ORDER (PACK)</th>
-              <th className="border px-2 py-2 text-center font-semibold w-32" rowSpan={2}>SPEK KAIN</th>
-              <th className="border px-2 py-2 text-center font-semibold w-28" rowSpan={2}>NO SPK</th>
-              {DAYS.map((day, idx) => (
-                <th key={day} className="border px-1 py-1 text-center font-semibold" colSpan={2}>
-                  <div>{day}</div>
-                  <div className="text-red-600 font-bold">{weekDates[idx]?.getDate() || ''}</div>
-                </th>
-              ))}
-              <th className="border px-2 py-2 text-center font-semibold print:hidden" rowSpan={2}>AKSI</th>
-            </tr>
-            <tr className="bg-gray-50">
-              {DAYS.map((day) => (
-                <React.Fragment key={`shift-${day}`}>
-                  <th className="border px-1 py-1 text-center text-[10px] w-6">1</th>
-                  <th className="border px-1 py-1 text-center text-[10px] w-6">2</th>
-                </React.Fragment>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={18} className="text-center py-8">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                </td>
+      <div className="bg-white rounded-2xl shadow-lg overflow-hidden print:shadow-none print:rounded-none">
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-700 to-slate-800">
+                <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Mesin</th>
+                <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Produk</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>CTN</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Q/CTN</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Pack</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Spek Kain</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>No SPK</th>
+                {DAYS.map((day, idx) => (
+                  <th key={day} className="px-1 py-2 text-center border-l border-slate-600" colSpan={2}>
+                    <div className="text-[10px] font-bold text-slate-300">{day}</div>
+                    <div className="text-lg font-bold text-white">{weekDates[idx]?.getDate() || ''}</div>
+                  </th>
+                ))}
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider print:hidden" rowSpan={2}>Aksi</th>
               </tr>
-            ) : Object.keys(groupedByMachine).length === 0 ? (
-              <tr>
-                <td colSpan={18} className="text-center py-8 text-gray-500">
-                  Belum ada jadwal produksi untuk minggu ini
-                </td>
+              <tr className="bg-slate-600">
+                {DAYS.map((day) => (
+                  <React.Fragment key={`shift-${day}`}>
+                    <th className="px-2 py-1 text-center text-[10px] font-medium text-slate-200 border-l border-slate-500">S1</th>
+                    <th className="px-2 py-1 text-center text-[10px] font-medium text-slate-200">S2</th>
+                  </React.Fragment>
+                ))}
               </tr>
-            ) : (
-              Object.entries(groupedByMachine).map(([machineCode, items]) => (
-                <React.Fragment key={machineCode}>
-                  {items.map((item, itemIdx) => (
-                    <tr key={item.id} className="hover:bg-gray-50">
-                      {itemIdx === 0 && (
-                        <td className="border px-2 py-2 font-semibold align-top" rowSpan={items.length}>
-                          <span className={`px-2 py-1 rounded text-white text-[10px] ${item.color || 'bg-gray-500'}`}>
-                            {machineCode}
-                          </span>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={18} className="text-center py-12">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-200 border-t-blue-600"></div>
+                      <p className="text-slate-500">Memuat jadwal...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : Object.keys(groupedByMachine).length === 0 ? (
+                <tr>
+                  <td colSpan={18} className="text-center py-16">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="bg-slate-100 p-4 rounded-full">
+                        <CalendarDaysIcon className="h-12 w-12 text-slate-400" />
+                      </div>
+                      <div>
+                        <p className="text-lg font-semibold text-slate-600">Belum Ada Jadwal</p>
+                        <p className="text-slate-400">Klik "Tambah Jadwal" untuk membuat jadwal produksi</p>
+                      </div>
+                      <button
+                        onClick={() => { resetForm(); setShowAddModal(true); }}
+                        className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                      >
+                        <PlusIcon className="h-5 w-5" />
+                        Tambah Jadwal Pertama
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                Object.entries(groupedByMachine).map(([machineCode, items], groupIdx) => (
+                  <React.Fragment key={machineCode}>
+                    {items.map((item, itemIdx) => (
+                      <tr key={item.id} className={`hover:bg-blue-50/50 transition-colors ${groupIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                        {itemIdx === 0 && (
+                          <td className="px-3 py-3 align-top border-r border-slate-200" rowSpan={items.length}>
+                            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-white text-xs font-bold shadow-sm ${item.color || 'bg-slate-500'}`}>
+                              <Cog6ToothIcon className="h-4 w-4" />
+                              {machineCode}
+                            </div>
+                          </td>
+                        )}
+                        <td className="px-3 py-2">
+                          <div className="font-medium text-slate-800 text-sm">{item.product_name}</div>
+                          <div className="text-[10px] text-slate-400">{item.product_code}</div>
                         </td>
-                      )}
-                      <td className="border px-2 py-1 text-[11px]">{item.product_name}</td>
-                      <td className="border px-2 py-1 text-center">{item.order_ctn?.toLocaleString()}</td>
-                      <td className="border px-2 py-1 text-center">{item.qty_per_ctn}</td>
-                      <td className="border px-2 py-1 text-center">{item.order_pack?.toLocaleString()}</td>
-                      <td className="border px-2 py-1 text-center text-[10px]">{item.spek_kain}</td>
-                      <td className="border px-2 py-1 text-center text-[10px]">{item.no_spk}</td>
-                      {weekDates.map((date) => {
-                        const dateStr = date.toISOString().split('T')[0];
-                        const shifts = item.schedule_days?.[dateStr] || [];
-                        return (
-                          <React.Fragment key={dateStr}>
-                            <td className="border px-0 py-0 w-6 h-6">
-                              {shifts.includes(1) && (
-                                <div className={`w-full h-6 ${item.color || 'bg-blue-500'}`}></div>
-                              )}
-                            </td>
-                            <td className="border px-0 py-0 w-6 h-6">
-                              {shifts.includes(2) && (
-                                <div className={`w-full h-6 ${item.color || 'bg-blue-500'}`}></div>
-                              )}
-                            </td>
-                          </React.Fragment>
-                        );
-                      })}
-                      <td className="border px-1 py-1 text-center print:hidden">
-                        <button
-                          onClick={() => handleDeleteItem(item.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </React.Fragment>
-              ))
-            )}
-          </tbody>
-        </table>
+                        <td className="px-3 py-2 text-center font-semibold text-slate-700">{item.order_ctn?.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-center text-slate-600">{item.qty_per_ctn}</td>
+                        <td className="px-3 py-2 text-center font-semibold text-blue-600">{item.order_pack?.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-center text-xs text-slate-500">{item.spek_kain || '-'}</td>
+                        <td className="px-3 py-2 text-center">
+                          {item.no_spk && (
+                            <span className="px-2 py-0.5 bg-slate-100 rounded text-xs font-mono text-slate-600">{item.no_spk}</span>
+                          )}
+                        </td>
+                        {weekDates.map((date) => {
+                          const dateStr = date.toISOString().split('T')[0];
+                          const shifts = item.schedule_days?.[dateStr] || [];
+                          return (
+                            <React.Fragment key={dateStr}>
+                              <td className="px-0 py-1 w-8 border-l border-slate-100">
+                                {shifts.includes(1) && (
+                                  <div className={`mx-auto w-6 h-6 rounded-md ${item.color || 'bg-blue-500'} shadow-sm`}></div>
+                                )}
+                              </td>
+                              <td className="px-0 py-1 w-8">
+                                {shifts.includes(2) && (
+                                  <div className={`mx-auto w-6 h-6 rounded-md ${item.color || 'bg-blue-500'} shadow-sm`}></div>
+                                )}
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+                        <td className="px-2 py-2 text-center print:hidden">
+                          <button
+                            onClick={() => handleDeleteItem(item.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Notes Section */}
-      <div className="mt-6 border-t pt-4">
-        <h3 className="font-semibold mb-2">CATATAN :</h3>
-        <div className="space-y-1">
-          {notes.map((note, idx) => (
-            <div key={idx} className="flex items-start gap-2 text-sm text-red-600">
-              <span>{idx + 1}.</span>
-              <span className="flex-1">{note}</span>
-              <button
-                onClick={() => handleRemoveNote(idx)}
-                className="text-gray-400 hover:text-red-500 print:hidden"
-              >
-                <XMarkIcon className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
+      <div className="mt-6 bg-white rounded-2xl shadow-lg p-6 print:shadow-none print:p-4 print:rounded-none">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="bg-red-100 p-2 rounded-lg">
+            <DocumentTextIcon className="h-5 w-5 text-red-600" />
+          </div>
+          <h3 className="font-bold text-slate-800">Catatan Penting</h3>
         </div>
-        <div className="flex gap-2 mt-2 print:hidden">
+        
+        {notes.length > 0 ? (
+          <div className="space-y-2 mb-4">
+            {notes.map((note, idx) => (
+              <div key={idx} className="flex items-start gap-3 bg-red-50 border border-red-100 rounded-lg px-4 py-2">
+                <span className="bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">{idx + 1}</span>
+                <span className="flex-1 text-red-700 text-sm">{note}</span>
+                <button
+                  onClick={() => handleRemoveNote(idx)}
+                  className="text-red-300 hover:text-red-600 transition-colors print:hidden"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-slate-400 text-sm mb-4 italic">Belum ada catatan</p>
+        )}
+        
+        <div className="flex gap-2 print:hidden">
           <input
             type="text"
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
-            placeholder="Tambah catatan..."
-            className="flex-1 px-3 py-1 border rounded text-sm"
+            placeholder="Tulis catatan baru..."
+            className="flex-1 px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-red-400 focus:outline-none transition-colors"
             onKeyPress={(e) => e.key === 'Enter' && handleAddNote()}
           />
           <button
             onClick={handleAddNote}
-            className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-sm"
+            className="px-4 py-2.5 bg-red-500 text-white rounded-xl hover:bg-red-600 font-medium transition-colors flex items-center gap-2"
           >
+            <PlusIcon className="h-4 w-4" />
             Tambah
           </button>
         </div>
@@ -450,154 +551,175 @@ const WeeklyProductionPlan: React.FC = () => {
 
       {/* Add/Edit Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 print:hidden">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">Tambah Jadwal Produksi</h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 print:hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <PlusIcon className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Tambah Jadwal Produksi</h3>
+                    <p className="text-blue-100 text-sm">Week {weekNumber} • {formatDateRange()}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <XMarkIcon className="h-6 w-6 text-white" />
+                </button>
+              </div>
+            </div>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Mesin *</label>
-                <select
-                  value={formData.machine_id}
-                  onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                >
-                  <option value="">Pilih Mesin</option>
-                  {machines.map((m) => (
-                    <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
-                  ))}
-                </select>
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mesin <span className="text-red-500">*</span></label>
+                  <select
+                    value={formData.machine_id}
+                    onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
+                  >
+                    <option value="">Pilih Mesin</option>
+                    {machines.map((m) => (
+                      <option key={m.id} value={m.id}>{m.code} - {m.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Produk <span className="text-red-500">*</span></label>
+                  <select
+                    value={formData.product_id}
+                    onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
+                  >
+                    <option value="">Pilih Produk</option>
+                    {products.map((p) => (
+                      <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Order (CTN)</label>
+                  <input
+                    type="number"
+                    value={formData.order_ctn}
+                    onChange={(e) => setFormData({ ...formData, order_ctn: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
+                    placeholder="0"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Q/CTN</label>
+                  <input
+                    type="number"
+                    value={formData.qty_per_ctn}
+                    onChange={(e) => setFormData({ ...formData, qty_per_ctn: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
+                    placeholder="0"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Spek Kain</label>
+                  <input
+                    type="text"
+                    value={formData.spek_kain}
+                    onChange={(e) => setFormData({ ...formData, spek_kain: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
+                    placeholder="Contoh: 60x60"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">No SPK</label>
+                  <input
+                    type="text"
+                    value={formData.no_spk}
+                    onChange={(e) => setFormData({ ...formData, no_spk: e.target.value })}
+                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
+                    placeholder="Contoh: SPK-001"
+                  />
+                </div>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium mb-1">Produk *</label>
-                <select
-                  value={formData.product_id}
-                  onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                >
-                  <option value="">Pilih Produk</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Order (CTN)</label>
-                <input
-                  type="number"
-                  value={formData.order_ctn}
-                  onChange={(e) => setFormData({ ...formData, order_ctn: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Q/CTN</label>
-                <input
-                  type="number"
-                  value={formData.qty_per_ctn}
-                  onChange={(e) => setFormData({ ...formData, qty_per_ctn: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Spek Kain</label>
-                <input
-                  type="text"
-                  value={formData.spek_kain}
-                  onChange={(e) => setFormData({ ...formData, spek_kain: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">No SPK</label>
-                <input
-                  type="text"
-                  value={formData.no_spk}
-                  onChange={(e) => setFormData({ ...formData, no_spk: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-1">Warna</label>
-                <div className="flex gap-1 flex-wrap">
+              {/* Color Picker */}
+              <div className="mt-5">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Warna Penanda</label>
+                <div className="flex gap-2 flex-wrap">
                   {SCHEDULE_COLORS.map((color) => (
                     <button
                       key={color}
                       onClick={() => setFormData({ ...formData, color })}
-                      className={`w-6 h-6 rounded ${color} ${formData.color === color ? 'ring-2 ring-offset-1 ring-gray-800' : ''}`}
+                      className={`w-10 h-10 rounded-xl ${color} transition-all ${formData.color === color ? 'ring-4 ring-offset-2 ring-slate-400 scale-110' : 'hover:scale-105'}`}
                     />
                   ))}
                 </div>
               </div>
-            </div>
-            
-            {/* Schedule Grid */}
-            <div className="mt-4">
-              <label className="block text-sm font-medium mb-2">Jadwal (klik untuk toggle)</label>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      {DAYS.map((day, idx) => (
-                        <th key={day} className="border px-2 py-1 text-center">
-                          <div>{day}</div>
-                          <div className="text-xs text-gray-500">{weekDates[idx]?.getDate()}</div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      {weekDates.map((date) => {
-                        const dateStr = date.toISOString().split('T')[0];
-                        const shifts = formData.schedule_days[dateStr] || [];
-                        return (
-                          <td key={dateStr} className="border p-1">
-                            <div className="flex gap-1 justify-center">
-                              <button
-                                onClick={() => toggleScheduleDay(dateStr, 1)}
-                                className={`w-8 h-8 rounded text-xs font-medium ${
-                                  shifts.includes(1) ? formData.color + ' text-white' : 'bg-gray-100 hover:bg-gray-200'
-                                }`}
-                              >
-                                1
-                              </button>
-                              <button
-                                onClick={() => toggleScheduleDay(dateStr, 2)}
-                                className={`w-8 h-8 rounded text-xs font-medium ${
-                                  shifts.includes(2) ? formData.color + ' text-white' : 'bg-gray-100 hover:bg-gray-200'
-                                }`}
-                              >
-                                2
-                              </button>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  </tbody>
-                </table>
+              
+              {/* Schedule Grid */}
+              <div className="mt-5">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Jadwal Shift</label>
+                <p className="text-xs text-slate-400 mb-3">Klik tombol shift untuk mengaktifkan/menonaktifkan</p>
+                <div className="bg-slate-50 rounded-xl p-4">
+                  <div className="grid grid-cols-5 gap-3">
+                    {weekDates.map((date, idx) => {
+                      const dateStr = date.toISOString().split('T')[0];
+                      const shifts = formData.schedule_days[dateStr] || [];
+                      return (
+                        <div key={dateStr} className="text-center">
+                          <div className="text-xs font-bold text-slate-500 mb-1">{DAYS[idx]}</div>
+                          <div className="text-lg font-bold text-slate-800 mb-2">{date.getDate()}</div>
+                          <div className="flex gap-1 justify-center">
+                            <button
+                              onClick={() => toggleScheduleDay(dateStr, 1)}
+                              className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${
+                                shifts.includes(1) 
+                                  ? formData.color + ' text-white shadow-md scale-105' 
+                                  : 'bg-white border-2 border-slate-200 text-slate-400 hover:border-slate-300'
+                              }`}
+                            >
+                              S1
+                            </button>
+                            <button
+                              onClick={() => toggleScheduleDay(dateStr, 2)}
+                              className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${
+                                shifts.includes(2) 
+                                  ? formData.color + ' text-white shadow-md scale-105' 
+                                  : 'bg-white border-2 border-slate-200 text-slate-400 hover:border-slate-300'
+                              }`}
+                            >
+                              S2
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
             
-            <div className="flex justify-end gap-3 mt-6">
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3">
               <button
                 onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-5 py-2.5 border-2 border-slate-200 rounded-xl hover:bg-slate-100 font-medium transition-colors"
               >
                 Batal
               </button>
               <button
                 onClick={handleAddItem}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium shadow-md transition-all"
               >
-                Simpan
+                Simpan Jadwal
               </button>
             </div>
           </div>
