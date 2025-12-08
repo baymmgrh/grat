@@ -1,19 +1,20 @@
 """
 Production Schedule Grid Routes
 Excel-style weekly production schedule with machine/product/shift grid
+Auto-generates Work Orders when scheduled date arrives
 """
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, Product
+from models.production import WorkOrder, BillOfMaterials
 from datetime import datetime, timedelta
 import json
 
 schedule_grid_bp = Blueprint('schedule_grid', __name__)
 
-# Simple in-memory storage for schedule grid (will be replaced with DB model)
-# In production, create a proper ScheduleGrid model
 
 class ScheduleGridItem(db.Model):
+    """Production Schedule - Rencana Produksi Mingguan"""
     __tablename__ = 'schedule_grid_items'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -24,8 +25,10 @@ class ScheduleGridItem(db.Model):
     qty_per_ctn = db.Column(db.Integer, default=0)
     spek_kain = db.Column(db.String(100))
     no_spk = db.Column(db.String(50))
+    wo_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=True)  # Link to generated WO
     color = db.Column(db.String(50), default='bg-blue-500')
     schedule_days = db.Column(db.Text)  # JSON: {"2025-12-08": [1, 2], "2025-12-09": [1]}
+    status = db.Column(db.String(50), default='planned')  # planned, wo_created, in_progress, completed
     notes = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -33,6 +36,7 @@ class ScheduleGridItem(db.Model):
     # Relationships
     machine = db.relationship('Machine', backref='schedule_grid_items')
     product = db.relationship('Product', backref='schedule_grid_items')
+    work_order = db.relationship('WorkOrder', backref='schedule_grid_item')
     
     def to_dict(self):
         return {
@@ -49,6 +53,9 @@ class ScheduleGridItem(db.Model):
             'order_pack': float(self.order_ctn or 0) * (self.qty_per_ctn or 0),
             'spek_kain': self.spek_kain,
             'no_spk': self.no_spk,
+            'wo_id': self.wo_id,
+            'wo_number': self.work_order.wo_number if self.work_order else None,
+            'status': self.status,
             'color': self.color,
             'schedule_days': json.loads(self.schedule_days) if self.schedule_days else {},
             'notes': self.notes,
@@ -234,4 +241,226 @@ def save_schedule_notes():
         
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+def generate_wo_number():
+    """Generate unique Work Order number"""
+    today = datetime.now()
+    prefix = f"WO-{today.strftime('%Y%m')}-"
+    
+    # Find last WO number this month
+    last_wo = WorkOrder.query.filter(
+        WorkOrder.wo_number.like(f"{prefix}%")
+    ).order_by(WorkOrder.wo_number.desc()).first()
+    
+    if last_wo:
+        try:
+            last_num = int(last_wo.wo_number.split('-')[-1])
+            new_num = last_num + 1
+        except:
+            new_num = 1
+    else:
+        new_num = 1
+    
+    return f"{prefix}{new_num:05d}"
+
+
+@schedule_grid_bp.route('/schedule-grid/<int:id>/generate-wo', methods=['POST'])
+@jwt_required()
+def generate_work_order_from_schedule(id):
+    """Generate Work Order from a schedule item"""
+    try:
+        current_user_id = get_jwt_identity()
+        schedule = ScheduleGridItem.query.get_or_404(id)
+        
+        # Check if WO already exists
+        if schedule.wo_id:
+            return jsonify({
+                'error': 'Work Order sudah dibuat untuk jadwal ini',
+                'wo_id': schedule.wo_id,
+                'wo_number': schedule.work_order.wo_number if schedule.work_order else None
+            }), 400
+        
+        # Get product's BOM if exists
+        bom = BillOfMaterials.query.filter_by(
+            product_id=schedule.product_id,
+            is_active=True
+        ).first()
+        
+        # Calculate quantity (order_ctn * qty_per_ctn = total pack)
+        total_quantity = float(schedule.order_ctn or 0) * (schedule.qty_per_ctn or 1)
+        
+        # Get first scheduled date for this item
+        schedule_days = json.loads(schedule.schedule_days) if schedule.schedule_days else {}
+        first_date = None
+        if schedule_days:
+            sorted_dates = sorted(schedule_days.keys())
+            if sorted_dates:
+                first_date = datetime.strptime(sorted_dates[0], '%Y-%m-%d')
+        
+        # Create Work Order
+        wo_number = generate_wo_number()
+        work_order = WorkOrder(
+            wo_number=wo_number,
+            product_id=schedule.product_id,
+            bom_id=bom.id if bom else None,
+            quantity=total_quantity,
+            uom='pack',
+            machine_id=schedule.machine_id,
+            scheduled_start_date=first_date,
+            required_date=first_date.date() if first_date else None,
+            status='planned',
+            priority='normal',
+            workflow_status='pending',
+            notes=f"Auto-generated from Production Schedule #{schedule.id}. Spek Kain: {schedule.spek_kain or '-'}",
+            created_by=current_user_id
+        )
+        
+        db.session.add(work_order)
+        db.session.flush()  # Get the WO ID
+        
+        # Update schedule with WO reference
+        schedule.wo_id = work_order.id
+        schedule.no_spk = wo_number
+        schedule.status = 'wo_created'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Work Order {wo_number} berhasil dibuat',
+            'work_order': {
+                'id': work_order.id,
+                'wo_number': work_order.wo_number,
+                'product_name': schedule.product.name if schedule.product else None,
+                'quantity': float(work_order.quantity),
+                'machine_name': schedule.machine.name if schedule.machine else None,
+                'scheduled_start_date': work_order.scheduled_start_date.isoformat() if work_order.scheduled_start_date else None
+            },
+            'schedule': schedule.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/schedule-grid/generate-wo-batch', methods=['POST'])
+@jwt_required()
+def generate_work_orders_batch():
+    """Generate Work Orders for all schedules on a specific date or today"""
+    try:
+        current_user_id = get_jwt_identity()
+        data = request.get_json() or {}
+        target_date_str = data.get('date')
+        
+        if target_date_str:
+            target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
+        else:
+            target_date = datetime.now().date()
+        
+        # Find all schedules that have this date in their schedule_days and no WO yet
+        all_schedules = ScheduleGridItem.query.filter(
+            ScheduleGridItem.wo_id.is_(None),
+            ScheduleGridItem.status == 'planned'
+        ).all()
+        
+        created_wos = []
+        
+        for schedule in all_schedules:
+            schedule_days = json.loads(schedule.schedule_days) if schedule.schedule_days else {}
+            target_date_str_check = target_date.isoformat()
+            
+            # Check if target date is in this schedule's days
+            if target_date_str_check in schedule_days:
+                # Get product's BOM
+                bom = BillOfMaterials.query.filter_by(
+                    product_id=schedule.product_id,
+                    is_active=True
+                ).first()
+                
+                # Calculate quantity
+                total_quantity = float(schedule.order_ctn or 0) * (schedule.qty_per_ctn or 1)
+                
+                # Create Work Order
+                wo_number = generate_wo_number()
+                work_order = WorkOrder(
+                    wo_number=wo_number,
+                    product_id=schedule.product_id,
+                    bom_id=bom.id if bom else None,
+                    quantity=total_quantity,
+                    uom='pack',
+                    machine_id=schedule.machine_id,
+                    scheduled_start_date=datetime.combine(target_date, datetime.min.time()),
+                    required_date=target_date,
+                    status='planned',
+                    priority='normal',
+                    workflow_status='pending',
+                    notes=f"Auto-generated from Production Schedule #{schedule.id}. Spek Kain: {schedule.spek_kain or '-'}",
+                    created_by=current_user_id
+                )
+                
+                db.session.add(work_order)
+                db.session.flush()
+                
+                # Update schedule
+                schedule.wo_id = work_order.id
+                schedule.no_spk = wo_number
+                schedule.status = 'wo_created'
+                
+                created_wos.append({
+                    'wo_number': wo_number,
+                    'product_name': schedule.product.name if schedule.product else None,
+                    'quantity': total_quantity,
+                    'machine_name': schedule.machine.name if schedule.machine else None
+                })
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'{len(created_wos)} Work Order berhasil dibuat untuk tanggal {target_date.isoformat()}',
+            'work_orders': created_wos
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/schedule-grid/check-today', methods=['GET'])
+@jwt_required()
+def check_schedules_for_today():
+    """Check schedules that need WO generation for today"""
+    try:
+        today = datetime.now().date()
+        today_str = today.isoformat()
+        
+        # Find schedules for today without WO
+        all_schedules = ScheduleGridItem.query.filter(
+            ScheduleGridItem.wo_id.is_(None),
+            ScheduleGridItem.status == 'planned'
+        ).all()
+        
+        pending_schedules = []
+        
+        for schedule in all_schedules:
+            schedule_days = json.loads(schedule.schedule_days) if schedule.schedule_days else {}
+            
+            if today_str in schedule_days:
+                pending_schedules.append({
+                    'id': schedule.id,
+                    'product_name': schedule.product.name if schedule.product else None,
+                    'machine_name': schedule.machine.name if schedule.machine else None,
+                    'order_ctn': float(schedule.order_ctn or 0),
+                    'qty_per_ctn': schedule.qty_per_ctn or 0,
+                    'shifts': schedule_days.get(today_str, [])
+                })
+        
+        return jsonify({
+            'date': today_str,
+            'pending_count': len(pending_schedules),
+            'pending_schedules': pending_schedules
+        }), 200
+        
+    except Exception as e:
         return jsonify({'error': str(e)}), 500

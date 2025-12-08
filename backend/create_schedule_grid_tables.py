@@ -28,20 +28,35 @@ def create_tables():
                 qty_per_ctn INTEGER DEFAULT 0,
                 spek_kain VARCHAR(100),
                 no_spk VARCHAR(50),
+                wo_id INTEGER,
                 color VARCHAR(50) DEFAULT 'bg-blue-500',
                 schedule_days TEXT,
+                status VARCHAR(50) DEFAULT 'planned',
                 notes TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (machine_id) REFERENCES machines(id),
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                FOREIGN KEY (product_id) REFERENCES products(id),
+                FOREIGN KEY (wo_id) REFERENCES work_orders(id)
             )
         ''')
         cursor.execute('CREATE INDEX ix_schedule_grid_week ON schedule_grid_items(week_start)')
         cursor.execute('CREATE INDEX ix_schedule_grid_machine ON schedule_grid_items(machine_id)')
+        cursor.execute('CREATE INDEX ix_schedule_grid_wo ON schedule_grid_items(wo_id)')
         print("Table 'schedule_grid_items' created successfully!")
     else:
-        print("Table 'schedule_grid_items' already exists")
+        # Add new columns if table exists
+        print("Table 'schedule_grid_items' already exists, checking for new columns...")
+        try:
+            cursor.execute("ALTER TABLE schedule_grid_items ADD COLUMN wo_id INTEGER REFERENCES work_orders(id)")
+            print("  Added column 'wo_id'")
+        except:
+            print("  Column 'wo_id' already exists")
+        try:
+            cursor.execute("ALTER TABLE schedule_grid_items ADD COLUMN status VARCHAR(50) DEFAULT 'planned'")
+            print("  Added column 'status'")
+        except:
+            print("  Column 'status' already exists")
     
     # Create schedule_grid_notes table
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schedule_grid_notes'")

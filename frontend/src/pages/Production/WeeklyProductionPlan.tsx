@@ -15,7 +15,9 @@ import {
   ArrowTopRightOnSquareIcon,
   SparklesIcon,
   CubeIcon,
-  PencilIcon,
+  BoltIcon,
+  CheckCircleIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
 
 interface ScheduleItem {
@@ -32,6 +34,8 @@ interface ScheduleItem {
   spek_kain: string;
   no_spk: string;
   wo_id?: number; // Work Order ID for navigation
+  wo_number?: string;
+  status: string; // planned, wo_created, in_progress, completed
   color: string;
   schedule_days: { [key: string]: number[] }; // { "2025-12-08": [1, 2], "2025-12-09": [1] }
   notes: string;
@@ -246,6 +250,43 @@ const WeeklyProductionPlan: React.FC = () => {
     window.print();
   };
 
+  const handleGenerateWO = async (scheduleId: number) => {
+    if (!confirm('Generate Work Order dari jadwal ini?')) return;
+    try {
+      const response = await axiosInstance.post(`/api/production/schedule-grid/${scheduleId}/generate-wo`);
+      alert(response.data.message);
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Gagal membuat Work Order');
+    }
+  };
+
+  const handleGenerateAllWO = async () => {
+    if (!confirm('Generate semua Work Order untuk hari ini?')) return;
+    try {
+      const response = await axiosInstance.post('/api/production/schedule-grid/generate-wo-batch', {
+        date: new Date().toISOString().split('T')[0]
+      });
+      alert(response.data.message);
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Gagal membuat Work Orders');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'wo_created':
+        return { bg: 'bg-blue-100 text-blue-700', icon: CheckCircleIcon, label: 'WO Dibuat' };
+      case 'in_progress':
+        return { bg: 'bg-amber-100 text-amber-700', icon: ClockIcon, label: 'Proses' };
+      case 'completed':
+        return { bg: 'bg-green-100 text-green-700', icon: CheckCircleIcon, label: 'Selesai' };
+      default:
+        return { bg: 'bg-slate-100 text-slate-600', icon: ClockIcon, label: 'Rencana' };
+    }
+  };
+
   // Group items by machine
   const groupedByMachine = scheduleItems.reduce((acc, item) => {
     const key = item.machine_code || 'OTHER';
@@ -322,6 +363,14 @@ const WeeklyProductionPlan: React.FC = () => {
               >
                 <PlusIcon className="h-5 w-5" />
                 Tambah Jadwal
+              </button>
+              <button
+                onClick={handleGenerateAllWO}
+                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:from-amber-600 hover:to-orange-600 flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
+                title="Generate semua Work Order untuk jadwal hari ini"
+              >
+                <BoltIcon className="h-5 w-5" />
+                Generate WO Hari Ini
               </button>
               <button
                 onClick={handlePrint}
@@ -565,6 +614,24 @@ const WeeklyProductionPlan: React.FC = () => {
                         })}
                         <td className="px-2 py-2 text-center print:hidden">
                           <div className="flex items-center justify-center gap-1">
+                            {!item.wo_id && item.status === 'planned' && (
+                              <button
+                                onClick={() => handleGenerateWO(item.id)}
+                                className="p-1.5 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
+                                title="Generate Work Order"
+                              >
+                                <BoltIcon className="h-4 w-4" />
+                              </button>
+                            )}
+                            {item.wo_id && (
+                              <button
+                                onClick={() => navigate(`/app/production/work-orders/${item.wo_id}`)}
+                                className="p-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                title="Lihat Work Order"
+                              >
+                                <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => handleDeleteItem(item.id)}
                               className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
