@@ -11,8 +11,11 @@ import {
   Cog6ToothIcon,
   DocumentTextIcon,
   XMarkIcon,
-  PencilSquareIcon,
   ClipboardDocumentListIcon,
+  ArrowTopRightOnSquareIcon,
+  SparklesIcon,
+  CubeIcon,
+  PencilIcon,
 } from '@heroicons/react/24/outline';
 
 interface ScheduleItem {
@@ -28,6 +31,7 @@ interface ScheduleItem {
   order_pack: number;
   spek_kain: string;
   no_spk: string;
+  wo_id?: number; // Work Order ID for navigation
   color: string;
   schedule_days: { [key: string]: number[] }; // { "2025-12-08": [1, 2], "2025-12-09": [1] }
   notes: string;
@@ -381,30 +385,68 @@ const WeeklyProductionPlan: React.FC = () => {
 
       {/* Schedule Table */}
       <div className="bg-white rounded-2xl shadow-lg overflow-hidden print:shadow-none print:rounded-none">
+        {/* Table Header Bar */}
+        <div className="bg-gradient-to-r from-slate-800 via-slate-700 to-slate-800 px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <SparklesIcon className="h-5 w-5 text-amber-400" />
+            <span className="text-white font-semibold">Jadwal Produksi Minggu Ini</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs print:hidden">
+            <span className="text-slate-400">Keterangan:</span>
+            <div className="flex items-center gap-1">
+              <div className="w-4 h-4 rounded bg-blue-500"></div>
+              <span className="text-slate-300">Shift Aktif</span>
+            </div>
+            <div className="flex items-center gap-1 ml-2">
+              <div className="w-4 h-4 rounded border-2 border-dashed border-slate-400"></div>
+              <span className="text-slate-300">Kosong</span>
+            </div>
+          </div>
+        </div>
+        
         <div className="overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-gradient-to-r from-slate-700 to-slate-800">
-                <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Mesin</th>
-                <th className="px-3 py-3 text-left text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Produk</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>CTN</th>
+              <tr className="bg-gradient-to-r from-indigo-600 via-blue-600 to-indigo-600">
+                <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>
+                  <div className="flex items-center gap-2">
+                    <Cog6ToothIcon className="h-4 w-4" />
+                    Mesin
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>
+                  <div className="flex items-center gap-2">
+                    <CubeIcon className="h-4 w-4" />
+                    Produk
+                  </div>
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Order<br/><span className="text-blue-200 font-normal">(CTN)</span></th>
                 <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Q/CTN</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Pack</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Spek Kain</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>No SPK</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Total<br/><span className="text-blue-200 font-normal">(Pack)</span></th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>Spek<br/>Kain</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider" rowSpan={2}>
+                  <div className="flex items-center justify-center gap-1">
+                    <DocumentTextIcon className="h-4 w-4" />
+                    SPK/WO
+                  </div>
+                </th>
                 {DAYS.map((day, idx) => (
-                  <th key={day} className="px-1 py-2 text-center border-l border-slate-600" colSpan={2}>
-                    <div className="text-[10px] font-bold text-slate-300">{day}</div>
-                    <div className="text-lg font-bold text-white">{weekDates[idx]?.getDate() || ''}</div>
+                  <th key={day} className="px-1 py-2 text-center border-l border-blue-500/50" colSpan={2}>
+                    <div className="text-[10px] font-bold text-blue-200 uppercase">{day}</div>
+                    <div className="text-xl font-black text-white">{weekDates[idx]?.getDate() || ''}</div>
                   </th>
                 ))}
                 <th className="px-3 py-3 text-center text-xs font-bold text-white uppercase tracking-wider print:hidden" rowSpan={2}>Aksi</th>
               </tr>
-              <tr className="bg-slate-600">
+              <tr className="bg-indigo-500/80">
                 {DAYS.map((day) => (
                   <React.Fragment key={`shift-${day}`}>
-                    <th className="px-2 py-1 text-center text-[10px] font-medium text-slate-200 border-l border-slate-500">S1</th>
-                    <th className="px-2 py-1 text-center text-[10px] font-medium text-slate-200">S2</th>
+                    <th className="px-2 py-1.5 text-center text-[10px] font-bold text-white border-l border-indigo-400/50">
+                      <span className="bg-white/20 px-2 py-0.5 rounded">S1</span>
+                    </th>
+                    <th className="px-2 py-1.5 text-center text-[10px] font-bold text-white">
+                      <span className="bg-white/20 px-2 py-0.5 rounded">S2</span>
+                    </th>
                   </React.Fragment>
                 ))}
               </tr>
@@ -454,16 +496,45 @@ const WeeklyProductionPlan: React.FC = () => {
                           </td>
                         )}
                         <td className="px-3 py-2">
-                          <div className="font-medium text-slate-800 text-sm">{item.product_name}</div>
-                          <div className="text-[10px] text-slate-400">{item.product_code}</div>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded-lg ${item.color || 'bg-slate-400'} flex items-center justify-center flex-shrink-0`}>
+                              <CubeIcon className="h-4 w-4 text-white" />
+                            </div>
+                            <div>
+                              <div className="font-semibold text-slate-800 text-sm leading-tight">{item.product_name}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{item.product_code}</div>
+                            </div>
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-center font-semibold text-slate-700">{item.order_ctn?.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-center text-slate-600">{item.qty_per_ctn}</td>
-                        <td className="px-3 py-2 text-center font-semibold text-blue-600">{item.order_pack?.toLocaleString()}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="inline-flex items-center px-2.5 py-1 bg-amber-50 text-amber-700 rounded-lg font-bold text-sm">
+                            {item.order_ctn?.toLocaleString() || 0}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-center text-slate-600 font-medium">{item.qty_per_ctn || 0}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="inline-flex items-center px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg font-bold text-sm">
+                            {item.order_pack?.toLocaleString() || 0}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-center text-xs text-slate-500">{item.spek_kain || '-'}</td>
                         <td className="px-3 py-2 text-center">
-                          {item.no_spk && (
-                            <span className="px-2 py-0.5 bg-slate-100 rounded text-xs font-mono text-slate-600">{item.no_spk}</span>
+                          {item.no_spk ? (
+                            <button
+                              onClick={() => {
+                                // Try to extract WO ID from no_spk or use wo_id field
+                                const woId = item.wo_id || item.no_spk.replace(/\D/g, '');
+                                if (woId) {
+                                  navigate(`/app/production/work-orders/${woId}`);
+                                }
+                              }}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-lg text-xs font-semibold hover:from-emerald-600 hover:to-green-700 transition-all shadow-sm hover:shadow-md group"
+                            >
+                              <span className="font-mono">{item.no_spk}</span>
+                              <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5 opacity-70 group-hover:opacity-100 transition-opacity" />
+                            </button>
+                          ) : (
+                            <span className="text-slate-300">-</span>
                           )}
                         </td>
                         {weekDates.map((date) => {
@@ -471,26 +542,37 @@ const WeeklyProductionPlan: React.FC = () => {
                           const shifts = item.schedule_days?.[dateStr] || [];
                           return (
                             <React.Fragment key={dateStr}>
-                              <td className="px-0 py-1 w-8 border-l border-slate-100">
-                                {shifts.includes(1) && (
-                                  <div className={`mx-auto w-6 h-6 rounded-md ${item.color || 'bg-blue-500'} shadow-sm`}></div>
+                              <td className="px-0.5 py-1.5 border-l border-slate-100">
+                                {shifts.includes(1) ? (
+                                  <div className={`mx-auto w-7 h-7 rounded-lg ${item.color || 'bg-blue-500'} shadow-md flex items-center justify-center`}>
+                                    <span className="text-[9px] font-bold text-white/90">S1</span>
+                                  </div>
+                                ) : (
+                                  <div className="mx-auto w-7 h-7 rounded-lg border-2 border-dashed border-slate-200"></div>
                                 )}
                               </td>
-                              <td className="px-0 py-1 w-8">
-                                {shifts.includes(2) && (
-                                  <div className={`mx-auto w-6 h-6 rounded-md ${item.color || 'bg-blue-500'} shadow-sm`}></div>
+                              <td className="px-0.5 py-1.5">
+                                {shifts.includes(2) ? (
+                                  <div className={`mx-auto w-7 h-7 rounded-lg ${item.color || 'bg-blue-500'} shadow-md flex items-center justify-center`}>
+                                    <span className="text-[9px] font-bold text-white/90">S2</span>
+                                  </div>
+                                ) : (
+                                  <div className="mx-auto w-7 h-7 rounded-lg border-2 border-dashed border-slate-200"></div>
                                 )}
                               </td>
                             </React.Fragment>
                           );
                         })}
                         <td className="px-2 py-2 text-center print:hidden">
-                          <button
-                            onClick={() => handleDeleteItem(item.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleDeleteItem(item.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              title="Hapus"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
