@@ -442,13 +442,24 @@ export default function WorkOrderDetail() {
             </Link>
           )}
           {(workOrder.status === 'in_progress' || workOrder.status === 'released') && (
-            <Link
-              to={`/app/production/work-orders/${id}/input`}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 inline-flex items-center"
-            >
-              <PlusIcon className="h-4 w-4 mr-2" />
-              Input Produksi
-            </Link>
+            <>
+              <Link
+                to={`/app/production/work-orders/${id}/input`}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 inline-flex items-center"
+              >
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Input Produksi
+              </Link>
+              <Link
+                to={`/app/production/work-orders/${id}/changeover`}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 inline-flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-4 w-4 mr-2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                </svg>
+                Ganti Produk
+              </Link>
+            </>
           )}
           {/* Submit for Approval - Only for completed WO without approval */}
           {workOrder.status === 'completed' && !approvalStatus && (

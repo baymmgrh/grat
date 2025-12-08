@@ -563,3 +563,83 @@ class ProductionApproval(db.Model):
             'forwarded_at': self.forwarded_at.isoformat() if self.forwarded_at else None,
             'invoice_id': self.invoice_id
         }
+
+
+class ProductChangeover(db.Model):
+    """Product Changeover - Ganti produk di tengah produksi"""
+    __tablename__ = 'product_changeovers'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    changeover_number = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    
+    # Work Order yang di-pause
+    from_work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=False)
+    # Work Order yang akan dijalankan (bisa null jika belum ditentukan)
+    to_work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=True)
+    
+    # Machine yang melakukan changeover
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=False)
+    
+    # Alasan changeover
+    reason = db.Column(db.String(50), nullable=False)  # material_shortage, target_exceeded, priority_change, quality_issue, customer_request, other
+    reason_detail = db.Column(db.Text, nullable=True)
+    
+    # Status WO sebelumnya saat di-pause
+    from_wo_status = db.Column(db.String(30), nullable=True)  # status sebelum pause
+    from_wo_progress = db.Column(db.Numeric(15, 2), default=0)  # qty produced saat pause
+    from_wo_target = db.Column(db.Numeric(15, 2), default=0)  # target qty
+    
+    # Waktu changeover
+    changeover_start = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    changeover_end = db.Column(db.DateTime, nullable=True)
+    setup_time_minutes = db.Column(db.Integer, default=0)  # waktu setup mesin untuk produk baru
+    
+    # Status changeover
+    status = db.Column(db.String(30), default='in_progress')  # in_progress, completed, cancelled
+    
+    # Operator/User
+    initiated_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    completed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    
+    # Notes
+    notes = db.Column(db.Text, nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    from_work_order = db.relationship('WorkOrder', foreign_keys=[from_work_order_id], backref='changeovers_from')
+    to_work_order = db.relationship('WorkOrder', foreign_keys=[to_work_order_id], backref='changeovers_to')
+    machine = db.relationship('Machine', backref='changeovers')
+    initiator = db.relationship('User', foreign_keys=[initiated_by], backref='initiated_changeovers')
+    completer = db.relationship('User', foreign_keys=[completed_by], backref='completed_changeovers')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'changeover_number': self.changeover_number,
+            'from_work_order_id': self.from_work_order_id,
+            'from_wo_number': self.from_work_order.wo_number if self.from_work_order else None,
+            'from_product_name': self.from_work_order.product.name if self.from_work_order and self.from_work_order.product else None,
+            'to_work_order_id': self.to_work_order_id,
+            'to_wo_number': self.to_work_order.wo_number if self.to_work_order else None,
+            'to_product_name': self.to_work_order.product.name if self.to_work_order and self.to_work_order.product else None,
+            'machine_id': self.machine_id,
+            'machine_name': self.machine.name if self.machine else None,
+            'reason': self.reason,
+            'reason_detail': self.reason_detail,
+            'from_wo_status': self.from_wo_status,
+            'from_wo_progress': float(self.from_wo_progress or 0),
+            'from_wo_target': float(self.from_wo_target or 0),
+            'progress_percentage': round((float(self.from_wo_progress or 0) / float(self.from_wo_target or 1)) * 100, 1),
+            'changeover_start': self.changeover_start.isoformat() if self.changeover_start else None,
+            'changeover_end': self.changeover_end.isoformat() if self.changeover_end else None,
+            'setup_time_minutes': self.setup_time_minutes,
+            'status': self.status,
+            'initiated_by': self.initiated_by,
+            'initiator_name': self.initiator.full_name if self.initiator else None,
+            'completed_by': self.completed_by,
+            'completer_name': self.completer.full_name if self.completer else None,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

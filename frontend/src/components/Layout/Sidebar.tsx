@@ -114,6 +114,7 @@ function SidebarContent() {
           children: [
             { name: 'Dashboard', href: '/app/production', icon: PresentationChartLineIcon },
             { name: 'Work Orders', href: '/app/production/work-orders', icon: ClipboardDocumentListIcon, permission: 'work_orders' },
+            { name: 'Changeover', href: '/app/production/changeovers', icon: ArrowsRightLeftIcon },
             { name: 'Approval', href: '/app/production/approvals', icon: ClipboardDocumentCheckIcon },
             { name: 'Scheduling', href: '/app/production/scheduling', icon: CalendarDaysIcon },
             { name: 'MRP', href: '/app/production/mrp', icon: CalculatorIcon, permission: 'mrp' },

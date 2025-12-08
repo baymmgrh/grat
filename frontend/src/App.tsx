@@ -99,6 +99,8 @@ import MaterialIssueDetail from './pages/Production/MaterialIssueDetail'
 import WIPBatchForm from './pages/Production/WIPBatchForm'
 import ProductionApprovalList from './pages/Production/ProductionApprovalList'
 import ProductionApprovalDetail from './pages/Production/ProductionApprovalDetail'
+import ProductChangeover from './pages/Production/ProductChangeover'
+import ChangeoverList from './pages/Production/ChangeoverList'
 import QualityTestList from './pages/Quality/QualityTestList'
 import QualityTestForm from './pages/Quality/QualityTestForm'
 import QualityDashboardEnhanced from './pages/Quality/QualityDashboardEnhanced'
@@ -762,6 +764,10 @@ function App() {
         {/* Production Approval */}
         <Route path="production/approvals" element={<ProductionApprovalList />} />
         <Route path="production/approvals/:id" element={<ProductionApprovalDetail />} />
+        
+        {/* Product Changeover */}
+        <Route path="production/changeovers" element={<ChangeoverList />} />
+        <Route path="production/work-orders/:woId/changeover" element={<ProductChangeover />} />
         
         {/* TV Display */}
         <Route path="tv-display" element={<TVDisplaySelector />} />

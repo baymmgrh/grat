@@ -156,6 +156,10 @@ def create_app(config_class=Config):
     # Import and register Executive Dashboard blueprint
     app.register_blueprint(executive_dashboard_bp, url_prefix='/api/executive')
     
+    # Import and register Product Changeover blueprint
+    from routes.product_changeover import product_changeover_bp
+    app.register_blueprint(product_changeover_bp, url_prefix='/api/production')
+    
     # Import and register KPI Targets blueprint
     from routes.kpi_targets import kpi_targets_bp
     app.register_blueprint(kpi_targets_bp, url_prefix='/api/kpi-targets')
