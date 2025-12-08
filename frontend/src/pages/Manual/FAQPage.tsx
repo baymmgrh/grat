@@ -177,8 +177,8 @@ const FAQPage: React.FC = () => {
                         )}
                       </button>
                       {expandedFaqs.includes(faq.id) && (
-                        <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-4">
-                          <div className="prose prose-sm dark:prose-invert max-w-none text-gray-600 dark:text-gray-400">
+                        <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700 pt-4 bg-gray-50 dark:bg-gray-900/50">
+                          <div className="manual-content text-sm">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {faq.answer}
                             </ReactMarkdown>

@@ -532,10 +532,12 @@ const UserManual: React.FC = () => {
                     )}
                   </button>
                   {expandedFaqs.includes(faq.id) && (
-                    <div className="px-4 pb-4 text-gray-600 dark:text-gray-400">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {faq.answer}
-                      </ReactMarkdown>
+                    <div className="px-4 pb-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700">
+                      <div className="manual-content text-sm pt-3">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {faq.answer}
+                        </ReactMarkdown>
+                      </div>
                     </div>
                   )}
                 </div>
