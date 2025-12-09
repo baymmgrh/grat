@@ -171,6 +171,7 @@ def get_products():
                     'is_sellable': p.is_sellable,
                     'is_purchasable': p.is_purchasable,
                     'is_producible': p.is_producible,
+                    'packs_per_karton': p.packaging.packs_per_karton if p.packaging else None,  # From ProductPackaging
                     'created_at': p.created_at.isoformat() if p.created_at else None
                 } for p in products_list],
                 'total': len(products_list)
@@ -194,6 +195,7 @@ def get_products():
                 'is_sellable': p.is_sellable,
                 'is_purchasable': p.is_purchasable,
                 'is_producible': p.is_producible,
+                'packs_per_karton': p.packaging.packs_per_karton if p.packaging else None,  # From ProductPackaging
                 'created_at': p.created_at.isoformat() if p.created_at else None
             } for p in products.items],
             'total': products.total,

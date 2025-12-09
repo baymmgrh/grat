@@ -51,6 +51,7 @@ interface Product {
   id: number;
   code: string;
   name: string;
+  packs_per_karton?: number; // From ProductPackaging
 }
 
 // Predefined colors for schedule blocks
@@ -744,12 +745,21 @@ const WeeklyProductionPlan: React.FC = () => {
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">Produk <span className="text-red-500">*</span></label>
                   <select
                     value={formData.product_id}
-                    onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                    onChange={(e) => {
+                      const productId = e.target.value;
+                      const selectedProduct = products.find(p => p.id === parseInt(productId));
+                      setFormData({ 
+                        ...formData, 
+                        product_id: productId,
+                        // Auto-fill qty_per_ctn from Product Packaging
+                        qty_per_ctn: selectedProduct?.packs_per_karton?.toString() || formData.qty_per_ctn
+                      });
+                    }}
                     className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
                   >
                     <option value="">Pilih Produk</option>
                     {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
+                      <option key={p.id} value={p.id}>{p.code} - {p.name} {p.packs_per_karton ? `(${p.packs_per_karton}/ctn)` : ''}</option>
                     ))}
                   </select>
                 </div>
@@ -766,13 +776,14 @@ const WeeklyProductionPlan: React.FC = () => {
                 </div>
                 
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Q/CTN</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Q/CTN (dari Produk)</label>
                   <input
                     type="number"
                     value={formData.qty_per_ctn}
                     onChange={(e) => setFormData({ ...formData, qty_per_ctn: e.target.value })}
-                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors"
-                    placeholder="0"
+                    className="w-full px-4 py-2.5 border-2 border-slate-200 rounded-xl text-sm focus:border-blue-400 focus:outline-none transition-colors bg-gray-50"
+                    placeholder="Auto dari produk"
+                    readOnly
                   />
                 </div>
                 

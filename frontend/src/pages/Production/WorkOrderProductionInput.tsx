@@ -246,6 +246,8 @@ export default function WorkOrderProductionInput() {
     quantity_good: '',
     quantity_reject: '0',
     quantity_rework: '0',
+    quantity_setting: '0', // Auto-calculated: produced - good - reject - rework
+    quantity_waste: '0',   // Auto-calculated: reject + rework
     operator_id: '',
     notes: '',
     planned_runtime: '480', // Bisa diubah manual
@@ -281,12 +283,21 @@ export default function WorkOrderProductionInput() {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
       
-      // Auto-calculate good quantity
-      if (field === 'quantity_produced' || field === 'quantity_reject' || field === 'quantity_rework') {
+      // Auto-calculate setting and waste when relevant fields change
+      // Formula: 
+      //   waste = reject + rework
+      //   setting = produced - good - reject - rework
+      if (field === 'quantity_produced' || field === 'quantity_good' || field === 'quantity_reject' || field === 'quantity_rework') {
         const produced = parseFloat(field === 'quantity_produced' ? value : updated.quantity_produced) || 0;
+        const good = parseFloat(field === 'quantity_good' ? value : updated.quantity_good) || 0;
         const reject = parseFloat(field === 'quantity_reject' ? value : updated.quantity_reject) || 0;
         const rework = parseFloat(field === 'quantity_rework' ? value : updated.quantity_rework) || 0;
-        updated.quantity_good = Math.max(0, produced - reject - rework).toString();
+        
+        // Waste = reject + rework
+        updated.quantity_waste = (reject + rework).toString();
+        
+        // Setting = produced - good - reject - rework
+        updated.quantity_setting = Math.max(0, produced - good - reject - rework).toString();
       }
       
       return updated;
@@ -416,6 +427,8 @@ export default function WorkOrderProductionInput() {
         quantity_good: parseFloat(formData.quantity_good),
         quantity_reject: parseFloat(formData.quantity_reject),
         quantity_rework: parseFloat(formData.quantity_rework),
+        quantity_setting: parseFloat(formData.quantity_setting),  // Auto-calculated
+        quantity_waste: parseFloat(formData.quantity_waste),      // Auto-calculated
         planned_runtime: getPlannedRuntime(),
         actual_runtime: getActualRuntime(),
         downtime_minutes: getTotalDowntime(),
@@ -641,6 +654,38 @@ export default function WorkOrderProductionInput() {
                 placeholder="0"
                 min="0"
               />
+            </div>
+          </div>
+
+          {/* Auto-calculated: Setting & Waste */}
+          <div className="grid grid-cols-2 gap-4 mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">
+                Setting (Auto)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={formData.quantity_setting}
+                  readOnly
+                  className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 font-medium cursor-not-allowed"
+                />
+                <span className="text-xs text-gray-500 whitespace-nowrap">= Produksi - Good - Reject - Rework</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500 mb-1">
+                Waste (Auto)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={formData.quantity_waste}
+                  readOnly
+                  className="w-full px-3 py-2 bg-orange-50 border border-orange-300 rounded-lg text-orange-700 font-medium cursor-not-allowed"
+                />
+                <span className="text-xs text-gray-500 whitespace-nowrap">= Reject + Rework</span>
+              </div>
             </div>
           </div>
           

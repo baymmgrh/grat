@@ -6,6 +6,7 @@ Auto-generates Work Orders when scheduled date arrives
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, Product
+from models.product import ProductPackaging
 from models.production import WorkOrder, BillOfMaterials
 from datetime import datetime, timedelta
 import json
@@ -39,6 +40,11 @@ class ScheduleGridItem(db.Model):
     work_order = db.relationship('WorkOrder', backref='schedule_grid_item')
     
     def to_dict(self):
+        # Get pack per carton from Product Packaging (priority) or use stored value
+        pack_per_ctn = self.qty_per_ctn or 0
+        if self.product and self.product.packaging:
+            pack_per_ctn = self.product.packaging.packs_per_karton or pack_per_ctn
+        
         return {
             'id': self.id,
             'machine_id': self.machine_id,
@@ -49,8 +55,8 @@ class ScheduleGridItem(db.Model):
             'product_name': self.product.name if self.product else None,
             'week_start': self.week_start.isoformat() if self.week_start else None,
             'order_ctn': float(self.order_ctn or 0),
-            'qty_per_ctn': self.qty_per_ctn or 0,
-            'order_pack': float(self.order_ctn or 0) * (self.qty_per_ctn or 0),
+            'qty_per_ctn': pack_per_ctn,  # From Product Packaging
+            'order_pack': float(self.order_ctn or 0) * pack_per_ctn,
             'spek_kain': self.spek_kain,
             'no_spk': self.no_spk,
             'wo_id': self.wo_id,
