@@ -581,6 +581,29 @@ const navigate = useNavigate()
                             </p>
                           </div>
                         )}
+                        
+                        {/* Batch Size Flexibility Warning */}
+                        {selectedQuantity > 0 && bom && totalCartonsNeeded % bom.batch_size !== 0 && (
+                          <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <div className="flex items-start gap-2">
+                              <InformationCircleIcon className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-sm font-medium text-amber-800">
+                                  Kuantitas Tidak Kelipatan Batch Size
+                                </p>
+                                <p className="text-xs text-amber-700 mt-1">
+                                  BOM batch size: {bom.batch_size} {bom.batch_uom}. 
+                                  Kuantitas {totalCartonsNeeded.toLocaleString('id-ID', { maximumFractionDigits: 2 })} karton 
+                                  bukan kelipatan dari batch size.
+                                </p>
+                                <p className="text-xs text-amber-600 mt-1">
+                                  <strong>Saran:</strong> Gunakan kelipatan {bom.batch_size} untuk efisiensi produksi 
+                                  (contoh: {Math.ceil(totalCartonsNeeded / bom.batch_size) * bom.batch_size * packPerKarton} PCS = {Math.ceil(totalCartonsNeeded / bom.batch_size) * bom.batch_size} karton)
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         {/* MRP Shortage Analysis */}
                         {selectedQuantity > 0 && totalCartonsNeeded > 0 && (

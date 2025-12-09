@@ -51,6 +51,7 @@ from .workflow_integration import (
 )
 from .product_new_schema import InventoryItemNew, BOMItemNew, WorkOrderNew
 from .bom_history import BOMHistory, BOMImportLog
+from .custom_bom import CustomBOM, CustomBOMItem
 from .kpi_target import KPITarget, seed_kpi_targets
 from .user_manual import ManualCategory, ManualArticle, ManualFAQ
 from .group_chat import (

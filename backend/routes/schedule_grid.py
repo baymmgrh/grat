@@ -318,6 +318,8 @@ def generate_work_order_from_schedule(id):
             required_date=first_date.date() if first_date else None,
             status='planned',
             priority='normal',
+            source_type='from_schedule',  # Mark as created from schedule
+            schedule_grid_id=schedule.id,  # Link back to schedule
             workflow_status='pending',
             notes=f"Auto-generated from Production Schedule #{schedule.id}. Spek Kain: {schedule.spek_kain or '-'}",
             created_by=current_user_id

@@ -220,6 +220,10 @@ def create_app(config_class=Config):
     from routes.production_approval import production_approval_bp
     app.register_blueprint(production_approval_bp, url_prefix='/api/production')
     
+    # Import and register Custom BOM blueprint
+    from routes.custom_bom import custom_bom_bp
+    app.register_blueprint(custom_bom_bp, url_prefix='/api/production')
+    
     # Serve uploaded files
     from flask import send_from_directory
     

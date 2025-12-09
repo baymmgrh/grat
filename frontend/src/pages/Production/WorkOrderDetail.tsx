@@ -358,6 +358,79 @@ export default function WorkOrderDetail() {
         </div>
       </div>
 
+      {/* BOM Materials Required */}
+      {workOrder.bom_materials && workOrder.bom_materials.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-900 flex items-center">
+              <CubeIcon className="h-5 w-5 mr-2 text-purple-600" />
+              Material yang Dibutuhkan
+              {workOrder.bom_number && (
+                <span className="ml-2 text-sm text-gray-500">
+                  (BOM: {workOrder.bom_number})
+                </span>
+              )}
+            </h2>
+            {workOrder.batch_size && (
+              <span className="text-sm text-gray-500">
+                Batch Size: {workOrder.batch_size} {workOrder.uom}
+              </span>
+            )}
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-purple-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase">No</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase">Kode</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase">Material</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase">Tipe</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Qty/Batch</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Qty Dibutuhkan</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-purple-700 uppercase">UOM</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Scrap %</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Qty Efektif</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-purple-700 uppercase">Critical</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {workOrder.bom_materials.map((material: any) => (
+                  <tr key={material.id} className={`hover:bg-gray-50 ${material.is_critical ? 'bg-red-50' : ''}`}>
+                    <td className="px-4 py-3 text-sm text-gray-500">{material.line_number}</td>
+                    <td className="px-4 py-3 text-sm font-mono text-gray-900">{material.item_code}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{material.item_name}</td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        material.item_type === 'raw_materials' ? 'bg-blue-100 text-blue-700' :
+                        material.item_type === 'packaging_materials' ? 'bg-green-100 text-green-700' :
+                        material.item_type === 'chemical_materials' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {material.item_type?.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right">{material.quantity_per_batch}</td>
+                    <td className="px-4 py-3 text-sm text-right font-medium text-purple-600">{material.required_quantity}</td>
+                    <td className="px-4 py-3 text-sm text-center">{material.uom}</td>
+                    <td className="px-4 py-3 text-sm text-right text-orange-600">{material.scrap_percent}%</td>
+                    <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">{material.effective_quantity}</td>
+                    <td className="px-4 py-3 text-center">
+                      {material.is_critical && (
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          <ExclamationTriangleIcon className="h-3 w-3 mr-1" />
+                          Critical
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Production Records */}
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">

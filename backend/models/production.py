@@ -266,6 +266,10 @@ class WorkOrder(db.Model):
     status = db.Column(db.String(50), nullable=False, default='planned')  # planned, released, in_progress, completed, cancelled
     priority = db.Column(db.String(20), nullable=False, default='normal')  # low, normal, high, urgent
     
+    # Source Type - How this WO was created
+    source_type = db.Column(db.String(50), nullable=False, default='manual')  # manual, from_bom, from_schedule
+    schedule_grid_id = db.Column(db.Integer, nullable=True)  # Link to ScheduleGridItem if from_schedule
+    
     # Workflow Integration Fields
     mrp_requirement_id = db.Column(db.Integer, nullable=True)  # Link to MRP requirement
     workflow_status = db.Column(db.String(50), nullable=False, default='pending')  # pending, mrp_analyzed, scheduled, in_production

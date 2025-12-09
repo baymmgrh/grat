@@ -358,6 +358,8 @@ def get_work_order(id):
             'product_id': wo.product_id,
             'product_name': wo.product.name if wo.product else 'Unknown Product',
             'product_code': wo.product.code if wo.product else None,
+            'bom_id': wo.bom_id,
+            'bom_number': wo.bom.bom_number if wo.bom else None,
             'quantity': float(wo.quantity) if wo.quantity else 0,
             'quantity_produced': float(wo.quantity_produced) if wo.quantity_produced else 0,
             'quantity_good': float(wo.quantity_good) if wo.quantity_good else 0,
@@ -365,6 +367,8 @@ def get_work_order(id):
             'uom': wo.uom,
             'status': wo.status,
             'priority': wo.priority,
+            'source_type': getattr(wo, 'source_type', 'manual'),  # manual, from_bom, from_schedule
+            'schedule_grid_id': getattr(wo, 'schedule_grid_id', None),
             'batch_number': getattr(wo, 'batch_number', None),
             'machine_id': wo.machine_id,
             'machine_name': wo.machine.name if wo.machine else None,
@@ -381,6 +385,39 @@ def get_work_order(id):
         if hasattr(wo, 'supervisor_id'):
             response_data['supervisor_id'] = wo.supervisor_id
             response_data['supervisor_name'] = wo.supervisor.name if wo.supervisor else None
+        
+        # Add BOM materials used for production
+        bom_materials = []
+        if wo.bom_id and wo.bom:
+            for item in wo.bom.items:
+                material_info = {
+                    'id': item.id,
+                    'line_number': item.line_number,
+                    'item_code': item.item_code,
+                    'item_name': item.item_name,
+                    'item_type': item.item_type,
+                    'quantity_per_batch': float(item.quantity) if item.quantity else 0,
+                    'uom': item.uom,
+                    'scrap_percent': float(item.scrap_percent) if item.scrap_percent else 0,
+                    'is_critical': item.is_critical,
+                    'unit_cost': float(item.unit_cost) if item.unit_cost else 0,
+                }
+                
+                # Calculate required quantity based on WO quantity and BOM batch size
+                batch_size = float(wo.bom.batch_size) if wo.bom.batch_size else 1
+                wo_quantity = float(wo.quantity) if wo.quantity else 0
+                batches_needed = wo_quantity / batch_size if batch_size > 0 else 0
+                required_qty = float(item.quantity) * batches_needed if item.quantity else 0
+                effective_qty = required_qty * (1 + (float(item.scrap_percent) / 100)) if item.scrap_percent else required_qty
+                
+                material_info['required_quantity'] = round(required_qty, 4)
+                material_info['effective_quantity'] = round(effective_qty, 4)
+                material_info['total_cost'] = round(effective_qty * (float(item.unit_cost) if item.unit_cost else 0), 2)
+                
+                bom_materials.append(material_info)
+        
+        response_data['bom_materials'] = bom_materials
+        response_data['batch_size'] = float(wo.bom.batch_size) if wo.bom and wo.bom.batch_size else None
         
         return jsonify({'work_order': response_data}), 200
     except Exception as e:
@@ -404,13 +441,19 @@ def create_work_order():
             product = Product.query.get(data['product_id'])
             uom = product.primary_uom if product else 'pcs'
         
+        # Determine source_type: manual, from_bom, from_schedule
+        source_type = data.get('source_type', 'manual')
+        bom_id = data.get('bom_id')
+        
         wo = WorkOrder(
             wo_number=wo_number,
             product_id=data['product_id'],
+            bom_id=bom_id,
             quantity=data['quantity'],
             uom=uom,
             status='planned',
             priority=data.get('priority', 'normal'),
+            source_type=source_type,  # manual, from_bom, from_schedule
             machine_id=data.get('machine_id'),
             scheduled_start_date=datetime.fromisoformat(data['scheduled_start_date']) if data.get('scheduled_start_date') else None,
             scheduled_end_date=datetime.fromisoformat(data['scheduled_end_date']) if data.get('scheduled_end_date') else None,
@@ -969,31 +1012,87 @@ def start_work_order(id):
                     
                     remaining_to_issue = required_qty
                     
+                    # Find production zone for transfer (if exists)
+                    from models.warehouse import WarehouseZone, WarehouseLocation
+                    production_zone = WarehouseZone.query.filter_by(
+                        zone_type='production',
+                        is_active=True
+                    ).first()
+                    production_location = None
+                    if production_zone:
+                        production_location = WarehouseLocation.query.filter_by(
+                            zone_id=production_zone.id,
+                            is_active=True
+                        ).first()
+                    
                     for inv in inventories:
                         if remaining_to_issue <= 0:
                             break
                         
                         issue_qty = min(float(inv.quantity_on_hand), remaining_to_issue)
+                        source_location_id = inv.location_id
                         
-                        # Deduct from inventory
+                        # Deduct from source inventory
                         inv.quantity_on_hand -= issue_qty
                         if inv.quantity_available >= issue_qty:
                             inv.quantity_available -= issue_qty
                         inv.updated_at = datetime.utcnow()
                         
-                        # Create movement record
-                        movement = InventoryMovement(
+                        # Create stock_out movement from source
+                        movement_out = InventoryMovement(
                             inventory_id=inv.id,
-                            movement_type='stock_out',
+                            movement_type='transfer_out',
                             movement_date=datetime.utcnow().date(),
                             quantity=issue_qty,
                             reference_number=issue_number,
                             reference_type='material_issue',
                             batch_number=inv.batch_number,
-                            notes=f'Issued for WO {wo.wo_number}',
+                            notes=f'Transfer to production for WO {wo.wo_number}',
                             created_by=user_id
                         )
-                        db.session.add(movement)
+                        db.session.add(movement_out)
+                        
+                        # If production location exists, create inventory there
+                        if production_location:
+                            # Check if inventory already exists in production location
+                            prod_inv = Inventory.query.filter_by(
+                                material_id=bom_item.material_id,
+                                location_id=production_location.id,
+                                batch_number=inv.batch_number
+                            ).first()
+                            
+                            if prod_inv:
+                                prod_inv.quantity_on_hand += issue_qty
+                                prod_inv.quantity_available += issue_qty
+                            else:
+                                prod_inv = Inventory(
+                                    material_id=bom_item.material_id,
+                                    location_id=production_location.id,
+                                    quantity_on_hand=issue_qty,
+                                    quantity_available=issue_qty,
+                                    batch_number=inv.batch_number,
+                                    lot_number=inv.lot_number,
+                                    work_order_id=id,
+                                    stock_status='in_production',
+                                    is_active=True
+                                )
+                                db.session.add(prod_inv)
+                            
+                            db.session.flush()
+                            
+                            # Create transfer_in movement to production
+                            movement_in = InventoryMovement(
+                                inventory_id=prod_inv.id,
+                                movement_type='transfer_in',
+                                movement_date=datetime.utcnow().date(),
+                                quantity=issue_qty,
+                                reference_number=issue_number,
+                                reference_type='material_issue',
+                                batch_number=inv.batch_number,
+                                notes=f'Received from storage for WO {wo.wo_number}',
+                                created_by=user_id
+                            )
+                            db.session.add(movement_in)
                         
                         remaining_to_issue -= issue_qty
                     

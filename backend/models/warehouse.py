@@ -9,6 +9,7 @@ class WarehouseZone(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=True)
     material_type = db.Column(db.String(50), nullable=False)  # finished_goods, raw_materials, packaging_materials, chemical_materials
+    zone_type = db.Column(db.String(50), nullable=False, default='storage')  # storage, production, staging, quarantine
     capacity = db.Column(db.Numeric(15, 2), nullable=True)
     capacity_uom = db.Column(db.String(20), nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
