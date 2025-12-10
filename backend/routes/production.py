@@ -340,16 +340,82 @@ def get_work_order(id):
         if not wo:
             return jsonify({'error': 'Work order not found'}), 404
         
-        # Get pack_per_carton from BOM if available
+        # Get pack_per_carton and consumption data from Product
         pack_per_carton = 0
+        consumption_data = {
+            'berat_kering_per_pack': 0,  # kg - for kain consumption (per pack)
+            'volume_per_pack': 0,  # liter - for ingredient consumption (per pack)
+            'berat_akhir_per_pack': 0,  # kg - for packaging & stiker consumption (per pack)
+        }
         if wo.product_id:
             from models.production import BillOfMaterials
+            from models.product import ProductPackaging
+            
             active_bom = BillOfMaterials.query.filter_by(
                 product_id=wo.product_id, 
                 is_active=True
             ).first()
-            if active_bom and active_bom.pack_per_carton:
+            # Only use BOM pack_per_carton if it's greater than 1 (meaningful value)
+            if active_bom and active_bom.pack_per_carton and active_bom.pack_per_carton > 1:
                 pack_per_carton = active_bom.pack_per_carton
+            
+            # Get consumption data from products_new table (has berat_kering, ingredient, pack_per_karton)
+            # Try matching by product code first, then by product name
+            product_code = wo.product.code if wo.product else None
+            product_name = wo.product.name if wo.product else None
+            product_new_data = None
+            
+            if product_code:
+                product_new_data = db.session.execute(
+                    db.text('SELECT berat_kering, ratio, ingredient, pack_per_karton FROM products_new WHERE kode_produk = :code'),
+                    {'code': product_code}
+                ).fetchone()
+            
+            # If not found by code, try matching by name (partial match)
+            # Remove common prefixes like "WIP " for better matching
+            if not product_new_data and product_name:
+                search_name = product_name
+                # Remove WIP prefix if present
+                if search_name.upper().startswith('WIP '):
+                    search_name = search_name[4:]
+                
+                product_new_data = db.session.execute(
+                    db.text('SELECT berat_kering, ratio, ingredient, pack_per_karton FROM products_new WHERE nama_produk LIKE :name ORDER BY LENGTH(nama_produk) LIMIT 1'),
+                    {'name': f'%{search_name}%'}
+                ).fetchone()
+            
+            # Process product_new_data if found
+            if product_new_data:
+                berat_kering = float(product_new_data[0]) if product_new_data[0] else 0  # kg per karton
+                ratio = float(product_new_data[1]) if product_new_data[1] else 0
+                ingredient = float(product_new_data[2]) if product_new_data[2] else 0  # liter per karton
+                packs = int(product_new_data[3]) if product_new_data[3] else 1
+                
+                # Always use packs from products_new as it's the most accurate source
+                pack_per_carton = packs
+                
+                # Convert per karton to per pack
+                consumption_data['berat_kering_per_pack'] = berat_kering / packs if packs > 0 else 0  # kg per pack
+                consumption_data['volume_per_pack'] = ingredient / packs if packs > 0 else 0  # liter per pack
+                consumption_data['ratio'] = ratio
+                consumption_data['packs_per_karton'] = packs
+            
+            # Fallback to ProductPackaging if products_new doesn't have data
+            if not consumption_data['berat_kering_per_pack'] and not consumption_data['volume_per_pack']:
+                packaging = ProductPackaging.query.filter_by(product_id=wo.product_id).first()
+                if packaging:
+                    packs = packaging.packs_per_karton or 1
+                    if not pack_per_carton:
+                        pack_per_carton = packs
+                    
+                    if packaging.berat_kering_per_karton:
+                        consumption_data['berat_kering_per_pack'] = float(packaging.berat_kering_per_karton) / 1000 / packs  # gram to kg per pack
+                    
+                    if packaging.volume_per_pack:
+                        consumption_data['volume_per_pack'] = float(packaging.volume_per_pack) / 1000  # ml to liter
+                    
+                    if packaging.berat_akhir_per_karton:
+                        consumption_data['berat_akhir_per_pack'] = float(packaging.berat_akhir_per_karton) / 1000 / packs  # gram to kg per pack
         
         # Build response safely
         response_data = {
@@ -373,6 +439,7 @@ def get_work_order(id):
             'machine_id': wo.machine_id,
             'machine_name': wo.machine.name if wo.machine else None,
             'pack_per_carton': pack_per_carton,
+            'consumption_data': consumption_data,
             'scheduled_start_date': wo.scheduled_start_date.isoformat() if wo.scheduled_start_date else None,
             'scheduled_end_date': wo.scheduled_end_date.isoformat() if wo.scheduled_end_date else None,
             'actual_start_date': wo.actual_start_date.isoformat() if wo.actual_start_date else None,
@@ -387,27 +454,81 @@ def get_work_order(id):
             response_data['supervisor_name'] = wo.supervisor.name if wo.supervisor else None
         
         # Add BOM materials used for production
+        # If bom_id is not set, try to find active BOM for this product
         bom_materials = []
-        if wo.bom_id and wo.bom:
-            for item in wo.bom.items:
+        bom_to_use = wo.bom
+        if not wo.bom_id and wo.product_id:
+            from models.production import BillOfMaterials
+            active_bom = BillOfMaterials.query.filter_by(
+                product_id=wo.product_id,
+                is_active=True
+            ).first()
+            if active_bom:
+                bom_to_use = active_bom
+                response_data['bom_id'] = active_bom.id
+                response_data['bom_number'] = active_bom.bom_number
+        
+        if bom_to_use:
+            # Get pack_per_karton from products_new first (by code or name), then BOM, then ProductPackaging
+            packs_per_karton = 1
+            product_code = wo.product.code if wo.product else None
+            product_name = wo.product.name if wo.product else None
+            
+            # Try by code first
+            if product_code:
+                product_new_packs = db.session.execute(
+                    db.text('SELECT pack_per_karton FROM products_new WHERE kode_produk = :code'),
+                    {'code': product_code}
+                ).fetchone()
+                if product_new_packs and product_new_packs[0]:
+                    packs_per_karton = int(product_new_packs[0])
+            
+            # Try by name if code didn't work
+            if packs_per_karton == 1 and product_name:
+                search_name = product_name
+                # Remove WIP prefix if present
+                if search_name.upper().startswith('WIP '):
+                    search_name = search_name[4:]
+                
+                product_new_packs = db.session.execute(
+                    db.text('SELECT pack_per_karton FROM products_new WHERE nama_produk LIKE :name ORDER BY LENGTH(nama_produk) LIMIT 1'),
+                    {'name': f'%{search_name}%'}
+                ).fetchone()
+                if product_new_packs and product_new_packs[0]:
+                    packs_per_karton = int(product_new_packs[0])
+            
+            if packs_per_karton == 1:
+                if bom_to_use.pack_per_carton and bom_to_use.pack_per_carton > 1:
+                    packs_per_karton = bom_to_use.pack_per_carton
+                elif wo.product_id:
+                    packaging = ProductPackaging.query.filter_by(product_id=wo.product_id).first()
+                    if packaging and packaging.packs_per_karton:
+                        packs_per_karton = packaging.packs_per_karton
+            
+            response_data['packs_per_karton'] = packs_per_karton
+            
+            for item in bom_to_use.items:
+                # BOM quantity is per karton, convert to per pack
+                qty_per_batch_per_pack = (float(item.quantity) / packs_per_karton) if item.quantity else 0
+                
                 material_info = {
                     'id': item.id,
                     'line_number': item.line_number,
                     'item_code': item.item_code,
                     'item_name': item.item_name,
                     'item_type': item.item_type,
-                    'quantity_per_batch': float(item.quantity) if item.quantity else 0,
+                    'quantity_per_batch': round(qty_per_batch_per_pack, 6),  # per pack now
+                    'quantity_per_karton': float(item.quantity) if item.quantity else 0,  # original per karton
                     'uom': item.uom,
                     'scrap_percent': float(item.scrap_percent) if item.scrap_percent else 0,
                     'is_critical': item.is_critical,
                     'unit_cost': float(item.unit_cost) if item.unit_cost else 0,
                 }
                 
-                # Calculate required quantity based on WO quantity and BOM batch size
-                batch_size = float(wo.bom.batch_size) if wo.bom.batch_size else 1
+                # Calculate required quantity based on WO quantity (in packs) and BOM per pack
+                # WO quantity is in packs, BOM is now converted to per pack
                 wo_quantity = float(wo.quantity) if wo.quantity else 0
-                batches_needed = wo_quantity / batch_size if batch_size > 0 else 0
-                required_qty = float(item.quantity) * batches_needed if item.quantity else 0
+                required_qty = qty_per_batch_per_pack * wo_quantity
                 effective_qty = required_qty * (1 + (float(item.scrap_percent) / 100)) if item.scrap_percent else required_qty
                 
                 material_info['required_quantity'] = round(required_qty, 4)
@@ -417,7 +538,7 @@ def get_work_order(id):
                 bom_materials.append(material_info)
         
         response_data['bom_materials'] = bom_materials
-        response_data['batch_size'] = float(wo.bom.batch_size) if wo.bom and wo.bom.batch_size else None
+        response_data['batch_size'] = float(bom_to_use.batch_size) if bom_to_use and bom_to_use.batch_size else None
         
         return jsonify({'work_order': response_data}), 200
     except Exception as e:

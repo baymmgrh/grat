@@ -4,6 +4,12 @@ import { ArrowLeftIcon, CheckCircleIcon, ClockIcon, CogIcon, UserIcon, CubeIcon,
 import axiosInstance from '../../utils/axiosConfig';
 import { toast } from 'react-hot-toast';
 
+interface ConsumptionData {
+  berat_kering_per_pack: number;  // gram - for kain consumption
+  volume_per_pack: number;        // ml - for ingredient consumption
+  berat_akhir_per_pack: number;   // gram - for packaging & stiker consumption
+}
+
 interface WorkOrder {
   id: number;
   wo_number: string;
@@ -17,6 +23,7 @@ interface WorkOrder {
   machine_name: string;
   status: string;
   pack_per_carton: number;
+  consumption_data?: ConsumptionData;
 }
 
 interface Employee {
@@ -243,11 +250,16 @@ export default function WorkOrderProductionInput() {
     production_date: new Date().toISOString().split('T')[0],
     shift: '1',
     quantity_produced: '',
-    quantity_good: '',
-    quantity_reject: '0',
-    quantity_rework: '0',
-    quantity_setting: '0', // Auto-calculated: produced - good - reject - rework
+    quantity_good: '0',    // Auto-calculated: produced - waste - setting
+    quantity_reject: '0',  // Grade C - user input
+    quantity_rework: '0',  // Grade B - user input
+    quantity_setting: '0', // User input (for product qty calculation)
     quantity_waste: '0',   // Auto-calculated: reject + rework
+    // Setting per material type (for consumption calculation)
+    setting_kain_kg: '0',
+    setting_ingredient_kg: '0',
+    setting_packaging_pcs: '0',
+    setting_stiker_pcs: '0',
     operator_id: '',
     notes: '',
     planned_runtime: '480', // Bisa diubah manual
@@ -283,21 +295,23 @@ export default function WorkOrderProductionInput() {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
       
-      // Auto-calculate setting and waste when relevant fields change
-      // Formula: 
+      // Auto-calculate waste and good when relevant fields change
+      // User inputs: qty_produced, qty_reject (Grade C), qty_rework (Grade B), qty_setting
+      // Auto-calculated:
       //   waste = reject + rework
-      //   setting = produced - good - reject - rework
-      if (field === 'quantity_produced' || field === 'quantity_good' || field === 'quantity_reject' || field === 'quantity_rework') {
+      //   qty_good (Grade A) = produced - waste - setting
+      if (field === 'quantity_produced' || field === 'quantity_reject' || field === 'quantity_rework' || field === 'quantity_setting') {
         const produced = parseFloat(field === 'quantity_produced' ? value : updated.quantity_produced) || 0;
-        const good = parseFloat(field === 'quantity_good' ? value : updated.quantity_good) || 0;
         const reject = parseFloat(field === 'quantity_reject' ? value : updated.quantity_reject) || 0;
         const rework = parseFloat(field === 'quantity_rework' ? value : updated.quantity_rework) || 0;
+        const setting = parseFloat(field === 'quantity_setting' ? value : updated.quantity_setting) || 0;
         
         // Waste = reject + rework
-        updated.quantity_waste = (reject + rework).toString();
+        const waste = reject + rework;
+        updated.quantity_waste = waste.toString();
         
-        // Setting = produced - good - reject - rework
-        updated.quantity_setting = Math.max(0, produced - good - reject - rework).toString();
+        // Good (Grade A) = produced - waste - setting
+        updated.quantity_good = Math.max(0, produced - waste - setting).toString();
       }
       
       return updated;
@@ -620,18 +634,7 @@ export default function WorkOrderProductionInput() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Qty Good
-              </label>
-              <input
-                type="number"
-                value={formData.quantity_good}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-green-50 text-green-800 font-medium"
-                readOnly
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Qty Reject
+                Qty Reject <span className="text-red-500">(Grade C)</span>
               </label>
               <input
                 type="number"
@@ -644,7 +647,7 @@ export default function WorkOrderProductionInput() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Qty Rework
+                Qty Rework <span className="text-yellow-600">(Grade B)</span>
               </label>
               <input
                 type="number"
@@ -655,26 +658,97 @@ export default function WorkOrderProductionInput() {
                 min="0"
               />
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Qty Setting
+              </label>
+              <input
+                type="number"
+                value={formData.quantity_setting}
+                onChange={(e) => handleChange('quantity_setting', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
           </div>
 
-          {/* Auto-calculated: Setting & Waste */}
+          {/* Setting Material - 4 inputs in a row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Setting Kain <span className="text-blue-500">(kg)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={formData.setting_kain_kg}
+                onChange={(e) => handleChange('setting_kain_kg', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Setting Ingredient <span className="text-green-500">(kg)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.001"
+                value={formData.setting_ingredient_kg}
+                onChange={(e) => handleChange('setting_ingredient_kg', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Setting Packaging <span className="text-purple-500">(pcs)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={formData.setting_packaging_pcs}
+                onChange={(e) => handleChange('setting_packaging_pcs', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Setting Stiker <span className="text-orange-500">(pcs)</span>
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={formData.setting_stiker_pcs}
+                onChange={(e) => handleChange('setting_stiker_pcs', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                placeholder="0"
+              />
+            </div>
+          </div>
+
+          {/* Auto-calculated: Good & Waste */}
           <div className="grid grid-cols-2 gap-4 mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">
-                Setting (Auto)
+              <label className="block text-sm font-medium text-green-700 mb-1">
+                Qty Good (Auto) <span className="text-green-600">(Grade A)</span>
               </label>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  value={formData.quantity_setting}
+                  value={formData.quantity_good}
                   readOnly
-                  className="w-full px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg text-gray-700 font-medium cursor-not-allowed"
+                  className="w-full px-3 py-2 bg-green-50 border border-green-300 rounded-lg text-green-800 font-medium cursor-not-allowed"
                 />
-                <span className="text-xs text-gray-500 whitespace-nowrap">= Produksi - Good - Reject - Rework</span>
+                <span className="text-xs text-gray-500 whitespace-nowrap">= Produksi - Waste - Setting</span>
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-500 mb-1">
+              <label className="block text-sm font-medium text-orange-700 mb-1">
                 Waste (Auto)
               </label>
               <div className="flex items-center gap-2">
@@ -700,6 +774,75 @@ export default function WorkOrderProductionInput() {
               {qualityRate}%
             </span>
           </div>
+
+          {/* Auto-calculated Consumption */}
+          {workOrder?.consumption_data && (parseFloat(formData.quantity_good) > 0 || parseFloat(formData.quantity_waste) > 0) && (
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="text-sm font-semibold text-blue-800 mb-3">
+                📊 Consumption (Auto-calculated)
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {/* Consumption Kain = (Grade A × berat_kering_per_pack) / 1000 + Setting Kain */}
+                <div className="bg-white p-3 rounded-lg border border-blue-100">
+                  <p className="text-xs text-gray-500 mb-1">Kain (Berat Kering)</p>
+                  <p className="text-lg font-bold text-blue-700">
+                    {workOrder.consumption_data.berat_kering_per_pack > 0 
+                      ? (((parseFloat(formData.quantity_good) * workOrder.consumption_data.berat_kering_per_pack * 1000) / 1000) + parseFloat(formData.setting_kain_kg || '0')).toFixed(4)
+                      : parseFloat(formData.setting_kain_kg || '0') > 0 ? parseFloat(formData.setting_kain_kg).toFixed(4) : '-'}
+                  </p>
+                  <p className="text-xs text-gray-400">kg</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    = ({formData.quantity_good} × {(workOrder.consumption_data.berat_kering_per_pack * 1000).toFixed(2)}g)/1000 + {formData.setting_kain_kg}
+                  </p>
+                </div>
+                
+                {/* Consumption Ingredient = (Grade A × volume_per_pack) / 1000 + Setting Ingredient */}
+                <div className="bg-white p-3 rounded-lg border border-blue-100">
+                  <p className="text-xs text-gray-500 mb-1">Ingredient (Volume)</p>
+                  <p className="text-lg font-bold text-green-700">
+                    {workOrder.consumption_data.volume_per_pack > 0 
+                      ? (((parseFloat(formData.quantity_good) * workOrder.consumption_data.volume_per_pack * 1000) / 1000) + parseFloat(formData.setting_ingredient_kg || '0')).toFixed(4)
+                      : parseFloat(formData.setting_ingredient_kg || '0') > 0 ? parseFloat(formData.setting_ingredient_kg).toFixed(4) : '-'}
+                  </p>
+                  <p className="text-xs text-gray-400">kg</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    = ({formData.quantity_good} × {(workOrder.consumption_data.volume_per_pack * 1000).toFixed(2)}ml)/1000 + {formData.setting_ingredient_kg}
+                  </p>
+                </div>
+                
+                {/* Consumption Packaging = Grade A + Waste + Setting Packaging */}
+                <div className="bg-white p-3 rounded-lg border border-blue-100">
+                  <p className="text-xs text-gray-500 mb-1">Packaging</p>
+                  <p className="text-lg font-bold text-purple-700">
+                    {(parseFloat(formData.quantity_good) + parseFloat(formData.quantity_waste) + parseFloat(formData.setting_packaging_pcs || '0')).toFixed(0)}
+                  </p>
+                  <p className="text-xs text-gray-400">pcs</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    = {formData.quantity_good} + {formData.quantity_waste} + {formData.setting_packaging_pcs}
+                  </p>
+                </div>
+                
+                {/* Consumption Stiker = Grade A + Waste + Setting Stiker */}
+                <div className="bg-white p-3 rounded-lg border border-blue-100">
+                  <p className="text-xs text-gray-500 mb-1">Stiker</p>
+                  <p className="text-lg font-bold text-orange-700">
+                    {(parseFloat(formData.quantity_good) + parseFloat(formData.quantity_waste) + parseFloat(formData.setting_stiker_pcs || '0')).toFixed(0)}
+                  </p>
+                  <p className="text-xs text-gray-400">pcs</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    = {formData.quantity_good} + {formData.quantity_waste} + {formData.setting_stiker_pcs}
+                  </p>
+                </div>
+              </div>
+              
+              {(!workOrder.consumption_data.berat_kering_per_pack && 
+                !workOrder.consumption_data.volume_per_pack) && (
+                <p className="text-xs text-amber-600 mt-2">
+                  ⚠️ Data consumption belum ditemukan di Master Produk (berat_kering, ingredient)
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Downtime Section */}

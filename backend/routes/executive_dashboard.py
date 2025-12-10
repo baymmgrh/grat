@@ -536,7 +536,7 @@ def get_performance_scorecard():
             ).scalar() or 0
         
         output_target = get_target('PRODUCTION_OUTPUT', 100000)
-        output_achievement = (total_output / output_target['value'] * 100) if output_target['value'] > 0 else 0
+        output_achievement = (float(total_output) / float(output_target['value']) * 100) if output_target['value'] > 0 else 0
         
         kpis.append({
             'category': 'Production',

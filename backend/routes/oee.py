@@ -7,6 +7,7 @@ from utils import generate_number
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, or_, desc
 import json
+import re
 
 oee_bp = Blueprint('oee', __name__)
 
@@ -50,6 +51,53 @@ def get_records():
         
         shift_records = shift_query.order_by(ShiftProduction.production_date.desc()).limit(limit).all()
         for sp in shift_records:
+            # Get product name from work order or product directly
+            product_name = None
+            target_qty = int(sp.target_quantity) if sp.target_quantity else 0
+            actual_qty = int(sp.actual_quantity) if sp.actual_quantity else 0
+            
+            # Try to get product name from product or work_order
+            if sp.product:
+                product_name = sp.product.name
+            elif sp.work_order and sp.work_order.product:
+                product_name = sp.work_order.product.name
+            
+            # Get target from work order if not set
+            if not target_qty and sp.work_order:
+                target_qty = int(sp.work_order.quantity) if sp.work_order.quantity else 0
+            
+            # Parse detailed downtime from issues field
+            # Format: "60 menit - Produk bocor (endseal kotor) [others]; 20 menit - Kain keluar jalur [others]; ..."
+            downtime_breakdown = []
+            # Keywords to exclude (human/biological needs - not machine issues)
+            excluded_keywords = ['istirahat', 'sholat', 'solat', 'toilet', 'wc', 'makan', 'minum', 'biologis', 'fisiologis']
+            
+            if sp.issues:
+                # Split by semicolon
+                issue_parts = sp.issues.split(';')
+                for part in issue_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    # Parse: "60 menit - Produk bocor (endseal kotor) [others]"
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[.+\])?$', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason = match.group(2).strip()
+                        # Remove trailing category if still present
+                        reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
+                        
+                        # Skip if reason contains excluded keywords (human/biological needs)
+                        reason_lower = reason.lower()
+                        if any(keyword in reason_lower for keyword in excluded_keywords):
+                            continue
+                        
+                        downtime_breakdown.append({'reason': reason, 'duration_minutes': duration})
+            
+            # Sort by duration descending and take top 3
+            downtime_breakdown.sort(key=lambda x: x['duration_minutes'], reverse=True)
+            top_3_downtime = downtime_breakdown[:3]
+            
             all_records.append({
                 'id': sp.id,
                 'source': 'shift_production',
@@ -60,7 +108,11 @@ def get_records():
                 'availability': float(sp.efficiency_rate) if sp.efficiency_rate else 0,
                 'performance': 100.0,  # Default performance
                 'quality': float(sp.quality_rate) if sp.quality_rate else 0,
-                'oee_percentage': float(sp.oee_score) if sp.oee_score else 0
+                'oee_percentage': float(sp.oee_score) if sp.oee_score else 0,
+                'product_name': product_name,
+                'target_quantity': target_qty,
+                'actual_quantity': actual_qty,
+                'top_3_downtime': top_3_downtime
             })
         
         # Sort by date and limit

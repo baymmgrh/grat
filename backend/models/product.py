@@ -129,6 +129,12 @@ class ProductPackaging(db.Model):
     karton_dimensions = db.Column(db.String(100), nullable=True)  # LxWxH in cm
     barcode_pack = db.Column(db.String(100), nullable=True)
     barcode_karton = db.Column(db.String(100), nullable=True)
+    
+    # Consumption calculation fields (per karton, will be divided by packs_per_karton for per pack)
+    berat_kering_per_karton = db.Column(db.Numeric(10, 3), nullable=True)  # gram - for kain consumption
+    volume_per_pack = db.Column(db.Numeric(10, 3), nullable=True)  # ml - for ingredient consumption
+    berat_akhir_per_karton = db.Column(db.Numeric(10, 3), nullable=True)  # gram - for packaging & stiker consumption
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -102,7 +102,7 @@ const [machines, setMachines] = useState<Machine[]>([])
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">🔧 Machine Data</h1>
+          <h1 className="text-3xl font-bold text-gray-900">🔧 Machine Data Controller</h1>
           <p className="text-gray-600 mt-1">Monitor and manage production machines</p>
         </div>
         <div className="flex gap-3">

@@ -386,7 +386,8 @@ export default function WorkOrderDetail() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase">Kode</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase">Material</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-purple-700 uppercase">Tipe</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Qty/Batch</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Qty/Karton</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Qty/Pack</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Qty Dibutuhkan</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-purple-700 uppercase">UOM</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-purple-700 uppercase">Scrap %</th>
@@ -410,6 +411,7 @@ export default function WorkOrderDetail() {
                         {material.item_type?.replace('_', ' ')}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-sm text-right text-gray-500">{material.quantity_per_karton}</td>
                     <td className="px-4 py-3 text-sm text-right">{material.quantity_per_batch}</td>
                     <td className="px-4 py-3 text-sm text-right font-medium text-purple-600">{material.required_quantity}</td>
                     <td className="px-4 py-3 text-sm text-center">{material.uom}</td>

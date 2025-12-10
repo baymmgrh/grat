@@ -42,12 +42,21 @@ interface Machine {
   is_active: boolean;
 }
 
+interface DowntimeItem {
+  reason: string;
+  duration_minutes: number;
+}
+
 interface OEEData {
   date: string;
   oee: number;
   availability: number;
   performance: number;
   quality: number;
+  product_name?: string;
+  target_quantity?: number;
+  actual_quantity?: number;
+  top_3_downtime?: DowntimeItem[];
 }
 
 interface MaintenanceRecord {
@@ -76,7 +85,8 @@ const MachineDetail: React.FC = () => {
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [downtimeRecords, setDowntimeRecords] = useState<DowntimeRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overview' | 'oee' | 'maintenance' | 'downtime'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'controller'>('overview');
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (id) {
@@ -104,7 +114,11 @@ const MachineDetail: React.FC = () => {
             oee: r.oee_percentage || 0,
             availability: r.availability || 0,
             performance: r.performance || 0,
-            quality: r.quality || 0
+            quality: r.quality || 0,
+            product_name: r.product_name || null,
+            target_quantity: r.target_quantity || 0,
+            actual_quantity: r.actual_quantity || 0,
+            top_3_downtime: r.top_3_downtime || []
           })));
         }
       } catch {
@@ -220,9 +234,7 @@ const MachineDetail: React.FC = () => {
         <nav className="flex gap-8">
           {[
             { id: 'overview', label: 'Overview', icon: CubeIcon },
-            { id: 'oee', label: 'OEE Analytics', icon: ChartBarIcon },
-            { id: 'maintenance', label: 'Maintenance', icon: WrenchScrewdriverIcon },
-            { id: 'downtime', label: 'Downtime', icon: ClockIcon }
+            { id: 'controller', label: 'Controller', icon: ChartBarIcon }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -331,132 +343,133 @@ const MachineDetail: React.FC = () => {
         </div>
       )}
 
-      {/* OEE Analytics Tab */}
-      {activeTab === 'oee' && (
-        <div className="space-y-6">
-          {/* OEE Trend Chart */}
+      {/* Controller Tab - Daily Efficiency Report */}
+      {activeTab === 'controller' && (
+        <div className="space-y-4">
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold mb-4">OEE Trend (Last 30 Days)</h3>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={oeeHistory}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" tickFormatter={(v) => v.slice(5)} />
-                  <YAxis domain={[0, 100]} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="oee" name="OEE" stroke="#3B82F6" strokeWidth={2} />
-                  <Line type="monotone" dataKey="availability" name="Availability" stroke="#10B981" strokeWidth={2} />
-                  <Line type="monotone" dataKey="performance" name="Performance" stroke="#F59E0B" strokeWidth={2} />
-                  <Line type="monotone" dataKey="quality" name="Quality" stroke="#8B5CF6" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+            <h3 className="text-lg font-semibold mb-4">📊 Daily Efficiency Report</h3>
+            <p className="text-sm text-gray-500 mb-4">Click on a row to expand details</p>
+            
+            {oeeHistory.length > 0 ? (
+              <div className="space-y-2">
+                {oeeHistory.map((day, index) => {
+                  const efficiency = day.oee || 0;
+                  const isExpanded = expandedDays.has(day.date);
+                  const isGood = efficiency >= 60;
+                  
+                  // Use top_3_downtime from API response
+                  const dayDowntimes = day.top_3_downtime || [];
+                  
+                  return (
+                    <div key={day.date} className="border rounded-lg overflow-hidden">
+                      {/* Header Row - Clickable */}
+                      <button
+                        onClick={() => {
+                          const newExpanded = new Set(expandedDays);
+                          if (isExpanded) {
+                            newExpanded.delete(day.date);
+                          } else {
+                            newExpanded.add(day.date);
+                          }
+                          setExpandedDays(newExpanded);
+                        }}
+                        className={`w-full p-4 flex items-center justify-between hover:bg-gray-50 transition-colors ${
+                          isGood ? 'bg-green-50' : 'bg-red-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-3 h-3 rounded-full ${isGood ? 'bg-green-500' : 'bg-red-500'}`} />
+                          <div className="text-left">
+                            <p className="font-medium text-gray-900">{day.date}</p>
+                            <p className="text-sm text-gray-500">Production Day</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <p className={`text-2xl font-bold ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+                              {efficiency.toFixed(1)}%
+                            </p>
+                            <p className="text-xs text-gray-500">Efficiency</p>
+                          </div>
+                          <svg
+                            className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+                      
+                      {/* Expanded Detail */}
+                      {isExpanded && (
+                        <div className="p-4 bg-white border-t">
+                          {/* Product Info */}
+                          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                            <p className="text-xs text-gray-500 mb-1">Produk yang Diproduksi</p>
+                            <p className="font-medium text-gray-900">{day.product_name || 'N/A'}</p>
+                          </div>
+                          
+                          {/* Target vs Actual */}
+                          <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="p-3 bg-blue-50 rounded-lg">
+                              <p className="text-xs text-gray-500">Target Produksi</p>
+                              <p className="text-lg font-bold text-blue-600">{day.target_quantity?.toLocaleString() || 0} pcs</p>
+                            </div>
+                            <div className="p-3 bg-green-50 rounded-lg">
+                              <p className="text-xs text-gray-500">Aktual Produksi</p>
+                              <p className="text-lg font-bold text-green-600">{day.actual_quantity?.toLocaleString() || 0} pcs</p>
+                            </div>
+                          </div>
 
-          {/* OEE Components */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {[
-              { label: 'OEE', value: avgOEE, color: 'blue' },
-              { label: 'Availability', value: oeeHistory.length > 0 ? (oeeHistory.reduce((s, d) => s + d.availability, 0) / oeeHistory.length).toFixed(1) : 85, color: 'green' },
-              { label: 'Performance', value: oeeHistory.length > 0 ? (oeeHistory.reduce((s, d) => s + d.performance, 0) / oeeHistory.length).toFixed(1) : 80, color: 'yellow' },
-              { label: 'Quality', value: oeeHistory.length > 0 ? (oeeHistory.reduce((s, d) => s + d.quality, 0) / oeeHistory.length).toFixed(1) : 95, color: 'purple' }
-            ].map((item) => (
-              <div key={item.label} className="bg-white rounded-lg shadow-sm border p-6 text-center">
-                <p className="text-sm text-gray-500 mb-2">{item.label}</p>
-                <p className={`text-3xl font-bold text-${item.color}-600`}>{item.value}%</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Maintenance Tab */}
-      {activeTab === 'maintenance' && (
-        <div className="bg-white rounded-lg shadow-sm border">
-          <div className="p-6 border-b flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Maintenance History</h3>
-            <Link
-              to={`/app/maintenance/new?machine_id=${id}`}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-            >
-              Schedule Maintenance
-            </Link>
-          </div>
-          {maintenanceRecords.length > 0 ? (
-            <div className="divide-y">
-              {maintenanceRecords.map((record) => (
-                <div key={record.id} className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">{record.maintenance_type}</p>
-                    <p className="text-sm text-gray-500">{record.description}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm">{record.scheduled_date}</p>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      record.status === 'completed' ? 'bg-green-100 text-green-800' :
-                      record.status === 'scheduled' ? 'bg-blue-100 text-blue-800' :
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {record.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="p-12 text-center text-gray-500">
-              <WrenchScrewdriverIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No maintenance records found</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Downtime Tab */}
-      {activeTab === 'downtime' && (
-        <div className="space-y-6">
-          <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold mb-4">Downtime Summary</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-4 bg-red-50 rounded-lg">
-                <p className="text-sm text-gray-500">Total Downtime</p>
-                <p className="text-2xl font-bold text-red-600">{Math.round(totalDowntime / 60)}h {totalDowntime % 60}m</p>
-              </div>
-              <div className="text-center p-4 bg-yellow-50 rounded-lg">
-                <p className="text-sm text-gray-500">Incidents</p>
-                <p className="text-2xl font-bold text-yellow-600">{downtimeRecords.length}</p>
-              </div>
-              <div className="text-center p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm text-gray-500">Avg Duration</p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {downtimeRecords.length > 0 ? Math.round(totalDowntime / downtimeRecords.length) : 0}m
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border">
-            <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold">Recent Downtime Events</h3>
-            </div>
-            {downtimeRecords.length > 0 ? (
-              <div className="divide-y">
-                {downtimeRecords.map((record) => (
-                  <div key={record.id} className="p-4 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{record.reason}</p>
-                      <p className="text-sm text-gray-500">{record.start_time}</p>
+                          {/* OEE Components */}
+                          <div className="grid grid-cols-3 gap-4 mb-4">
+                            <div className="p-3 bg-blue-50 rounded-lg">
+                              <p className="text-xs text-gray-500">Availability</p>
+                              <p className="text-lg font-bold text-blue-600">{day.availability?.toFixed(1) || 0}%</p>
+                            </div>
+                            <div className="p-3 bg-yellow-50 rounded-lg">
+                              <p className="text-xs text-gray-500">Performance</p>
+                              <p className="text-lg font-bold text-yellow-600">{day.performance?.toFixed(1) || 0}%</p>
+                            </div>
+                            <div className="p-3 bg-purple-50 rounded-lg">
+                              <p className="text-xs text-gray-500">Quality</p>
+                              <p className="text-lg font-bold text-purple-600">{day.quality?.toFixed(1) || 0}%</p>
+                            </div>
+                          </div>
+                          
+                          {/* Top 3 Downtime */}
+                          <div className="mt-4">
+                            <p className="text-sm font-medium text-gray-700 mb-2">🔴 Top 3 Downtime Terlama</p>
+                            {dayDowntimes.length > 0 ? (
+                              <div className="space-y-2">
+                                {dayDowntimes.map((dt, idx) => (
+                                  <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                                    <div className="flex items-center gap-2">
+                                      <span className="w-5 h-5 flex items-center justify-center bg-red-100 text-red-600 text-xs font-bold rounded">
+                                        {idx + 1}
+                                      </span>
+                                      <span className="text-sm text-gray-700">{dt.reason}</span>
+                                    </div>
+                                    <span className="text-sm font-medium text-red-600">{dt.duration_minutes} min</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-400 italic">No downtime recorded</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <p className="font-medium text-red-600">{record.duration_minutes} minutes</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="p-12 text-center text-gray-500">
-                <ClockIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p>No downtime records found</p>
+                <ChartBarIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                <p>No efficiency data available</p>
               </div>
             )}
           </div>
