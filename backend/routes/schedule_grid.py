@@ -27,6 +27,7 @@ class ScheduleGridItem(db.Model):
     spek_kain = db.Column(db.String(100))
     no_spk = db.Column(db.String(50))
     wo_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=True)  # Link to generated WO
+    monthly_schedule_id = db.Column(db.Integer, db.ForeignKey('monthly_schedules.id'), nullable=True)  # Link to monthly source
     color = db.Column(db.String(50), default='bg-blue-500')
     schedule_days = db.Column(db.Text)  # JSON: {"2025-12-08": [1, 2], "2025-12-09": [1]}
     status = db.Column(db.String(50), default='planned')  # planned, wo_created, in_progress, completed
@@ -38,6 +39,7 @@ class ScheduleGridItem(db.Model):
     machine = db.relationship('Machine', backref='schedule_grid_items')
     product = db.relationship('Product', backref='schedule_grid_items')
     work_order = db.relationship('WorkOrder', backref='schedule_grid_item')
+    monthly_schedule = db.relationship('MonthlySchedule', backref='weekly_schedules')
     
     def to_dict(self):
         # Get pack per carton from Product Packaging (priority) or use stored value
@@ -76,6 +78,75 @@ class ScheduleGridNote(db.Model):
     note_text = db.Column(db.Text, nullable=False)
     order_index = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class MonthlySchedule(db.Model):
+    """Monthly Production Schedule - Rencana Produksi Bulanan sebagai sumber untuk Weekly"""
+    __tablename__ = 'monthly_schedules'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)  # 1-12
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
+    
+    # Target quantities
+    target_ctn = db.Column(db.Numeric(15, 2), default=0)  # Target karton per bulan
+    target_pack = db.Column(db.Numeric(15, 2), default=0)  # Auto-calculated: target_ctn * qty_per_ctn
+    
+    # Tracking - how much has been scheduled to weekly
+    scheduled_ctn = db.Column(db.Numeric(15, 2), default=0)  # Total yang sudah dijadwalkan ke weekly
+    remaining_ctn = db.Column(db.Numeric(15, 2), default=0)  # Sisa yang belum dijadwalkan
+    
+    # Additional info
+    priority = db.Column(db.String(20), default='normal')  # low, normal, high, urgent
+    spek_kain = db.Column(db.String(100))
+    color = db.Column(db.String(50), default='bg-blue-500')
+    notes = db.Column(db.Text)
+    status = db.Column(db.String(50), default='draft')  # draft, approved, in_progress, completed
+    
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product = db.relationship('Product', backref='monthly_schedules')
+    machine = db.relationship('Machine', backref='monthly_schedules')
+    
+    __table_args__ = (
+        db.UniqueConstraint('year', 'month', 'product_id', 'machine_id', name='unique_monthly_schedule'),
+    )
+    
+    def to_dict(self):
+        # Get pack per carton from Product Packaging
+        pack_per_ctn = 0
+        if self.product and self.product.packaging:
+            pack_per_ctn = self.product.packaging.packs_per_karton or 0
+        
+        return {
+            'id': self.id,
+            'year': self.year,
+            'month': self.month,
+            'month_name': ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+                          'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][self.month],
+            'product_id': self.product_id,
+            'product_code': self.product.code if self.product else None,
+            'product_name': self.product.name if self.product else None,
+            'machine_id': self.machine_id,
+            'machine_code': self.machine.code if self.machine else None,
+            'machine_name': self.machine.name if self.machine else None,
+            'target_ctn': float(self.target_ctn or 0),
+            'target_pack': float(self.target_ctn or 0) * pack_per_ctn,
+            'qty_per_ctn': pack_per_ctn,
+            'scheduled_ctn': float(self.scheduled_ctn or 0),
+            'remaining_ctn': float(self.target_ctn or 0) - float(self.scheduled_ctn or 0),
+            'progress_percent': round((float(self.scheduled_ctn or 0) / float(self.target_ctn or 1)) * 100, 1),
+            'priority': self.priority,
+            'spek_kain': self.spek_kain,
+            'color': self.color,
+            'notes': self.notes,
+            'status': self.status,
+        }
 
 
 def get_week_start(date_str):
@@ -468,6 +539,230 @@ def check_schedules_for_today():
             'date': today_str,
             'pending_count': len(pending_schedules),
             'pending_schedules': pending_schedules
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= MONTHLY SCHEDULE ROUTES =============
+
+@schedule_grid_bp.route('/monthly-schedule', methods=['GET'])
+@jwt_required()
+def get_monthly_schedules():
+    """Get monthly schedules for a specific month/year"""
+    try:
+        year = request.args.get('year', datetime.now().year, type=int)
+        month = request.args.get('month', datetime.now().month, type=int)
+        
+        schedules = MonthlySchedule.query.filter_by(
+            year=year,
+            month=month
+        ).order_by(MonthlySchedule.priority.desc(), MonthlySchedule.product_id).all()
+        
+        return jsonify({
+            'year': year,
+            'month': month,
+            'schedules': [s.to_dict() for s in schedules]
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule', methods=['POST'])
+@jwt_required()
+def create_monthly_schedule():
+    """Create new monthly schedule item"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        # Check if already exists
+        existing = MonthlySchedule.query.filter_by(
+            year=data['year'],
+            month=data['month'],
+            product_id=data['product_id'],
+            machine_id=data.get('machine_id')
+        ).first()
+        
+        if existing:
+            return jsonify({'error': 'Jadwal untuk produk ini di bulan tersebut sudah ada'}), 400
+        
+        schedule = MonthlySchedule(
+            year=data['year'],
+            month=data['month'],
+            product_id=data['product_id'],
+            machine_id=data.get('machine_id'),
+            target_ctn=data.get('target_ctn', 0),
+            priority=data.get('priority', 'normal'),
+            spek_kain=data.get('spek_kain'),
+            color=data.get('color', 'bg-blue-500'),
+            notes=data.get('notes'),
+            status='draft',
+            created_by=user_id
+        )
+        
+        db.session.add(schedule)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Monthly schedule created',
+            'schedule': schedule.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/<int:id>', methods=['PUT'])
+@jwt_required()
+def update_monthly_schedule(id):
+    """Update monthly schedule item"""
+    try:
+        schedule = MonthlySchedule.query.get_or_404(id)
+        data = request.get_json()
+        
+        if 'target_ctn' in data:
+            schedule.target_ctn = data['target_ctn']
+        if 'machine_id' in data:
+            schedule.machine_id = data['machine_id']
+        if 'priority' in data:
+            schedule.priority = data['priority']
+        if 'spek_kain' in data:
+            schedule.spek_kain = data['spek_kain']
+        if 'color' in data:
+            schedule.color = data['color']
+        if 'notes' in data:
+            schedule.notes = data['notes']
+        if 'status' in data:
+            schedule.status = data['status']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Monthly schedule updated',
+            'schedule': schedule.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_monthly_schedule(id):
+    """Delete monthly schedule item"""
+    try:
+        schedule = MonthlySchedule.query.get_or_404(id)
+        
+        # Check if has weekly schedules linked
+        if schedule.weekly_schedules:
+            return jsonify({'error': 'Tidak bisa hapus karena sudah ada jadwal mingguan terkait'}), 400
+        
+        db.session.delete(schedule)
+        db.session.commit()
+        
+        return jsonify({'message': 'Monthly schedule deleted'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/<int:id>/add-to-weekly', methods=['POST'])
+@jwt_required()
+def add_monthly_to_weekly(id):
+    """Add portion of monthly schedule to weekly schedule"""
+    try:
+        monthly = MonthlySchedule.query.get_or_404(id)
+        data = request.get_json()
+        
+        order_ctn = float(data.get('order_ctn', 0))
+        week_start_str = data.get('week_start')
+        schedule_days = data.get('schedule_days', {})
+        
+        if order_ctn <= 0:
+            return jsonify({'error': 'Order CTN harus lebih dari 0'}), 400
+        
+        # Check remaining
+        remaining = float(monthly.target_ctn or 0) - float(monthly.scheduled_ctn or 0)
+        if order_ctn > remaining:
+            return jsonify({'error': f'Melebihi sisa target. Sisa: {remaining} CTN'}), 400
+        
+        # Parse week start
+        week_start = get_week_start(week_start_str)
+        
+        # Create weekly schedule item
+        weekly_item = ScheduleGridItem(
+            machine_id=monthly.machine_id,
+            product_id=monthly.product_id,
+            week_start=week_start,
+            order_ctn=order_ctn,
+            qty_per_ctn=monthly.product.packaging.packs_per_karton if monthly.product and monthly.product.packaging else 0,
+            spek_kain=monthly.spek_kain,
+            color=monthly.color,
+            schedule_days=json.dumps(schedule_days),
+            monthly_schedule_id=monthly.id,
+            status='planned',
+            notes=data.get('notes', f'Dari jadwal bulanan {monthly.year}-{monthly.month:02d}')
+        )
+        
+        db.session.add(weekly_item)
+        
+        # Update monthly scheduled amount
+        monthly.scheduled_ctn = float(monthly.scheduled_ctn or 0) + order_ctn
+        if monthly.status == 'draft':
+            monthly.status = 'in_progress'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'{order_ctn} CTN berhasil ditambahkan ke jadwal minggu {week_start.isoformat()}',
+            'weekly_schedule': weekly_item.to_dict(),
+            'monthly_remaining': float(monthly.target_ctn or 0) - float(monthly.scheduled_ctn or 0)
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/available', methods=['GET'])
+@jwt_required()
+def get_available_monthly_schedules():
+    """Get monthly schedules that have remaining quantity for a specific week"""
+    try:
+        week_start_str = request.args.get('week_start')
+        week_start = get_week_start(week_start_str)
+        
+        # Get year and month from week start
+        year = week_start.year
+        month = week_start.month
+        
+        # Also check previous month if week spans two months
+        schedules = MonthlySchedule.query.filter(
+            MonthlySchedule.year == year,
+            MonthlySchedule.month == month,
+            MonthlySchedule.status.in_(['draft', 'approved', 'in_progress'])
+        ).all()
+        
+        # Filter only those with remaining quantity
+        available = []
+        for s in schedules:
+            remaining = float(s.target_ctn or 0) - float(s.scheduled_ctn or 0)
+            if remaining > 0:
+                data = s.to_dict()
+                data['remaining_ctn'] = remaining
+                available.append(data)
+        
+        return jsonify({
+            'week_start': week_start.isoformat(),
+            'year': year,
+            'month': month,
+            'available_schedules': available
         }), 200
         
     except Exception as e:

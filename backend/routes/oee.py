@@ -1,13 +1,15 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, MaintenanceRecord, MaintenanceSchedule, User
 from utils.i18n import success_response, error_response, get_message
 from models.oee import OEERecord, OEEDowntimeRecord, OEETarget, OEEAlert, MaintenanceImpact, OEEAnalytics, QualityDefect
+from models.product_new_schema import ProductNew
 from utils import generate_number
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, or_, desc
 import json
 import re
+import io
 
 oee_bp = Blueprint('oee', __name__)
 
@@ -55,12 +57,27 @@ def get_records():
             product_name = None
             target_qty = int(sp.target_quantity) if sp.target_quantity else 0
             actual_qty = int(sp.actual_quantity) if sp.actual_quantity else 0
+            pack_per_karton = 50  # Default value
             
             # Try to get product name from product or work_order
             if sp.product:
                 product_name = sp.product.name
             elif sp.work_order and sp.work_order.product:
                 product_name = sp.work_order.product.name
+            
+            # Get pack_per_karton from ProductNew if product name available
+            if product_name:
+                try:
+                    # Remove "WIP " prefix for matching
+                    search_name = product_name.replace('WIP ', '').strip()
+                    product_new = ProductNew.query.filter(
+                        ProductNew.nama_produk.ilike(f'%{search_name}%')
+                    ).first()
+                    if product_new and product_new.pack_per_karton:
+                        pack_per_karton = int(product_new.pack_per_karton)
+                except Exception as e:
+                    # If query fails, use default
+                    pack_per_karton = 50
             
             # Get target from work order if not set
             if not target_qty and sp.work_order:
@@ -98,6 +115,22 @@ def get_records():
             downtime_breakdown.sort(key=lambda x: x['duration_minutes'], reverse=True)
             top_3_downtime = downtime_breakdown[:3]
             
+            # Extract shift number from shift field (e.g., "shift_1" -> 1)
+            shift_num = 1
+            if sp.shift:
+                shift_match = re.search(r'(\d+)', str(sp.shift))
+                if shift_match:
+                    shift_num = int(shift_match.group(1))
+            
+            # Shift data with Grade A, B, C
+            shift_data = {
+                'shift': shift_num,
+                'grade_a': int(sp.good_quantity) if sp.good_quantity else 0,
+                'grade_b': int(sp.rework_quantity) if sp.rework_quantity else 0,
+                'grade_c': int(sp.reject_quantity) if sp.reject_quantity else 0,
+                'total': int(sp.actual_quantity) if sp.actual_quantity else 0
+            }
+            
             all_records.append({
                 'id': sp.id,
                 'source': 'shift_production',
@@ -112,7 +145,9 @@ def get_records():
                 'product_name': product_name,
                 'target_quantity': target_qty,
                 'actual_quantity': actual_qty,
-                'top_3_downtime': top_3_downtime
+                'top_3_downtime': top_3_downtime,
+                'shift_data': shift_data,
+                'pack_per_karton': pack_per_karton
             })
         
         # Sort by date and limit
@@ -122,6 +157,302 @@ def get_records():
         return jsonify({
             'records': all_records
         }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@oee_bp.route('/export-excel', methods=['GET'])
+@jwt_required()
+def export_controller_excel():
+    """Export Controller report to Excel - per tanggal per mesin per work order"""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+        from openpyxl.utils import get_column_letter
+        from models.production import ShiftProduction
+        from collections import Counter
+        
+        machine_id = request.args.get('machine_id', type=int)
+        period = request.args.get('period', 'day')  # 'day', 'week' or 'month'
+        selected_date = request.args.get('date')  # Optional: specific date for 'day' period
+        
+        # Calculate date range based on period
+        if period == 'day':
+            if selected_date:
+                # Use the selected date
+                start_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
+                end_date = start_date
+            else:
+                # Find the latest production date for this machine
+                latest_query = ShiftProduction.query
+                if machine_id:
+                    latest_query = latest_query.filter(ShiftProduction.machine_id == machine_id)
+                latest_record = latest_query.order_by(ShiftProduction.production_date.desc()).first()
+                
+                if latest_record:
+                    start_date = latest_record.production_date
+                    end_date = latest_record.production_date
+                else:
+                    start_date = datetime.now().date()
+                    end_date = datetime.now().date()
+        else:
+            end_date = datetime.now().date()
+            if period == 'month':
+                start_date = end_date - timedelta(days=30)
+            else:  # week
+                start_date = end_date - timedelta(days=7)
+        
+        # Get shift production records within date range
+        query = ShiftProduction.query.filter(
+            ShiftProduction.production_date >= start_date,
+            ShiftProduction.production_date <= end_date
+        )
+        if machine_id:
+            query = query.filter(ShiftProduction.machine_id == machine_id)
+        
+        records = query.order_by(
+            ShiftProduction.production_date.desc(),
+            ShiftProduction.machine_id,
+            ShiftProduction.work_order_id
+        ).all()
+        
+        # Keywords for human-related downtime (excluded from top 3)
+        HUMAN_DOWNTIME_KEYWORDS = [
+            'istirahat', 'makan', 'sholat', 'toilet', 'wc', 'break',
+            'pulang', 'datang', 'terlambat', 'absen', 'cuti', 'sakit',
+            'meeting', 'rapat', 'briefing', 'training', 'pelatihan'
+        ]
+        
+        def is_human_downtime(reason):
+            """Check if downtime reason is human-related"""
+            reason_lower = reason.lower()
+            return any(keyword in reason_lower for keyword in HUMAN_DOWNTIME_KEYWORDS)
+        
+        # Collect all issues across all records to find most frequent
+        all_downtime_issues = []
+        for sp in records:
+            if sp.issues:
+                parts = [p.strip() for p in sp.issues.split(';') if p.strip()]
+                for part in parts:
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[.+\])?$', part, re.IGNORECASE)
+                    if match:
+                        reason = match.group(2).strip()
+                        reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
+                        duration = int(match.group(1))
+                        all_downtime_issues.append({
+                            'reason': reason,
+                            'duration': duration,
+                            'is_human': is_human_downtime(reason)
+                        })
+        
+        # Count frequency of each issue (excluding human downtime for top ranking)
+        non_human_issues = [i['reason'] for i in all_downtime_issues if not i['is_human']]
+        issue_frequency = Counter(non_human_issues)
+        
+        # Get top 3 most frequent non-human issues
+        top_3_issues = [issue for issue, count in issue_frequency.most_common(3)]
+        print(f"[DEBUG] Top 3 non-human issues: {top_3_issues}")
+        
+        # Create workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Controller Report"
+        
+        # Styles
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Styles for downtime
+        red_font = Font(color="FF0000", bold=True)  # Red for top 3 issues
+        black_font = Font(color="000000")  # Black for other issues
+        
+        # Headers - single Issue column, issues go down as rows
+        headers = [
+            "Tanggal", "Mesin", "Shift", "Produk", 
+            "Target (pcs)", "Aktual (pcs)", "Target (karton)", "Aktual (karton)",
+            "Grade A", "Grade B", "Grade C",
+            "Availability (%)", "Performance (%)", "Quality (%)", "OEE (%)",
+            "Downtime (menit)", "Issue"
+        ]
+        
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+        
+        # Data rows
+        row_num = 2
+        for sp in records:
+            # Get product name
+            product_name = None
+            if sp.product:
+                product_name = sp.product.name
+            elif sp.work_order and sp.work_order.product:
+                product_name = sp.work_order.product.name
+            
+            # Get pack_per_karton
+            pack_per_karton = 50
+            if product_name:
+                try:
+                    search_name = product_name.replace('WIP ', '').strip()
+                    product_new = ProductNew.query.filter(
+                        ProductNew.nama_produk.ilike(f'%{search_name}%')
+                    ).first()
+                    if product_new and product_new.pack_per_karton:
+                        pack_per_karton = int(product_new.pack_per_karton)
+                except:
+                    pass
+            
+            # Get shift number
+            shift_num = 1
+            if sp.shift:
+                shift_match = re.search(r'(\d+)', str(sp.shift))
+                if shift_match:
+                    shift_num = int(shift_match.group(1))
+            
+            # Parse all issues from issues field
+            record_issues = []
+            if sp.issues:
+                parts = [p.strip() for p in sp.issues.split(';') if p.strip()]
+                for part in parts:
+                    # Parse format: "XX menit - reason [category]"
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[.+\])?$', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason = match.group(2).strip()
+                        reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
+                        is_top3 = reason in top_3_issues  # Check if in global top 3
+                        record_issues.append({
+                            'duration': duration, 
+                            'reason': reason,
+                            'is_top3': is_top3,
+                            'is_human': is_human_downtime(reason)
+                        })
+                    else:
+                        # Fallback: just use the text
+                        record_issues.append({
+                            'duration': 0, 
+                            'reason': part,
+                            'is_top3': False,
+                            'is_human': is_human_downtime(part)
+                        })
+                
+                # Sort: top 3 issues first (by duration), then others (by duration)
+                record_issues.sort(key=lambda x: (not x['is_top3'], -x['duration']))
+            
+            target_qty = int(sp.target_quantity) if sp.target_quantity else 0
+            actual_qty = int(sp.actual_quantity) if sp.actual_quantity else 0
+            
+            # Base row data (without issues)
+            base_row_data = [
+                sp.production_date.strftime('%Y-%m-%d') if sp.production_date else '',
+                sp.machine.name if sp.machine else '',
+                f"Shift {shift_num}",
+                product_name or '',
+                target_qty,
+                actual_qty,
+                round(target_qty / pack_per_karton) if pack_per_karton else 0,
+                round(actual_qty / pack_per_karton) if pack_per_karton else 0,
+                int(sp.good_quantity) if sp.good_quantity else 0,
+                int(sp.rework_quantity) if sp.rework_quantity else 0,
+                int(sp.reject_quantity) if sp.reject_quantity else 0,
+                round(float(sp.efficiency_rate), 1) if sp.efficiency_rate else 0,
+                100.0,  # Default performance
+                round(float(sp.quality_rate), 1) if sp.quality_rate else 0,
+                round(float(sp.oee_score), 1) if sp.oee_score else 0,
+                int(sp.downtime_minutes) if sp.downtime_minutes else 0
+            ]
+            
+            # If no issues, write single row with empty issue
+            if not record_issues:
+                for col, value in enumerate(base_row_data, 1):
+                    cell = ws.cell(row=row_num, column=col, value=value)
+                    cell.border = thin_border
+                    if col >= 5:
+                        cell.alignment = Alignment(horizontal="right")
+                # Empty issue cell
+                cell = ws.cell(row=row_num, column=17, value="")
+                cell.border = thin_border
+                row_num += 1
+            else:
+                # Write multiple rows - one per issue
+                # First row has all data, subsequent rows only have issue
+                for i, issue in enumerate(record_issues):
+                    if i == 0:
+                        # First row: write all base data + first issue
+                        for col, value in enumerate(base_row_data, 1):
+                            cell = ws.cell(row=row_num, column=col, value=value)
+                            cell.border = thin_border
+                            if col >= 5:
+                                cell.alignment = Alignment(horizontal="right")
+                    else:
+                        # Subsequent rows: empty cells for base data (or merge later)
+                        for col in range(1, 17):
+                            cell = ws.cell(row=row_num, column=col, value="")
+                            cell.border = thin_border
+                    
+                    # Write issue in column 17
+                    issue_text = f"{issue['duration']} menit - {issue['reason']}"
+                    cell = ws.cell(row=row_num, column=17, value=issue_text)
+                    cell.border = thin_border
+                    
+                    # Top 3 global issues (non-human) in red, others in black
+                    # Human downtime never gets red even if frequent
+                    if issue['is_top3'] and not issue['is_human']:
+                        cell.font = red_font
+                    else:
+                        cell.font = black_font
+                    
+                    row_num += 1
+        
+        # Set fixed column widths for better readability
+        column_widths = {
+            1: 12,   # Tanggal
+            2: 15,   # Mesin
+            3: 8,    # Shift
+            4: 25,   # Produk
+            5: 12,   # Target (pcs)
+            6: 12,   # Aktual (pcs)
+            7: 10,   # Target (karton)
+            8: 10,   # Aktual (karton)
+            9: 10,   # Grade A
+            10: 10,  # Grade B
+            11: 10,  # Grade C
+            12: 12,  # Availability
+            13: 12,  # Performance
+            14: 10,  # Quality
+            15: 8,   # OEE
+            16: 12,  # Downtime
+            17: 40   # Issue
+        }
+        for col, width in column_widths.items():
+            ws.column_dimensions[get_column_letter(col)].width = width
+        
+        # Freeze header row
+        ws.freeze_panes = 'A2'
+        
+        # Save to BytesIO
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"controller_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

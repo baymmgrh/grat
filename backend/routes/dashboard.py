@@ -147,6 +147,8 @@ def get_production_chart():
 def get_executive_dashboard():
     """Comprehensive executive dashboard with all modules KPIs"""
     try:
+        from models.production import ShiftProduction
+        
         # Date ranges
         today = date.today()
         week_start = today - timedelta(days=7)
@@ -161,18 +163,42 @@ def get_executive_dashboard():
             SalesOrder.order_date >= month_start
         ).scalar() or 0
         
+        # Sales orders count
+        sales_orders_count = SalesOrder.query.filter(
+            SalesOrder.order_date >= month_start
+        ).count()
+        
         active_work_orders = WorkOrder.query.filter_by(status='in_progress').count()
+        completed_today = WorkOrder.query.filter(
+            func.date(WorkOrder.actual_end_date) == today,
+            WorkOrder.status == 'completed'
+        ).count()
         
         machines_running = Machine.query.filter_by(status='running', is_active=True).count()
         total_machines = Machine.query.filter_by(is_active=True).count()
         machine_utilization = (machines_running / total_machines * 100) if total_machines > 0 else 0
         
+        # OEE from ShiftProduction (more accurate)
         try:
-            avg_oee = db.session.query(func.coalesce(func.avg(OEERecord.oee), 0)).filter(
-                OEERecord.record_date >= week_start
+            avg_oee = db.session.query(func.coalesce(func.avg(ShiftProduction.oee_score), 0)).filter(
+                ShiftProduction.production_date >= week_start
             ).scalar() or 0
         except:
-            avg_oee = 0
+            try:
+                avg_oee = db.session.query(func.coalesce(func.avg(OEERecord.oee), 0)).filter(
+                    OEERecord.record_date >= week_start
+                ).scalar() or 0
+            except:
+                avg_oee = 0
+        
+        # Machines with OEE below 75%
+        try:
+            low_oee_machines = db.session.query(func.count(func.distinct(ShiftProduction.machine_id))).filter(
+                ShiftProduction.production_date >= week_start,
+                ShiftProduction.oee_score < 75
+            ).scalar() or 0
+        except:
+            low_oee_machines = 0
         
         try:
             critical_alerts = OEEAlert.query.filter(
@@ -182,8 +208,125 @@ def get_executive_dashboard():
         except:
             critical_alerts = 0
         
-        # Safe calculations
-        revenue_growth = 0  # Simplified for now
+        # Production output from ShiftProduction
+        try:
+            production_output = db.session.query(func.coalesce(func.sum(ShiftProduction.actual_quantity), 0)).filter(
+                ShiftProduction.production_date >= month_start
+            ).scalar() or 0
+        except:
+            production_output = 0
+        
+        # Quality pass rate from ShiftProduction
+        try:
+            total_produced = db.session.query(func.coalesce(func.sum(ShiftProduction.actual_quantity), 0)).filter(
+                ShiftProduction.production_date >= month_start
+            ).scalar() or 0
+            total_good = db.session.query(func.coalesce(func.sum(ShiftProduction.good_quantity), 0)).filter(
+                ShiftProduction.production_date >= month_start
+            ).scalar() or 0
+            quality_pass_rate = (total_good / total_produced * 100) if total_produced > 0 else 0
+        except:
+            quality_pass_rate = 0
+        
+        # Quality inspections
+        try:
+            inspections_today = QualityInspection.query.filter(
+                func.date(QualityInspection.inspection_date) == today
+            ).count()
+        except:
+            inspections_today = 0
+        
+        # Inventory
+        try:
+            low_stock_items = Inventory.query.filter(
+                Inventory.quantity <= Inventory.min_quantity
+            ).count()
+        except:
+            low_stock_items = 0
+        
+        try:
+            inventory_value = db.session.query(func.coalesce(func.sum(Inventory.quantity * Inventory.unit_cost), 0)).scalar() or 0
+        except:
+            inventory_value = 0
+        
+        # Purchasing
+        try:
+            pending_po = PurchaseOrder.query.filter(
+                PurchaseOrder.status.in_(['pending', 'approved'])
+            ).count()
+        except:
+            pending_po = 0
+        
+        # HR
+        try:
+            total_employees = Employee.query.filter_by(status='active').count()
+        except:
+            total_employees = 0
+        
+        try:
+            today_roster = EmployeeRoster.query.filter(
+                EmployeeRoster.date == today
+            ).count()
+        except:
+            today_roster = 0
+        
+        # Maintenance
+        try:
+            overdue_maintenance = MaintenanceSchedule.query.filter(
+                MaintenanceSchedule.scheduled_date < today,
+                MaintenanceSchedule.status.in_(['pending', 'scheduled'])
+            ).count()
+        except:
+            overdue_maintenance = 0
+        
+        # Customers
+        try:
+            active_customers = Customer.query.filter_by(is_active=True).count()
+        except:
+            active_customers = 0
+        
+        try:
+            returns_this_month = CustomerReturn.query.filter(
+                CustomerReturn.return_date >= month_start
+            ).count()
+        except:
+            returns_this_month = 0
+        
+        # R&D
+        try:
+            active_projects = ResearchProject.query.filter(
+                ResearchProject.status.in_(['planning', 'in_progress', 'testing'])
+            ).count()
+        except:
+            active_projects = 0
+        
+        # Waste
+        try:
+            waste_this_week = db.session.query(func.coalesce(func.sum(WasteRecord.quantity), 0)).filter(
+                WasteRecord.record_date >= week_start
+            ).scalar() or 0
+        except:
+            waste_this_week = 0
+        
+        # Revenue growth calculation
+        prev_month_start = (month_start - timedelta(days=1)).replace(day=1)
+        prev_month_end = month_start - timedelta(days=1)
+        try:
+            prev_month_sales = db.session.query(func.coalesce(func.sum(SalesOrder.total_amount), 0)).filter(
+                SalesOrder.order_date >= prev_month_start,
+                SalesOrder.order_date <= prev_month_end
+            ).scalar() or 0
+            revenue_growth = ((sales_this_month - prev_month_sales) / prev_month_sales * 100) if prev_month_sales > 0 else 0
+        except:
+            revenue_growth = 0
+        
+        # Outstanding invoices
+        try:
+            outstanding_invoices = db.session.query(func.coalesce(func.sum(Invoice.total_amount - Invoice.paid_amount), 0)).filter(
+                Invoice.status.in_(['pending', 'partial'])
+            ).scalar() or 0
+        except:
+            outstanding_invoices = 0
         
         # Simple trend data
         sales_trend = []
@@ -199,58 +342,73 @@ def get_executive_dashboard():
         
         # Critical issues
         critical_issues = []
-        if critical_alerts > 0:
+        if low_oee_machines > 0:
             critical_issues.append({
                 'type': 'oee_alert',
-                'message': f'{critical_alerts} critical OEE alerts require attention',
+                'message': f'{low_oee_machines} machines with OEE below 75%',
                 'severity': 'high',
                 'module': 'OEE'
+            })
+        if low_stock_items > 0:
+            critical_issues.append({
+                'type': 'inventory_alert',
+                'message': f'{low_stock_items} items below minimum stock',
+                'severity': 'medium',
+                'module': 'Inventory'
+            })
+        if overdue_maintenance > 0:
+            critical_issues.append({
+                'type': 'maintenance_alert',
+                'message': f'{overdue_maintenance} overdue maintenance schedules',
+                'severity': 'high',
+                'module': 'Maintenance'
             })
         
         return jsonify({
             'financial': {
                 'sales_today': float(sales_today),
                 'sales_this_month': float(sales_this_month),
-                'revenue_growth': revenue_growth,
-                'outstanding_invoices': 0
+                'revenue_growth': round(revenue_growth, 1),
+                'outstanding_invoices': float(outstanding_invoices)
             },
             'production': {
                 'active_work_orders': active_work_orders,
-                'completed_today': 0,
-                'efficiency': 0
+                'completed_today': completed_today,
+                'efficiency': round(float(avg_oee), 1),
+                'output': int(production_output)
             },
             'oee': {
-                'average_oee': round(float(avg_oee), 2),
-                'critical_alerts': critical_alerts,
-                'machine_utilization': round(machine_utilization, 2)
+                'average_oee': round(float(avg_oee), 1),
+                'critical_alerts': low_oee_machines,
+                'machine_utilization': round(machine_utilization, 1)
             },
             'quality': {
-                'inspections_today': 0,
-                'pass_rate': 0
+                'inspections_today': inspections_today,
+                'pass_rate': round(quality_pass_rate, 1)
             },
             'inventory': {
-                'low_stock_items': 0,
-                'total_value': 0
+                'low_stock_items': low_stock_items,
+                'total_value': float(inventory_value)
             },
             'purchasing': {
-                'pending_orders': 0
+                'pending_orders': pending_po
             },
             'hr': {
-                'total_employees': 0,
-                'today_roster': 0
+                'total_employees': total_employees,
+                'today_roster': today_roster
             },
             'maintenance': {
-                'overdue': 0
+                'overdue': overdue_maintenance
             },
             'customers': {
-                'active_customers': 0,
-                'returns_this_month': 0
+                'active_customers': active_customers,
+                'returns_this_month': returns_this_month
             },
             'rd': {
-                'active_projects': 0
+                'active_projects': active_projects
             },
             'waste': {
-                'this_week_kg': 0
+                'this_week_kg': float(waste_this_week)
             },
             'trends': {
                 'sales': sales_trend
@@ -259,8 +417,13 @@ def get_executive_dashboard():
             'summary': {
                 'total_modules': 11,
                 'last_updated': datetime.now().isoformat()
+            },
+            'sales_orders': {
+                'count': sales_orders_count
             }
         }), 200
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500

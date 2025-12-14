@@ -103,6 +103,7 @@ import ProductChangeover from './pages/Production/ProductChangeover'
 import ChangeoverList from './pages/Production/ChangeoverList'
 import WeeklyProductionPlan from './pages/Production/WeeklyProductionPlan'
 import WeeklyPlanDetail from './pages/Production/WeeklyPlanDetail'
+import MonthlyProductionPlan from './pages/Production/MonthlyProductionPlan'
 import QualityTestList from './pages/Quality/QualityTestList'
 import QualityTestForm from './pages/Quality/QualityTestForm'
 import QualityDashboardEnhanced from './pages/Quality/QualityDashboardEnhanced'
@@ -193,13 +194,16 @@ import MachineAnalytics from './pages/OEE/MachineAnalytics'
 import ProductionInput from './pages/Production/ProductionInput'
 import DowntimeInput from './pages/Production/DowntimeInput'
 import WorkOrderProductionInput from './pages/Production/WorkOrderProductionInput'
+import EditProductionRecord from './pages/Production/EditProductionRecord'
 import WorkOrderEdit from './pages/Production/WorkOrderEdit'
+import WorkOrderBOMEdit from './pages/Production/WorkOrderBOMEdit'
 import BOMForm from './pages/Products/BOMForm'
 import ProductionScheduleForm from './pages/Production/ProductionScheduleForm'
 import QualityCheckForm from './pages/Production/QualityCheckForm'
 import MaterialIssueForm from './pages/Production/MaterialIssueForm'
 import WIPDashboard from './pages/Production/WIPDashboard'
 import WIPBatchList from './pages/Production/WIPBatchList'
+import RemainingStock from './pages/Production/RemainingStock'
 import Reports from './pages/Reports/ReportsFixed'
 import AdvancedReportBuilder from './pages/Reports/AdvancedReportBuilder'
 import ScheduledReports from './pages/Reports/ScheduledReports'
@@ -549,7 +553,11 @@ function App() {
         <Route path="production/work-orders/:id" element={<WorkOrderDetail />} />
         <Route path="production/work-orders/:id/edit" element={<WorkOrderEdit />} />
         <Route path="production/work-orders/:id/input" element={<WorkOrderProductionInput />} />
+        <Route path="production/work-orders/:id/records/:recordId/edit" element={<EditProductionRecord />} />
+        <Route path="production/work-orders/:id/bom-edit" element={<WorkOrderBOMEdit />} />
+        <Route path="production/remaining-stock" element={<RemainingStock />} />
         <Route path="production/scheduling" element={<WeeklyProductionPlan />} />
+        <Route path="production/monthly-schedule" element={<MonthlyProductionPlan />} />
         <Route path="production/weekly-plans/:id" element={<WeeklyPlanDetail />} />
         <Route path="production/schedules/new" element={<Navigate to="/app/production/scheduling?new=true" replace />} />
         <Route path="production/records" element={<ProductionRecords />} />

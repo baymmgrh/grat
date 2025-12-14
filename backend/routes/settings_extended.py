@@ -241,6 +241,9 @@ def get_audit_logs():
         user_id = request.args.get('user_id', type=int)
         action = request.args.get('action')
         resource_type = request.args.get('resource_type')
+        resource_id = request.args.get('resource_id')
+        url_contains = request.args.get('url_contains')
+        exclude_actions = request.args.get('exclude_actions')  # comma-separated list
         status = request.args.get('status')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
@@ -257,6 +260,13 @@ def get_audit_logs():
             query = query.filter(AuditLog.action == action)
         if resource_type:
             query = query.filter(AuditLog.resource_type == resource_type)
+        if resource_id:
+            query = query.filter(AuditLog.resource_id == str(resource_id))
+        if url_contains:
+            query = query.filter(AuditLog.request_url.ilike(f'%{url_contains}%'))
+        if exclude_actions:
+            excluded = [a.strip() for a in exclude_actions.split(',')]
+            query = query.filter(~AuditLog.action.in_(excluded))
         if status:
             query = query.filter(AuditLog.status == status)
         if start_date:

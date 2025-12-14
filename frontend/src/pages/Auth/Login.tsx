@@ -77,11 +77,28 @@ export default function Login() {
   }
 
   const handleGoogleLogin = () => {
+    const hostname = window.location.hostname
+    const isPrivateIP = hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('172.')
+    
+    // Google OAuth tidak mendukung private IP
+    if (isPrivateIP) {
+      toast.error('Login Google hanya tersedia di production (falmaco.com). Silakan login dengan username/password.')
+      return
+    }
+    
     setGoogleLoading(true)
-    // Redirect to backend OAuth endpoint - use same hostname for LAN compatibility
-    const backendUrl = `http://${window.location.hostname}:5000`
+    // Redirect to backend OAuth endpoint - support production domain
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1'
+    
+    // For production, use https and same domain; for local, use http with port 5000
+    const backendUrl = isLocal 
+      ? `http://${hostname}:5000`
+      : `https://${hostname}/api`
     const redirectUri = encodeURIComponent(`${window.location.origin}/oauth/callback`)
-    window.location.href = `${backendUrl}/api/oauth/google/login?redirect_uri=${redirectUri}`
+    
+    // Construct OAuth URL
+    const oauthPath = isLocal ? '/api/oauth/google/login' : '/oauth/google/login'
+    window.location.href = `${backendUrl}${oauthPath}?redirect_uri=${redirectUri}`
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

@@ -36,13 +36,21 @@ def get_executive_overview():
         prev_start_date = prev_end_date - timedelta(days=30)
         
         # ===== FINANCIAL METRICS =====
-        # Current period revenue
+        # Current period revenue - try Invoice first, fallback to SalesOrder
         current_revenue = db.session.query(func.sum(Invoice.total_amount))\
             .filter(
                 Invoice.invoice_date >= start_date,
                 Invoice.invoice_date <= end_date,
                 Invoice.status.in_(['paid', 'partial'])
             ).scalar() or 0
+        
+        # If no invoice data, use SalesOrder total_amount
+        if current_revenue == 0:
+            current_revenue = db.session.query(func.sum(SalesOrder.total_amount))\
+                .filter(
+                    SalesOrder.order_date >= start_date,
+                    SalesOrder.order_date <= end_date
+                ).scalar() or 0
         
         # Previous period revenue
         prev_revenue = db.session.query(func.sum(Invoice.total_amount))\
@@ -51,6 +59,14 @@ def get_executive_overview():
                 Invoice.invoice_date <= prev_end_date,
                 Invoice.status.in_(['paid', 'partial'])
             ).scalar() or 0
+        
+        # If no invoice data, use SalesOrder
+        if prev_revenue == 0:
+            prev_revenue = db.session.query(func.sum(SalesOrder.total_amount))\
+                .filter(
+                    SalesOrder.order_date >= prev_start_date,
+                    SalesOrder.order_date <= prev_end_date
+                ).scalar() or 0
         
         revenue_growth = ((current_revenue - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0
         
@@ -708,20 +724,26 @@ def get_alerts():  # executive_alerts():
                 'action_required': True
             })
         
-        # Low OEE machines
+        # Low OEE machines - check both oee_score and efficiency_rate
+        # Use COALESCE to handle NULL values, prioritize oee_score then efficiency_rate
         low_oee_machines = db.session.query(
             ShiftProduction.machine_id,
-            func.avg(ShiftProduction.oee_score).label('avg_oee')
+            func.avg(func.coalesce(ShiftProduction.oee_score, ShiftProduction.efficiency_rate, 0)).label('avg_oee')
         ).filter(
-            ShiftProduction.production_date >= (datetime.now() - timedelta(days=7)).date()
+            ShiftProduction.production_date >= (datetime.now() - timedelta(days=30)).date()
         ).group_by(ShiftProduction.machine_id)\
-        .having(func.avg(ShiftProduction.oee_score) < 75)\
+        .having(func.avg(func.coalesce(ShiftProduction.oee_score, ShiftProduction.efficiency_rate, 0)) < 75)\
         .all()
+        
+        # Debug: print count
+        print(f"[DEBUG] Low OEE machines found: {len(low_oee_machines)}")
+        for m in low_oee_machines:
+            print(f"  - Machine ID: {m.machine_id}, Avg OEE: {m.avg_oee}")
         
         if low_oee_machines:
             alerts.append({
                 'type': 'low_oee',
-                'severity': 'medium',
+                'severity': 'high',
                 'title': 'Low OEE Performance',
                 'message': f'{len(low_oee_machines)} machines with OEE below 75%',
                 'action_required': True

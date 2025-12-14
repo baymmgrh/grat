@@ -14,11 +14,13 @@ import {
   PencilIcon,
   TrashIcon,
   EyeIcon,
-  BoltIcon
+  BoltIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react'
 import axiosInstance from '../../utils/axiosConfig'
 import LoadingSpinner from '../../components/Common/LoadingSpinner'
+import ActivityLogModal from '../../components/ActivityLogModal'
 interface WorkOrder {
   id: number
   wo_number: string
@@ -52,6 +54,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
     priority: '',
     search: ''
   })
+  const [showActivityLog, setShowActivityLog] = useState(false)
 
   useEffect(() => {
     loadWorkOrders()
@@ -176,6 +179,13 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
           <p className="text-gray-600 mt-1">Manage production work orders and schedules</p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={() => setShowActivityLog(true)}
+            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2"
+          >
+            <DocumentTextIcon className="h-5 w-5" />
+            Log Aktivitas
+          </button>
           <Link to="/app/production/work-orders/new" className="btn-primary inline-flex items-center gap-2">
             <PlusIcon className="h-5 w-5" />
             New Work Order
@@ -518,6 +528,14 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
           </div>
         )}
       </div>
+
+      {/* Activity Log Modal */}
+      <ActivityLogModal
+        isOpen={showActivityLog}
+        onClose={() => setShowActivityLog(false)}
+        resourceType="work_order"
+        title="Log Aktivitas Work Order"
+      />
     </div>
   )
 }

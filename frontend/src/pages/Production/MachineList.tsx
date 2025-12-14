@@ -11,11 +11,13 @@ import {
   PencilIcon,
   PlayIcon,
   PlusIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react'
 import axiosInstance from '../../utils/axiosConfig'
 import LoadingSpinner from '../../components/Common/LoadingSpinner'
+import ActivityLogModal from '../../components/ActivityLogModal'
 interface Machine {
   id: number
   code: string
@@ -43,6 +45,7 @@ const [machines, setMachines] = useState<Machine[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
+  const [showActivityLog, setShowActivityLog] = useState(false)
 
   useEffect(() => {
     loadMachines()
@@ -106,6 +109,13 @@ const [machines, setMachines] = useState<Machine[]>([])
           <p className="text-gray-600 mt-1">Monitor and manage production machines</p>
         </div>
         <div className="flex gap-3">
+          <button
+            onClick={() => setShowActivityLog(true)}
+            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2"
+          >
+            <DocumentTextIcon className="h-5 w-5" />
+            Log Aktivitas
+          </button>
           <Link to="/app/production/machines/new" className="btn-primary inline-flex items-center gap-2">
             <PlusIcon className="h-5 w-5" />
             Add Machine
@@ -277,6 +287,14 @@ const [machines, setMachines] = useState<Machine[]>([])
           )}
         </div>
       )}
+
+      {/* Activity Log Modal */}
+      <ActivityLogModal
+        isOpen={showActivityLog}
+        onClose={() => setShowActivityLog(false)}
+        resourceType="machine"
+        title="Log Aktivitas Machine"
+      />
     </div>
   )
 }

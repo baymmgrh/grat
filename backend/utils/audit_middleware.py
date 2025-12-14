@@ -2,7 +2,7 @@
 Audit Trail Middleware
 Tracks all user activities except admin
 """
-from flask import request, g
+from flask import request, g, current_app
 from functools import wraps
 from models import db, User
 from models.settings_extended import AuditLog
@@ -10,6 +10,7 @@ from datetime import datetime
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 import json
 import time
+import traceback
 
 def should_track_request():
     """Determine if request should be tracked"""
@@ -152,20 +153,37 @@ def log_response(response):
         resource_id = None
         resource_name = None
         
+        # Try to get resource_id from URL path (e.g., /api/production/work-orders/123)
+        path_parts = request.path.split('/')
+        for i, part in enumerate(path_parts):
+            if part.isdigit():
+                resource_id = part
+                break
+        
         try:
             if response.is_json:
                 response_data = response.get_json()
                 if isinstance(response_data, dict):
                     # Try to extract ID and name from common patterns
-                    for id_key in ['id', 'order_id', 'product_id', 'customer_id', 'user_id']:
-                        if id_key in response_data:
+                    for id_key in ['id', 'order_id', 'product_id', 'customer_id', 'user_id', 'wo_id']:
+                        if id_key in response_data and not resource_id:
                             resource_id = response_data[id_key]
                             break
                     
-                    for name_key in ['name', 'order_number', 'code', 'title']:
+                    for name_key in ['wo_number', 'name', 'order_number', 'code', 'title', 'machine_name', 'product_name']:
                         if name_key in response_data:
                             resource_name = response_data[name_key]
                             break
+                    
+                    # For work orders, try to get more specific info
+                    if 'work-orders' in request.path or 'work_order' in request.path:
+                        if 'wo_number' in response_data:
+                            resource_name = f"WO: {response_data['wo_number']}"
+                        elif 'work_order' in response_data and isinstance(response_data['work_order'], dict):
+                            wo = response_data['work_order']
+                            resource_name = f"WO: {wo.get('wo_number', '')}"
+                            if not resource_id:
+                                resource_id = wo.get('id')
         except:
             pass
         
@@ -191,3 +209,103 @@ def init_audit_middleware(app):
     """Initialize audit middleware"""
     app.before_request(track_request)
     app.after_request(log_response)
+
+
+def audit_log_action(action, resource_type, get_resource_id=None, get_resource_name=None, get_old_values=None):
+    """
+    Decorator for detailed audit logging with old values tracking.
+    
+    Usage:
+        @audit_log_action('update', 'work_order', 
+                          get_resource_id=lambda: request.view_args.get('id'),
+                          get_resource_name=lambda wo: wo.wo_number,
+                          get_old_values=lambda wo: {'status': wo.status, 'quantity': wo.quantity_target})
+        def update_work_order(id):
+            ...
+    """
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            start_time = time.time()
+            user_id = None
+            old_values = None
+            resource_id = None
+            resource_name = None
+            
+            try:
+                # Get user info
+                verify_jwt_in_request(optional=True)
+                user_id = get_jwt_identity()
+                
+                # Skip if admin
+                if user_id:
+                    user = User.query.get(user_id)
+                    if user and (user.username == 'admin' or (hasattr(user, 'role') and user.role == 'admin')):
+                        return f(*args, **kwargs)
+                
+                # Get resource ID
+                if get_resource_id:
+                    resource_id = get_resource_id()
+                
+                # Get old values before update (for update/delete actions)
+                if get_old_values and action in ['update', 'delete'] and resource_id:
+                    try:
+                        # This function should return the model instance
+                        old_values = get_old_values(resource_id)
+                    except Exception as e:
+                        print(f"Error getting old values: {e}")
+                
+            except Exception as e:
+                print(f"Error in audit pre-processing: {e}")
+            
+            # Execute the actual function
+            result = f(*args, **kwargs)
+            
+            # Log after execution
+            try:
+                if user_id:
+                    duration_ms = int((time.time() - start_time) * 1000)
+                    
+                    # Get new values from request
+                    new_values = None
+                    if request.method in ['POST', 'PUT', 'PATCH']:
+                        try:
+                            new_values = request.get_json(silent=True)
+                        except:
+                            pass
+                    
+                    # Determine status from response
+                    status = 'success'
+                    if hasattr(result, 'status_code') and result.status_code >= 400:
+                        status = 'failed'
+                    elif isinstance(result, tuple) and len(result) > 1 and result[1] >= 400:
+                        status = 'failed'
+                    
+                    # Get resource name from response if available
+                    if get_resource_name and not resource_name:
+                        try:
+                            if hasattr(result, 'get_json'):
+                                resp_data = result.get_json()
+                                if isinstance(resp_data, dict):
+                                    resource_name = resp_data.get('wo_number') or resp_data.get('name') or resp_data.get('code')
+                        except:
+                            pass
+                    
+                    log_audit_trail(
+                        user_id=user_id,
+                        action=action,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        resource_name=resource_name,
+                        old_values=old_values,
+                        new_values=new_values,
+                        status=status,
+                        duration_ms=duration_ms
+                    )
+            except Exception as e:
+                print(f"Error in audit post-processing: {e}")
+                traceback.print_exc()
+            
+            return result
+        return decorated_function
+    return decorator

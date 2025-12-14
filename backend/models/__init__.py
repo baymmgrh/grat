@@ -59,6 +59,7 @@ from .group_chat import (
     ChatReaction, ChatMention, ChatPinnedMessage, ChatServerRole,
     ChatServerRoleMember, ChatUserStatus, ChatUnreadMessage
 )
+from .work_order_bom import WorkOrderBOMItem
 
 # Import to ensure models are registered
 from . import product_new_schema

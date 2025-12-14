@@ -130,13 +130,27 @@ def google_login():
     state = secrets.token_urlsafe(32)
     session['oauth_state'] = state
     
-    # Get redirect URI - use the same host as the request for LAN compatibility
-    default_redirect = f"http://{request.host.split(':')[0]}:3000/oauth/callback"
+    # Get redirect URI - support production domain, LAN, and localhost
+    host = request.host.split(':')[0]
+    
+    # Determine protocol and port based on environment
+    if host in ['localhost', '127.0.0.1'] or host.startswith('192.168.'):
+        # Development/LAN - use http and port 3000
+        default_redirect = f"http://{host}:3000/oauth/callback"
+    else:
+        # Production domain (e.g., falmaco.com) - use https without port
+        default_redirect = f"https://{host}/oauth/callback"
+    
     redirect_uri = request.args.get('redirect_uri', default_redirect)
     session['oauth_redirect'] = redirect_uri
     
-    # Redirect to Google
-    callback_url = url_for('oauth.google_callback', _external=True)
+    # Redirect to Google - construct callback URL properly for production
+    if host in ['localhost', '127.0.0.1'] or host.startswith('192.168.'):
+        callback_url = url_for('oauth.google_callback', _external=True)
+    else:
+        # For production, use the configured domain
+        callback_url = f"https://{host}/api/oauth/google/callback"
+    
     return oauth.google.authorize_redirect(callback_url, state=state)
 
 
@@ -176,8 +190,12 @@ def google_callback():
         access_token = create_access_token(identity=str(user.id))
         refresh_token = create_refresh_token(identity=str(user.id))
         
-        # Redirect to frontend with tokens - use request host for LAN compatibility
-        default_redirect = f"http://{request.host.split(':')[0]}:3000/oauth/callback"
+        # Redirect to frontend with tokens - support production domain
+        host = request.host.split(':')[0]
+        if host in ['localhost', '127.0.0.1'] or host.startswith('192.168.'):
+            default_redirect = f"http://{host}:3000/oauth/callback"
+        else:
+            default_redirect = f"https://{host}/oauth/callback"
         frontend_redirect = session.get('oauth_redirect', default_redirect)
         
         # Clean up session
@@ -205,8 +223,12 @@ def google_callback():
 
 def redirect_with_error(error_message: str):
     """Redirect to frontend with error"""
-    # Use session redirect or construct from request host for LAN compatibility
-    default_redirect = f"http://{request.host.split(':')[0]}:3000/oauth/callback"
+    # Use session redirect or construct from request host - support production domain
+    host = request.host.split(':')[0]
+    if host in ['localhost', '127.0.0.1'] or host.startswith('192.168.'):
+        default_redirect = f"http://{host}:3000/oauth/callback"
+    else:
+        default_redirect = f"https://{host}/oauth/callback"
     frontend_redirect = session.get('oauth_redirect', default_redirect)
     session.pop('oauth_state', None)
     session.pop('oauth_redirect', None)

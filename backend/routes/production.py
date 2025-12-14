@@ -1,10 +1,14 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, WorkOrder, ProductionRecord, BillOfMaterials, BOMItem, ProductionSchedule, Product, Employee
+from models.production import RemainingStock
+from models.work_order_bom import WorkOrderBOMItem
+from models.product import Material
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_, or_
+from io import BytesIO
 
 production_bp = Blueprint('production', __name__)
 
@@ -1384,6 +1388,97 @@ def create_production_record():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+@production_bp.route('/production-records/<int:record_id>', methods=['GET'])
+@jwt_required()
+def get_production_record(record_id):
+    """Get single production record by ID"""
+    try:
+        record = ProductionRecord.query.get(record_id)
+        if not record:
+            return jsonify({'error': 'Production record not found'}), 404
+        
+        return jsonify({
+            'record': {
+                'id': record.id,
+                'work_order_id': record.work_order_id,
+                'work_order_number': record.work_order.wo_number if record.work_order else '',
+                'machine_id': record.machine_id,
+                'production_date': record.production_date.isoformat() if record.production_date else None,
+                'shift': record.shift,
+                'quantity_produced': float(record.quantity_produced) if record.quantity_produced else 0,
+                'quantity_good': float(record.quantity_good) if record.quantity_good else 0,
+                'quantity_scrap': float(record.quantity_scrap) if record.quantity_scrap else 0,
+                'uom': record.uom,
+                'downtime_minutes': record.downtime_minutes or 0,
+                'operator_id': record.operator_id,
+                'operator_name': record.operator.name if record.operator else None,
+                'notes': record.notes
+            }
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@production_bp.route('/production-records/<int:record_id>', methods=['PUT'])
+@jwt_required()
+def update_production_record(record_id):
+    """Update production record and adjust work order totals"""
+    try:
+        record = ProductionRecord.query.get(record_id)
+        if not record:
+            return jsonify({'error': 'Production record not found'}), 404
+        
+        data = request.get_json()
+        wo = record.work_order
+        
+        # Store old values to calculate difference
+        old_produced = float(record.quantity_produced) if record.quantity_produced else 0
+        old_good = float(record.quantity_good) if record.quantity_good else 0
+        old_scrap = float(record.quantity_scrap) if record.quantity_scrap else 0
+        
+        # Update record fields
+        if 'production_date' in data:
+            record.production_date = datetime.fromisoformat(data['production_date']) if data['production_date'] else record.production_date
+        if 'shift' in data:
+            record.shift = data['shift']
+        if 'quantity_produced' in data:
+            record.quantity_produced = data['quantity_produced']
+        if 'quantity_good' in data:
+            record.quantity_good = data['quantity_good']
+        if 'quantity_scrap' in data:
+            record.quantity_scrap = data['quantity_scrap']
+        if 'downtime_minutes' in data:
+            record.downtime_minutes = data['downtime_minutes']
+        if 'operator_id' in data:
+            record.operator_id = data['operator_id']
+        if 'notes' in data:
+            record.notes = data['notes']
+        
+        # Calculate new values
+        new_produced = float(record.quantity_produced) if record.quantity_produced else 0
+        new_good = float(record.quantity_good) if record.quantity_good else 0
+        new_scrap = float(record.quantity_scrap) if record.quantity_scrap else 0
+        
+        # Update work order totals with difference
+        if wo:
+            wo.quantity_produced = (wo.quantity_produced or 0) - old_produced + new_produced
+            wo.quantity_good = (wo.quantity_good or 0) - old_good + new_good
+            wo.quantity_scrap = (wo.quantity_scrap or 0) - old_scrap + new_scrap
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Production record updated successfully',
+            'record': {
+                'id': record.id,
+                'quantity_produced': float(record.quantity_produced),
+                'quantity_good': float(record.quantity_good),
+                'quantity_scrap': float(record.quantity_scrap)
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @production_bp.route('/bom', methods=['GET'])
 @jwt_required()
 def get_boms():
@@ -1562,4 +1657,802 @@ def get_production_dashboard():
         print(f"Production dashboard error: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= PACKING LIST =============
+from models.production import PackingList, PackingListItem
+
+@production_bp.route('/work-orders/<int:wo_id>/packing-list', methods=['GET'])
+@jwt_required()
+def get_packing_list(wo_id):
+    """Get packing list for a work order"""
+    try:
+        work_order = WorkOrder.query.get(wo_id)
+        if not work_order:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        # Get or create packing list
+        packing_list = PackingList.query.filter_by(work_order_id=wo_id).first()
+        
+        if not packing_list:
+            # Create new packing list
+            packing_list = PackingList(
+                work_order_id=wo_id,
+                product_name=work_order.product.name if work_order.product else 'Unknown',
+                total_karton=0,
+                last_carton_number=0
+            )
+            db.session.add(packing_list)
+            db.session.commit()
+        
+        # Get items with pagination
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        
+        items_query = PackingListItem.query.filter_by(packing_list_id=packing_list.id)\
+            .order_by(PackingListItem.carton_number)
+        
+        paginated = items_query.paginate(page=page, per_page=per_page, error_out=False)
+        
+        return jsonify({
+            'packing_list': packing_list.to_dict(),
+            'items': [item.to_dict() for item in paginated.items],
+            'pagination': {
+                'page': page,
+                'per_page': per_page,
+                'total': paginated.total,
+                'pages': paginated.pages
+            }
+        }), 200
+    except Exception as e:
+        print(f"Get packing list error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/packing-list/sync', methods=['POST'])
+@jwt_required()
+def sync_packing_list(wo_id):
+    """Sync packing list items based on actual karton count with user-defined start number"""
+    try:
+        work_order = WorkOrder.query.get(wo_id)
+        if not work_order:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        data = request.get_json() or {}
+        total_karton = data.get('total_karton', 0)
+        start_carton_number = data.get('start_carton_number', 1)
+        
+        # Validate start_carton_number (1-10000)
+        if start_carton_number < 1:
+            start_carton_number = 1
+        if start_carton_number > 10000:
+            start_carton_number = ((start_carton_number - 1) % 10000) + 1
+        
+        # Get or create packing list
+        packing_list = PackingList.query.filter_by(work_order_id=wo_id).first()
+        
+        if not packing_list:
+            packing_list = PackingList(
+                work_order_id=wo_id,
+                product_name=work_order.product.name if work_order.product else 'Unknown',
+                total_karton=total_karton,
+                start_carton_number=start_carton_number,
+                last_carton_number=0
+            )
+            db.session.add(packing_list)
+            db.session.flush()
+        else:
+            # Update start_carton_number if changed
+            packing_list.start_carton_number = start_carton_number
+        
+        # Delete existing items and recreate with new numbering
+        PackingListItem.query.filter_by(packing_list_id=packing_list.id).delete()
+        
+        # Create items with sequential carton numbers starting from start_carton_number
+        for i in range(total_karton):
+            # Calculate carton number (reset at 10000)
+            carton_num = ((start_carton_number + i - 1) % 10000) + 1
+            
+            item = PackingListItem(
+                packing_list_id=packing_list.id,
+                carton_number=carton_num,
+                batch_mixing=packing_list.current_batch_mixing,
+                is_batch_start=(i == 0)  # First item is batch start
+            )
+            db.session.add(item)
+        
+        # Update last carton number
+        if total_karton > 0:
+            packing_list.last_carton_number = ((start_carton_number + total_karton - 2) % 10000) + 1
+        
+        packing_list.total_karton = total_karton
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'packing_list': packing_list.to_dict(),
+            'items_created': total_karton
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Sync packing list error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/packing-list/items', methods=['PUT'])
+@jwt_required()
+def update_packing_list_items(wo_id):
+    """Update packing list items (weight, batch mixing)"""
+    try:
+        packing_list = PackingList.query.filter_by(work_order_id=wo_id).first()
+        if not packing_list:
+            return jsonify({'error': 'Packing list not found'}), 404
+        
+        data = request.get_json()
+        items_data = data.get('items', [])
+        
+        for item_data in items_data:
+            item_id = item_data.get('id')
+            if item_id:
+                item = PackingListItem.query.get(item_id)
+                if item and item.packing_list_id == packing_list.id:
+                    if 'weight_kg' in item_data:
+                        item.weight_kg = item_data['weight_kg']
+                    if 'batch_mixing' in item_data:
+                        item.batch_mixing = item_data['batch_mixing']
+                    if 'is_batch_start' in item_data:
+                        item.is_batch_start = item_data['is_batch_start']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Items updated successfully'
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Update packing list items error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/packing-list/batch-mixing', methods=['POST'])
+@jwt_required()
+def set_batch_mixing(wo_id):
+    """Set new batch mixing for subsequent cartons"""
+    try:
+        packing_list = PackingList.query.filter_by(work_order_id=wo_id).first()
+        if not packing_list:
+            return jsonify({'error': 'Packing list not found'}), 404
+        
+        data = request.get_json()
+        batch_mixing = data.get('batch_mixing', '')
+        start_from_carton = data.get('start_from_carton')  # Optional: which carton to start from
+        
+        packing_list.current_batch_mixing = batch_mixing
+        
+        # If start_from_carton specified, update that item as batch start
+        if start_from_carton:
+            item = PackingListItem.query.filter_by(
+                packing_list_id=packing_list.id,
+                carton_number=start_from_carton
+            ).first()
+            if item:
+                item.is_batch_start = True
+                item.batch_mixing = batch_mixing
+                
+                # Update all subsequent items with new batch
+                subsequent_items = PackingListItem.query.filter(
+                    PackingListItem.packing_list_id == packing_list.id,
+                    PackingListItem.carton_number >= start_from_carton
+                ).all()
+                for sub_item in subsequent_items:
+                    sub_item.batch_mixing = batch_mixing
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'current_batch_mixing': packing_list.current_batch_mixing
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Set batch mixing error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= REMAINING STOCK (SISA ORDER) =============
+@production_bp.route('/remaining-stocks', methods=['GET'])
+@jwt_required()
+def get_remaining_stocks():
+    """Get all remaining stocks (Sisa Order)"""
+    try:
+        stocks = RemainingStock.query.order_by(RemainingStock.product_name).all()
+        return jsonify({
+            'remaining_stocks': [s.to_dict() for s in stocks],
+            'total': len(stocks)
+        }), 200
+    except Exception as e:
+        print(f"Get remaining stocks error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/remaining-stocks', methods=['POST'])
+@jwt_required()
+def create_remaining_stock():
+    """Create new remaining stock entry"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        product_name = data.get('product_name')
+        if not product_name:
+            return jsonify({'error': 'Nama produk harus diisi'}), 400
+        
+        qty_karton = data.get('qty_karton', 0)
+        if qty_karton <= 0:
+            return jsonify({'error': 'Qty karton harus lebih dari 0'}), 400
+        
+        # If product_id provided, get product info
+        product_id = data.get('product_id')
+        product_code = data.get('product_code')
+        
+        if product_id:
+            product = Product.query.get(product_id)
+            if product:
+                product_name = product.name
+                product_code = product.code
+        
+        stock = RemainingStock(
+            product_id=product_id,
+            product_name=product_name,
+            product_code=product_code,
+            qty_karton=qty_karton,
+            qty_pcs=data.get('qty_pcs'),
+            pack_per_carton=data.get('pack_per_carton'),
+            notes=data.get('notes'),
+            location=data.get('location'),
+            created_by=user_id
+        )
+        
+        db.session.add(stock)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sisa order berhasil ditambahkan',
+            'remaining_stock': stock.to_dict()
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        print(f"Create remaining stock error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/remaining-stocks/<int:id>', methods=['GET'])
+@jwt_required()
+def get_remaining_stock(id):
+    """Get single remaining stock by ID"""
+    try:
+        stock = RemainingStock.query.get(id)
+        if not stock:
+            return jsonify({'error': 'Data tidak ditemukan'}), 404
+        return jsonify({'remaining_stock': stock.to_dict()}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/remaining-stocks/<int:id>', methods=['PUT'])
+@jwt_required()
+def update_remaining_stock(id):
+    """Update remaining stock entry"""
+    try:
+        user_id = get_jwt_identity()
+        stock = RemainingStock.query.get(id)
+        if not stock:
+            return jsonify({'error': 'Data tidak ditemukan'}), 404
+        
+        data = request.get_json()
+        
+        # Update product info
+        if 'product_id' in data:
+            stock.product_id = data['product_id']
+            if data['product_id']:
+                product = Product.query.get(data['product_id'])
+                if product:
+                    stock.product_name = product.name
+                    stock.product_code = product.code
+        
+        if 'product_name' in data:
+            stock.product_name = data['product_name']
+        if 'product_code' in data:
+            stock.product_code = data['product_code']
+        if 'qty_karton' in data:
+            stock.qty_karton = data['qty_karton']
+        if 'qty_pcs' in data:
+            stock.qty_pcs = data['qty_pcs']
+        if 'pack_per_carton' in data:
+            stock.pack_per_carton = data['pack_per_carton']
+        if 'notes' in data:
+            stock.notes = data['notes']
+        if 'location' in data:
+            stock.location = data['location']
+        
+        stock.updated_by = user_id
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sisa order berhasil diupdate',
+            'remaining_stock': stock.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Update remaining stock error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/remaining-stocks/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_remaining_stock(id):
+    """Delete remaining stock entry"""
+    try:
+        stock = RemainingStock.query.get(id)
+        if not stock:
+            return jsonify({'error': 'Data tidak ditemukan'}), 404
+        
+        db.session.delete(stock)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sisa order berhasil dihapus'
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Delete remaining stock error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/remaining-stocks/export-excel', methods=['GET'])
+@jwt_required()
+def export_remaining_stocks_excel():
+    """Export remaining stocks to Excel"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+        
+        stocks = RemainingStock.query.order_by(RemainingStock.product_name).all()
+        
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Sisa Order"
+        
+        # Styles
+        header_font = Font(bold=True, color="FFFFFF", size=11)
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell_alignment = Alignment(horizontal="left", vertical="center")
+        number_alignment = Alignment(horizontal="right", vertical="center")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Title
+        ws.merge_cells('A1:D1')
+        ws['A1'] = 'LAPORAN SISA ORDER'
+        ws['A1'].font = Font(bold=True, size=14)
+        ws['A1'].alignment = Alignment(horizontal="center")
+        
+        # Date
+        ws.merge_cells('A2:D2')
+        ws['A2'] = f'Tanggal: {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        ws['A2'].alignment = Alignment(horizontal="center")
+        
+        # Headers
+        headers = ['No', 'Nama Produk', 'Kode Produk', 'Qty Karton']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+        
+        # Data
+        for row_idx, stock in enumerate(stocks, 5):
+            ws.cell(row=row_idx, column=1, value=row_idx - 4).border = thin_border
+            ws.cell(row=row_idx, column=1).alignment = Alignment(horizontal="center")
+            
+            ws.cell(row=row_idx, column=2, value=stock.product_name).border = thin_border
+            ws.cell(row=row_idx, column=2).alignment = cell_alignment
+            
+            ws.cell(row=row_idx, column=3, value=stock.product_code or '-').border = thin_border
+            ws.cell(row=row_idx, column=3).alignment = cell_alignment
+            
+            ws.cell(row=row_idx, column=4, value=float(stock.qty_karton) if stock.qty_karton else 0).border = thin_border
+            ws.cell(row=row_idx, column=4).alignment = number_alignment
+        
+        # Total row
+        total_row = len(stocks) + 5
+        ws.cell(row=total_row, column=1, value='').border = thin_border
+        ws.merge_cells(f'B{total_row}:C{total_row}')
+        ws.cell(row=total_row, column=2, value='TOTAL').border = thin_border
+        ws.cell(row=total_row, column=2).font = Font(bold=True)
+        ws.cell(row=total_row, column=2).alignment = Alignment(horizontal="right")
+        ws.cell(row=total_row, column=3).border = thin_border
+        
+        total_karton = sum(float(s.qty_karton) if s.qty_karton else 0 for s in stocks)
+        ws.cell(row=total_row, column=4, value=total_karton).border = thin_border
+        ws.cell(row=total_row, column=4).font = Font(bold=True)
+        ws.cell(row=total_row, column=4).alignment = number_alignment
+        
+        # Column widths
+        ws.column_dimensions['A'].width = 6
+        ws.column_dimensions['B'].width = 40
+        ws.column_dimensions['C'].width = 20
+        ws.column_dimensions['D'].width = 15
+        
+        # Save to BytesIO
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        filename = f"Sisa_Order_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        print(f"Export remaining stocks error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= WORK ORDER BOM (Editable copy of BOM for WO) =============
+
+@production_bp.route('/work-orders/<int:wo_id>/bom', methods=['GET'])
+@jwt_required()
+def get_work_order_bom(wo_id):
+    """Get BOM items for a work order (WO-specific copy or from master BOM)"""
+    try:
+        wo = WorkOrder.query.get(wo_id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        # Check if WO has its own BOM items
+        wo_bom_items = WorkOrderBOMItem.query.filter_by(work_order_id=wo_id).order_by(WorkOrderBOMItem.line_number).all()
+        
+        if wo_bom_items:
+            # Return WO-specific BOM
+            return jsonify({
+                'source': 'work_order',
+                'work_order_id': wo_id,
+                'wo_number': wo.wo_number,
+                'bom_items': [{
+                    'id': item.id,
+                    'line_number': item.line_number,
+                    'material_id': item.material_id,
+                    'product_id': item.product_id,
+                    'item_name': item.item_name,
+                    'item_code': item.item_code,
+                    'item_type': item.item_type,
+                    'quantity_per_unit': float(item.quantity_per_unit) if item.quantity_per_unit else 0,
+                    'uom': item.uom,
+                    'scrap_percent': float(item.scrap_percent) if item.scrap_percent else 0,
+                    'quantity_planned': float(item.quantity_planned) if item.quantity_planned else 0,
+                    'quantity_actual': float(item.quantity_actual) if item.quantity_actual else 0,
+                    'unit_cost': float(item.unit_cost) if item.unit_cost else 0,
+                    'is_modified': item.is_modified,
+                    'is_added': item.is_added,
+                    'modification_reason': item.modification_reason,
+                    'notes': item.notes
+                } for item in wo_bom_items]
+            }), 200
+        
+        # If no WO-specific BOM, find master BOM
+        # First check if bom_id is set, otherwise find active BOM by product_id
+        bom = None
+        if wo.bom_id:
+            bom = BillOfMaterials.query.get(wo.bom_id)
+        
+        if not bom and wo.product_id:
+            # Find active BOM for this product
+            bom = BillOfMaterials.query.filter_by(
+                product_id=wo.product_id,
+                is_active=True
+            ).first()
+        
+        if bom:
+            return jsonify({
+                'source': 'master_bom',
+                'work_order_id': wo_id,
+                'wo_number': wo.wo_number,
+                'bom_id': bom.id,
+                'bom_number': bom.bom_number,
+                'bom_items': [{
+                    'id': item.id,
+                    'line_number': item.line_number,
+                    'material_id': item.material_id,
+                    'product_id': item.product_id,
+                    'item_name': item.item_name,
+                    'item_code': item.item_code,
+                    'item_type': item.item_type,
+                    'quantity': float(item.quantity) if item.quantity else 0,
+                    'uom': item.uom,
+                    'scrap_percent': float(item.scrap_percent) if item.scrap_percent else 0,
+                    'unit_cost': float(item.unit_cost) if item.unit_cost else 0,
+                    'notes': item.notes
+                } for item in bom.items]
+            }), 200
+        
+        return jsonify({
+            'source': 'none',
+            'work_order_id': wo_id,
+            'wo_number': wo.wo_number,
+            'bom_items': [],
+            'message': 'No BOM associated with this work order'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/bom/copy-from-master', methods=['POST'])
+@jwt_required()
+def copy_bom_to_work_order(wo_id):
+    """Copy BOM items from master BOM to work order for editing"""
+    try:
+        user_id = get_jwt_identity()
+        wo = WorkOrder.query.get(wo_id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        # Find BOM - first by bom_id, then by product_id
+        bom = None
+        if wo.bom_id:
+            bom = BillOfMaterials.query.get(wo.bom_id)
+        
+        if not bom and wo.product_id:
+            # Find active BOM for this product
+            bom = BillOfMaterials.query.filter_by(
+                product_id=wo.product_id,
+                is_active=True
+            ).first()
+        
+        if not bom:
+            return jsonify({'error': 'No BOM found for this work order'}), 404
+        
+        # Check if WO already has BOM items
+        existing = WorkOrderBOMItem.query.filter_by(work_order_id=wo_id).first()
+        if existing:
+            return jsonify({'error': 'Work order already has BOM items. Delete them first to re-copy.'}), 400
+        
+        # Copy BOM items to WO
+        wo_quantity = float(wo.quantity) if wo.quantity else 0
+        
+        for bom_item in bom.items:
+            qty_per_unit = float(bom_item.quantity) if bom_item.quantity else 0
+            qty_planned = qty_per_unit * wo_quantity
+            
+            wo_bom_item = WorkOrderBOMItem(
+                work_order_id=wo_id,
+                original_bom_id=bom.id,
+                original_bom_item_id=bom_item.id,
+                line_number=bom_item.line_number,
+                material_id=bom_item.material_id,
+                product_id=bom_item.product_id,
+                item_name=bom_item.item_name,
+                item_code=bom_item.item_code,
+                item_type=bom_item.item_type,
+                quantity_per_unit=bom_item.quantity,
+                uom=bom_item.uom,
+                scrap_percent=bom_item.scrap_percent,
+                quantity_planned=qty_planned,
+                unit_cost=bom_item.unit_cost,
+                is_modified=False,
+                is_added=False,
+                notes=bom_item.notes
+            )
+            db.session.add(wo_bom_item)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'BOM items copied from {bom.bom_number} to work order',
+            'items_copied': len(bom.items)
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/bom/<int:item_id>', methods=['PUT'])
+@jwt_required()
+def update_work_order_bom_item(wo_id, item_id):
+    """Update a WO BOM item (does NOT affect master BOM)"""
+    try:
+        user_id = get_jwt_identity()
+        
+        item = WorkOrderBOMItem.query.filter_by(id=item_id, work_order_id=wo_id).first()
+        if not item:
+            return jsonify({'error': 'BOM item not found'}), 404
+        
+        data = request.get_json()
+        
+        # Update fields
+        if 'quantity_per_unit' in data:
+            item.quantity_per_unit = data['quantity_per_unit']
+        if 'scrap_percent' in data:
+            item.scrap_percent = data['scrap_percent']
+        if 'unit_cost' in data:
+            item.unit_cost = data['unit_cost']
+        if 'notes' in data:
+            item.notes = data['notes']
+        if 'modification_reason' in data:
+            item.modification_reason = data['modification_reason']
+        if 'quantity_actual' in data:
+            item.quantity_actual = data['quantity_actual']
+        
+        # Recalculate planned quantity
+        wo = WorkOrder.query.get(wo_id)
+        if wo:
+            wo_quantity = float(wo.quantity) if wo.quantity else 0
+            qty_per_unit = float(item.quantity_per_unit) if item.quantity_per_unit else 0
+            item.quantity_planned = qty_per_unit * wo_quantity
+            
+            # Calculate variance if actual is set
+            if item.quantity_actual:
+                item.quantity_variance = float(item.quantity_actual) - float(item.quantity_planned)
+        
+        # Mark as modified
+        item.is_modified = True
+        item.modified_by = user_id
+        item.modified_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'BOM item updated (master BOM unchanged)',
+            'item': {
+                'id': item.id,
+                'item_name': item.item_name,
+                'quantity_per_unit': float(item.quantity_per_unit),
+                'quantity_planned': float(item.quantity_planned) if item.quantity_planned else 0,
+                'is_modified': item.is_modified
+            }
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/bom', methods=['POST'])
+@jwt_required()
+def add_work_order_bom_item(wo_id):
+    """Add a new BOM item to work order (manual addition)"""
+    try:
+        user_id = get_jwt_identity()
+        
+        wo = WorkOrder.query.get(wo_id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        data = request.get_json()
+        
+        # Get next line number
+        max_line = db.session.query(func.max(WorkOrderBOMItem.line_number)).filter_by(work_order_id=wo_id).scalar()
+        next_line = (max_line or 0) + 1
+        
+        # Get item details
+        item_name = data.get('item_name', '')
+        item_code = data.get('item_code', '')
+        item_type = data.get('item_type', '')
+        
+        # If material_id provided, get details from material
+        material_id = data.get('material_id')
+        if material_id:
+            material = Material.query.get(material_id)
+            if material:
+                item_name = material.name
+                item_code = material.code
+                item_type = material.material_type
+        
+        # Calculate planned quantity
+        wo_quantity = float(wo.quantity) if wo.quantity else 0
+        qty_per_unit = float(data.get('quantity_per_unit', 0))
+        qty_planned = qty_per_unit * wo_quantity
+        
+        item = WorkOrderBOMItem(
+            work_order_id=wo_id,
+            line_number=next_line,
+            material_id=material_id,
+            product_id=data.get('product_id'),
+            item_name=item_name,
+            item_code=item_code,
+            item_type=item_type,
+            quantity_per_unit=qty_per_unit,
+            uom=data.get('uom', 'pcs'),
+            scrap_percent=data.get('scrap_percent', 0),
+            quantity_planned=qty_planned,
+            unit_cost=data.get('unit_cost'),
+            is_modified=False,
+            is_added=True,  # Mark as manually added
+            modified_by=user_id,
+            modified_at=datetime.utcnow(),
+            modification_reason=data.get('modification_reason', 'Manually added'),
+            notes=data.get('notes')
+        )
+        
+        db.session.add(item)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'BOM item added to work order',
+            'item': {
+                'id': item.id,
+                'line_number': item.line_number,
+                'item_name': item.item_name,
+                'quantity_per_unit': float(item.quantity_per_unit),
+                'quantity_planned': float(item.quantity_planned) if item.quantity_planned else 0
+            }
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/bom/<int:item_id>', methods=['DELETE'])
+@jwt_required()
+def delete_work_order_bom_item(wo_id, item_id):
+    """Delete a WO BOM item (does NOT affect master BOM)"""
+    try:
+        item = WorkOrderBOMItem.query.filter_by(id=item_id, work_order_id=wo_id).first()
+        if not item:
+            return jsonify({'error': 'BOM item not found'}), 404
+        
+        db.session.delete(item)
+        db.session.commit()
+        
+        return jsonify({'message': 'BOM item deleted from work order (master BOM unchanged)'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@production_bp.route('/work-orders/<int:wo_id>/bom/reset', methods=['POST'])
+@jwt_required()
+def reset_work_order_bom(wo_id):
+    """Delete all WO BOM items and re-copy from master BOM"""
+    try:
+        wo = WorkOrder.query.get(wo_id)
+        if not wo:
+            return jsonify({'error': 'Work order not found'}), 404
+        
+        # Delete existing WO BOM items
+        WorkOrderBOMItem.query.filter_by(work_order_id=wo_id).delete()
+        db.session.commit()
+        
+        return jsonify({'message': 'Work order BOM items deleted. You can now copy from master BOM again.'}), 200
+        
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500

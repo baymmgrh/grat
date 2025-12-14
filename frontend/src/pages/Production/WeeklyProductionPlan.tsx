@@ -18,6 +18,8 @@ import {
   BoltIcon,
   CheckCircleIcon,
   ClockIcon,
+  PencilIcon,
+  ArrowDownTrayIcon,
 } from '@heroicons/react/24/outline';
 
 interface ScheduleItem {
@@ -54,6 +56,22 @@ interface Product {
   packs_per_karton?: number; // From ProductPackaging
 }
 
+interface MonthlySchedule {
+  id: number;
+  product_id: number;
+  product_code: string;
+  product_name: string;
+  machine_id: number | null;
+  machine_code: string | null;
+  target_ctn: number;
+  scheduled_ctn: number;
+  remaining_ctn: number;
+  qty_per_ctn: number;
+  spek_kain: string;
+  color: string;
+  priority: string;
+}
+
 // Predefined colors for schedule blocks
 const SCHEDULE_COLORS = [
   'bg-blue-500',
@@ -84,9 +102,13 @@ const WeeklyProductionPlan: React.FC = () => {
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showMonthlyModal, setShowMonthlyModal] = useState(false);
   const [editingItem, setEditingItem] = useState<ScheduleItem | null>(null);
   const [notes, setNotes] = useState<string[]>([]);
   const [newNote, setNewNote] = useState('');
+  const [availableMonthly, setAvailableMonthly] = useState<MonthlySchedule[]>([]);
+  const [selectedMonthly, setSelectedMonthly] = useState<MonthlySchedule | null>(null);
+  const [monthlyOrderCtn, setMonthlyOrderCtn] = useState('');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -131,7 +153,7 @@ const WeeklyProductionPlan: React.FC = () => {
       setLoading(true);
       const [machinesRes, productsRes, schedulesRes] = await Promise.all([
         axiosInstance.get('/api/production/machines'),
-        axiosInstance.get('/api/products'),
+        axiosInstance.get('/api/products?all=true'),  // Get all products for dropdown
         axiosInstance.get(`/api/production/schedule-grid?week_start=${weekDates[0]?.toISOString().split('T')[0] || ''}`),
       ]);
       
@@ -222,6 +244,42 @@ const WeeklyProductionPlan: React.FC = () => {
     }
   };
 
+  const handleEditItem = (item: ScheduleItem) => {
+    setEditingItem(item);
+    setFormData({
+      machine_id: item.machine_id.toString(),
+      product_id: item.product_id.toString(),
+      order_ctn: item.order_ctn?.toString() || '',
+      qty_per_ctn: item.qty_per_ctn?.toString() || '',
+      spek_kain: item.spek_kain || '',
+      no_spk: item.no_spk || '',
+      color: item.color || SCHEDULE_COLORS[0],
+      schedule_days: item.schedule_days || {},
+      notes: item.notes || '',
+    });
+    setShowAddModal(true);
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editingItem) return;
+    try {
+      await axiosInstance.put(`/api/production/schedule-grid/${editingItem.id}`, {
+        ...formData,
+        machine_id: parseInt(formData.machine_id),
+        product_id: parseInt(formData.product_id),
+        order_ctn: parseFloat(formData.order_ctn) || 0,
+        qty_per_ctn: parseFloat(formData.qty_per_ctn) || 0,
+      });
+      
+      setShowAddModal(false);
+      setEditingItem(null);
+      resetForm();
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Gagal mengupdate jadwal');
+    }
+  };
+
   const handleAddNote = () => {
     if (newNote.trim()) {
       setNotes([...notes, newNote.trim()]);
@@ -234,6 +292,7 @@ const WeeklyProductionPlan: React.FC = () => {
   };
 
   const resetForm = () => {
+    setEditingItem(null);
     setFormData({
       machine_id: '',
       product_id: '',
@@ -249,6 +308,59 @@ const WeeklyProductionPlan: React.FC = () => {
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const fetchAvailableMonthly = async () => {
+    try {
+      const weekStart = weekDates[0]?.toISOString().split('T')[0] || '';
+      const res = await axiosInstance.get(`/api/production/monthly-schedule/available?week_start=${weekStart}`);
+      setAvailableMonthly(res.data.available_schedules || []);
+    } catch (error) {
+      console.error('Error fetching monthly schedules:', error);
+    }
+  };
+
+  const handleOpenMonthlyModal = async () => {
+    await fetchAvailableMonthly();
+    setShowMonthlyModal(true);
+    setSelectedMonthly(null);
+    setMonthlyOrderCtn('');
+  };
+
+  const handleAddFromMonthly = async () => {
+    if (!selectedMonthly || !monthlyOrderCtn) {
+      alert('Pilih jadwal bulanan dan masukkan jumlah CTN');
+      return;
+    }
+
+    const orderCtn = parseFloat(monthlyOrderCtn);
+    if (orderCtn <= 0) {
+      alert('Jumlah CTN harus lebih dari 0');
+      return;
+    }
+    if (orderCtn > selectedMonthly.remaining_ctn) {
+      alert(`Melebihi sisa target. Sisa: ${selectedMonthly.remaining_ctn} CTN`);
+      return;
+    }
+
+    try {
+      const weekStart = weekDates[0]?.toISOString().split('T')[0] || '';
+      await axiosInstance.post(`/api/production/monthly-schedule/${selectedMonthly.id}/add-to-weekly`, {
+        order_ctn: orderCtn,
+        week_start: weekStart,
+        schedule_days: formData.schedule_days,
+        notes: `Dari target bulanan: ${selectedMonthly.product_name}`,
+      });
+
+      setShowMonthlyModal(false);
+      setSelectedMonthly(null);
+      setMonthlyOrderCtn('');
+      resetForm();
+      fetchData();
+      alert('Jadwal berhasil ditambahkan dari target bulanan');
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Gagal menambah jadwal');
+    }
   };
 
   const handleGenerateWO = async (scheduleId: number) => {
@@ -359,11 +471,19 @@ const WeeklyProductionPlan: React.FC = () => {
             {/* Actions */}
             <div className="flex gap-2 print:hidden">
               <button
+                onClick={handleOpenMonthlyModal}
+                className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-xl hover:from-purple-600 hover:to-indigo-700 flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
+                title="Ambil dari target bulanan"
+              >
+                <ArrowDownTrayIcon className="h-5 w-5" />
+                Dari Bulanan
+              </button>
+              <button
                 onClick={() => { resetForm(); setShowAddModal(true); }}
                 className="px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl hover:from-emerald-600 hover:to-green-700 flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
               >
                 <PlusIcon className="h-5 w-5" />
-                Tambah Jadwal
+                Tambah Manual
               </button>
               <button
                 onClick={handleGenerateAllWO}
@@ -634,6 +754,13 @@ const WeeklyProductionPlan: React.FC = () => {
                               </button>
                             )}
                             <button
+                              onClick={() => handleEditItem(item)}
+                              className="p-1.5 text-blue-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              title="Edit Jadwal"
+                            >
+                              <PencilIcon className="h-4 w-4" />
+                            </button>
+                            <button
                               onClick={() => handleDeleteItem(item.id)}
                               className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                               title="Hapus"
@@ -704,19 +831,19 @@ const WeeklyProductionPlan: React.FC = () => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 print:hidden">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-4">
+            <div className={`bg-gradient-to-r ${editingItem ? 'from-amber-500 to-orange-500' : 'from-blue-600 to-indigo-600'} px-6 py-4`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="bg-white/20 p-2 rounded-lg">
-                    <PlusIcon className="h-6 w-6 text-white" />
+                    {editingItem ? <PencilIcon className="h-6 w-6 text-white" /> : <PlusIcon className="h-6 w-6 text-white" />}
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-white">Tambah Jadwal Produksi</h3>
+                    <h3 className="text-lg font-bold text-white">{editingItem ? 'Edit Jadwal Produksi' : 'Tambah Jadwal Produksi'}</h3>
                     <p className="text-blue-100 text-sm">Week {weekNumber} • {formatDateRange()}</p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => { setShowAddModal(false); setEditingItem(null); }}
                   className="p-2 hover:bg-white/20 rounded-lg transition-colors"
                 >
                   <XMarkIcon className="h-6 w-6 text-white" />
@@ -870,17 +997,193 @@ const WeeklyProductionPlan: React.FC = () => {
             {/* Modal Footer */}
             <div className="px-6 py-4 bg-slate-50 border-t flex justify-end gap-3">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => { setShowAddModal(false); setEditingItem(null); }}
                 className="px-5 py-2.5 border-2 border-slate-200 rounded-xl hover:bg-slate-100 font-medium transition-colors"
               >
                 Batal
               </button>
               <button
-                onClick={handleAddItem}
-                className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 font-medium shadow-md transition-all"
+                onClick={editingItem ? handleUpdateItem : handleAddItem}
+                className={`px-5 py-2.5 bg-gradient-to-r ${editingItem ? 'from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600' : 'from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'} text-white rounded-xl font-medium shadow-md transition-all`}
               >
-                Simpan Jadwal
+                {editingItem ? 'Update Jadwal' : 'Simpan Jadwal'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Schedule Modal */}
+      {showMonthlyModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 print:hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <ArrowDownTrayIcon className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Ambil dari Target Bulanan</h3>
+                    <p className="text-purple-100 text-sm">Week {weekNumber} • {formatDateRange()}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowMonthlyModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <XMarkIcon className="h-6 w-6 text-white" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+              {availableMonthly.length === 0 ? (
+                <div className="text-center py-8">
+                  <CalendarDaysIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">Tidak ada target bulanan yang tersedia untuk bulan ini</p>
+                  <button
+                    onClick={() => navigate('/app/production/monthly-schedule')}
+                    className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  >
+                    Buat Target Bulanan
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-500 mb-4">Pilih target bulanan yang ingin dijadwalkan ke minggu ini:</p>
+                  
+                  <div className="space-y-3 mb-6">
+                    {availableMonthly.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => setSelectedMonthly(item)}
+                        className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
+                          selectedMonthly?.id === item.id 
+                            ? 'border-purple-500 bg-purple-50' 
+                            : 'border-gray-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-4 h-4 rounded-full ${item.color}`}></div>
+                            <div>
+                              <p className="font-semibold text-gray-900">{item.product_name}</p>
+                              <p className="text-xs text-gray-500">{item.product_code} • {item.machine_code || 'Semua Mesin'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-medium text-gray-700">
+                              Sisa: <span className="text-orange-600 font-bold">{item.remaining_ctn.toLocaleString()}</span> CTN
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              dari {item.target_ctn.toLocaleString()} CTN ({item.qty_per_ctn}/ctn)
+                            </p>
+                          </div>
+                        </div>
+                        {item.spek_kain && (
+                          <p className="text-xs text-gray-500 mt-2">Spek Kain: {item.spek_kain}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {selectedMonthly && (
+                    <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 space-y-4">
+                      <h4 className="font-semibold text-purple-800">
+                        Jadwalkan: {selectedMonthly.product_name}
+                      </h4>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Jumlah CTN untuk minggu ini <span className="text-red-500">*</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={monthlyOrderCtn}
+                            onChange={(e) => setMonthlyOrderCtn(e.target.value)}
+                            className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-400 focus:outline-none"
+                            placeholder="0"
+                            max={selectedMonthly.remaining_ctn}
+                          />
+                          <span className="text-sm text-gray-500">
+                            / {selectedMonthly.remaining_ctn.toLocaleString()} CTN tersedia
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Schedule Grid */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Jadwal Shift</label>
+                        <div className="bg-white rounded-lg p-3">
+                          <div className="grid grid-cols-5 gap-2">
+                            {weekDates.map((date, idx) => {
+                              const dateStr = date.toISOString().split('T')[0];
+                              const shifts = formData.schedule_days[dateStr] || [];
+                              return (
+                                <div key={dateStr} className="text-center">
+                                  <div className="text-xs font-bold text-gray-500">{DAYS[idx]}</div>
+                                  <div className="text-sm font-bold text-gray-800 mb-1">{date.getDate()}</div>
+                                  <div className="flex gap-1 justify-center">
+                                    <button
+                                      onClick={() => toggleScheduleDay(dateStr, 1)}
+                                      className={`w-8 h-8 rounded text-xs font-bold transition-all ${
+                                        shifts.includes(1) 
+                                          ? 'bg-purple-500 text-white' 
+                                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      S1
+                                    </button>
+                                    <button
+                                      onClick={() => toggleScheduleDay(dateStr, 2)}
+                                      className={`w-8 h-8 rounded text-xs font-bold transition-all ${
+                                        shifts.includes(2) 
+                                          ? 'bg-purple-500 text-white' 
+                                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      S2
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t flex justify-between">
+              <button
+                onClick={() => navigate('/app/production/monthly-schedule')}
+                className="px-4 py-2 text-purple-600 hover:bg-purple-50 rounded-lg font-medium"
+              >
+                Kelola Target Bulanan
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowMonthlyModal(false)}
+                  className="px-5 py-2.5 border-2 border-gray-200 rounded-xl hover:bg-gray-100 font-medium"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleAddFromMonthly}
+                  disabled={!selectedMonthly || !monthlyOrderCtn}
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl hover:from-purple-700 hover:to-indigo-700 font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Tambahkan ke Minggu Ini
+                </button>
+              </div>
             </div>
           </div>
         </div>

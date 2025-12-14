@@ -765,3 +765,136 @@ class ProductChangeover(db.Model):
             'notes': self.notes,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+class RemainingStock(db.Model):
+    """Sisa Order - Stok produk sisa produksi lama (input manual)"""
+    __tablename__ = 'remaining_stocks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Product reference (optional - bisa dari database atau input manual)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)
+    
+    # Manual input fields (jika tidak dari database product)
+    product_name = db.Column(db.String(200), nullable=False)
+    product_code = db.Column(db.String(100), nullable=True)
+    
+    # Quantity
+    qty_karton = db.Column(db.Numeric(15, 2), nullable=False, default=0)
+    qty_pcs = db.Column(db.Numeric(15, 2), nullable=True)  # Optional: qty dalam pcs
+    pack_per_carton = db.Column(db.Integer, nullable=True)  # Isi per karton
+    
+    # Additional info
+    notes = db.Column(db.Text, nullable=True)
+    location = db.Column(db.String(100), nullable=True)  # Lokasi penyimpanan
+    
+    # Tracking
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    updated_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product = db.relationship('Product', backref='remaining_stocks')
+    created_by_user = db.relationship('User', foreign_keys=[created_by])
+    updated_by_user = db.relationship('User', foreign_keys=[updated_by])
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'product_name': self.product_name,
+            'product_code': self.product_code,
+            'qty_karton': float(self.qty_karton) if self.qty_karton else 0,
+            'qty_pcs': float(self.qty_pcs) if self.qty_pcs else None,
+            'pack_per_carton': self.pack_per_carton,
+            'notes': self.notes,
+            'location': self.location,
+            'created_by': self.created_by,
+            'created_by_name': self.created_by_user.full_name if self.created_by_user else None,
+            'updated_by': self.updated_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class PackingList(db.Model):
+    """Packing List - Daftar karton yang diproduksi per Work Order"""
+    __tablename__ = 'packing_lists'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=False)
+    
+    # Product info (auto from work order)
+    product_name = db.Column(db.String(200), nullable=False)
+    
+    # Total karton (auto-calculated from actual production)
+    total_karton = db.Column(db.Integer, default=0)
+    
+    # Last carton number used (for tracking, resets at 10000)
+    last_carton_number = db.Column(db.Integer, default=0)
+    
+    # Start carton number (user input)
+    start_carton_number = db.Column(db.Integer, default=1)
+    
+    # Current batch mixing
+    current_batch_mixing = db.Column(db.String(100), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    work_order = db.relationship('WorkOrder', backref='packing_list')
+    items = db.relationship('PackingListItem', backref='packing_list', lazy='dynamic', cascade='all, delete-orphan')
+    
+    def to_dict(self, include_items=False):
+        result = {
+            'id': self.id,
+            'work_order_id': self.work_order_id,
+            'product_name': self.product_name,
+            'total_karton': self.total_karton,
+            'last_carton_number': self.last_carton_number,
+            'start_carton_number': self.start_carton_number,
+            'current_batch_mixing': self.current_batch_mixing,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'items_count': self.items.count()
+        }
+        if include_items:
+            result['items'] = [item.to_dict() for item in self.items.order_by(PackingListItem.carton_number).all()]
+        return result
+
+
+class PackingListItem(db.Model):
+    """Item dalam Packing List - Detail per karton"""
+    __tablename__ = 'packing_list_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    packing_list_id = db.Column(db.Integer, db.ForeignKey('packing_lists.id'), nullable=False)
+    
+    # Nomor karton (1-10000, reset ke 1 setelah 10000)
+    carton_number = db.Column(db.Integer, nullable=False)
+    
+    # Berat karton dalam kg
+    weight_kg = db.Column(db.Numeric(10, 3), nullable=True)
+    
+    # Batch mixing
+    batch_mixing = db.Column(db.String(100), nullable=True)
+    
+    # Flag untuk menandai awal batch mixing baru
+    is_batch_start = db.Column(db.Boolean, default=False)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'packing_list_id': self.packing_list_id,
+            'carton_number': self.carton_number,
+            'weight_kg': float(self.weight_kg) if self.weight_kg else None,
+            'batch_mixing': self.batch_mixing,
+            'is_batch_start': self.is_batch_start,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

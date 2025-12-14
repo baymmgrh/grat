@@ -114,9 +114,11 @@ function SidebarContent() {
           children: [
             { name: 'Dashboard', href: '/app/production', icon: PresentationChartLineIcon },
             { name: 'Work Orders', href: '/app/production/work-orders', icon: ClipboardDocumentListIcon, permission: 'work_orders' },
+            { name: 'Sisa Order', href: '/app/production/remaining-stock', icon: ArchiveBoxIcon },
             { name: 'Changeover', href: '/app/production/changeovers', icon: ArrowsRightLeftIcon },
             { name: 'Approval', href: '/app/production/approvals', icon: ClipboardDocumentCheckIcon },
-            { name: 'Scheduling', href: '/app/production/scheduling', icon: CalendarDaysIcon },
+            { name: 'Jadwal Bulanan', href: '/app/production/monthly-schedule', icon: CalendarDaysIcon },
+            { name: 'Jadwal Mingguan', href: '/app/production/scheduling', icon: CalendarDaysIcon },
             { name: 'MRP', href: '/app/production/mrp', icon: CalculatorIcon, permission: 'mrp' },
             { name: 'Demand Planning', href: '/app/production/demand-planning', icon: ChartBarIcon, permission: 'mrp' },
             { name: 'Capacity', href: '/app/production/capacity-planning', icon: ScaleIcon, permission: 'mrp' },

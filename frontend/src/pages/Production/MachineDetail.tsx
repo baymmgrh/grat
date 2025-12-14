@@ -47,6 +47,14 @@ interface DowntimeItem {
   duration_minutes: number;
 }
 
+interface ShiftData {
+  shift: number;
+  grade_a: number;
+  grade_b: number;
+  grade_c: number;
+  total: number;
+}
+
 interface OEEData {
   date: string;
   oee: number;
@@ -57,6 +65,8 @@ interface OEEData {
   target_quantity?: number;
   actual_quantity?: number;
   top_3_downtime?: DowntimeItem[];
+  shifts?: ShiftData[];
+  pack_per_karton?: number;
 }
 
 interface MaintenanceRecord {
@@ -109,17 +119,50 @@ const MachineDetail: React.FC = () => {
       try {
         const oeeRes = await axiosInstance.get(`/api/oee/records?machine_id=${id}&limit=30`);
         if (oeeRes.data.records) {
-          setOeeHistory(oeeRes.data.records.map((r: any) => ({
-            date: r.record_date || r.created_at?.split('T')[0],
-            oee: r.oee_percentage || 0,
-            availability: r.availability || 0,
-            performance: r.performance || 0,
-            quality: r.quality || 0,
-            product_name: r.product_name || null,
-            target_quantity: r.target_quantity || 0,
-            actual_quantity: r.actual_quantity || 0,
-            top_3_downtime: r.top_3_downtime || []
-          })));
+          // Group records by date to combine shifts
+          const recordsByDate: { [key: string]: any[] } = {};
+          oeeRes.data.records.forEach((r: any) => {
+            const date = r.record_date || r.created_at?.split('T')[0];
+            if (!recordsByDate[date]) {
+              recordsByDate[date] = [];
+            }
+            recordsByDate[date].push(r);
+          });
+          
+          // Convert grouped records to OEEData with shifts array
+          const groupedHistory = Object.entries(recordsByDate).map(([date, records]) => {
+            // Aggregate data from all shifts for this date
+            const shifts = records.map((r: any) => r.shift_data).filter(Boolean);
+            const totalTarget = records.reduce((sum: number, r: any) => sum + (r.target_quantity || 0), 0);
+            const totalActual = records.reduce((sum: number, r: any) => sum + (r.actual_quantity || 0), 0);
+            const avgOee = records.reduce((sum: number, r: any) => sum + (r.oee_percentage || 0), 0) / records.length;
+            const avgAvailability = records.reduce((sum: number, r: any) => sum + (r.availability || 0), 0) / records.length;
+            const avgPerformance = records.reduce((sum: number, r: any) => sum + (r.performance || 0), 0) / records.length;
+            const avgQuality = records.reduce((sum: number, r: any) => sum + (r.quality || 0), 0) / records.length;
+            
+            // Combine all downtimes and get top 3
+            const allDowntimes = records.flatMap((r: any) => r.top_3_downtime || []);
+            allDowntimes.sort((a: any, b: any) => b.duration_minutes - a.duration_minutes);
+            const top3 = allDowntimes.slice(0, 3);
+            
+            return {
+              date,
+              oee: avgOee,
+              availability: avgAvailability,
+              performance: avgPerformance,
+              quality: avgQuality,
+              product_name: records[0]?.product_name || null,
+              target_quantity: totalTarget,
+              actual_quantity: totalActual,
+              top_3_downtime: top3,
+              shifts: shifts.sort((a: any, b: any) => a.shift - b.shift),
+              pack_per_karton: records[0]?.pack_per_karton || 50
+            };
+          });
+          
+          // Sort by date descending
+          groupedHistory.sort((a, b) => b.date.localeCompare(a.date));
+          setOeeHistory(groupedHistory);
         }
       } catch {
         setOeeHistory([]);
@@ -347,8 +390,70 @@ const MachineDetail: React.FC = () => {
       {activeTab === 'controller' && (
         <div className="space-y-4">
           <div className="bg-white rounded-lg shadow-sm border p-6">
-            <h3 className="text-lg font-semibold mb-4">📊 Daily Efficiency Report</h3>
-            <p className="text-sm text-gray-500 mb-4">Click on a row to expand details</p>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold">📊 Daily Efficiency Report</h3>
+                <p className="text-sm text-gray-500">Click on a row to expand details</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  id="export-period"
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                  defaultValue="day"
+                  onChange={(e) => {
+                    const dateInput = document.getElementById('export-date') as HTMLInputElement;
+                    if (dateInput) {
+                      dateInput.style.display = e.target.value === 'day' ? 'block' : 'none';
+                    }
+                  }}
+                >
+                  <option value="day">Perhari</option>
+                  <option value="week">Seminggu</option>
+                  <option value="month">Sebulan</option>
+                </select>
+                <input
+                  type="date"
+                  id="export-date"
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                  defaultValue={new Date().toISOString().split('T')[0]}
+                />
+                <button
+                  onClick={async () => {
+                    try {
+                      const period = (document.getElementById('export-period') as HTMLSelectElement)?.value || 'day';
+                      const selectedDate = (document.getElementById('export-date') as HTMLInputElement)?.value;
+                      
+                      let url_params = `machine_id=${id}&period=${period}`;
+                      if (period === 'day' && selectedDate) {
+                        url_params += `&date=${selectedDate}`;
+                      }
+                      
+                      const response = await axiosInstance.get(`/api/oee/export-excel?${url_params}`, {
+                        responseType: 'blob'
+                      });
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const link = document.createElement('a');
+                      link.href = url;
+                      const periodLabel = period === 'month' ? 'sebulan' : period === 'week' ? 'seminggu' : selectedDate;
+                      link.setAttribute('download', `controller_report_${machine?.name || 'machine'}_${periodLabel}_${new Date().toISOString().split('T')[0]}.xlsx`);
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                      window.URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Export failed:', error);
+                      alert('Export failed. Please try again.');
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export Excel
+                </button>
+              </div>
+            </div>
             
             {oeeHistory.length > 0 ? (
               <div className="space-y-2">
@@ -377,16 +482,31 @@ const MachineDetail: React.FC = () => {
                           isGood ? 'bg-green-50' : 'bg-red-50'
                         }`}
                       >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-3 h-3 rounded-full ${isGood ? 'bg-green-500' : 'bg-red-500'}`} />
-                          <div className="text-left">
-                            <p className="font-medium text-gray-900">{day.date}</p>
-                            <p className="text-sm text-gray-500">Production Day</p>
+                        <div className="flex items-center gap-6">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-3 h-3 rounded-full ${isGood ? 'bg-green-500' : 'bg-red-500'}`} />
+                            <div className="text-left">
+                              <p className="font-medium text-gray-900">{day.product_name || 'N/A'}</p>
+                              <p className="text-sm text-gray-500">{day.date}</p>
+                            </div>
+                          </div>
+                          {/* Target vs Actual in header - converted to karton */}
+                          <div className="flex items-center gap-6">
+                            <div className="text-center">
+                              <p className="text-xs text-gray-400">Target</p>
+                              <p className="text-xl font-bold text-blue-600">{Math.round((day.target_quantity || 0) / (day.pack_per_karton || 50)).toLocaleString()}</p>
+                              <p className="text-xs text-gray-400">karton</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-gray-400">Aktual</p>
+                              <p className="text-xl font-bold text-green-600">{Math.round((day.actual_quantity || 0) / (day.pack_per_karton || 50)).toLocaleString()}</p>
+                              <p className="text-xs text-gray-400">karton</p>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-4">
                           <div className="text-right">
-                            <p className={`text-2xl font-bold ${isGood ? 'text-green-600' : 'text-red-600'}`}>
+                            <p className={`text-lg font-bold ${isGood ? 'text-green-600' : 'text-red-600'}`}>
                               {efficiency.toFixed(1)}%
                             </p>
                             <p className="text-xs text-gray-500">Efficiency</p>
@@ -405,22 +525,37 @@ const MachineDetail: React.FC = () => {
                       {/* Expanded Detail */}
                       {isExpanded && (
                         <div className="p-4 bg-white border-t">
-                          {/* Product Info */}
-                          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                            <p className="text-xs text-gray-500 mb-1">Produk yang Diproduksi</p>
-                            <p className="font-medium text-gray-900">{day.product_name || 'N/A'}</p>
-                          </div>
-                          
-                          {/* Target vs Actual */}
-                          <div className="grid grid-cols-2 gap-4 mb-4">
-                            <div className="p-3 bg-blue-50 rounded-lg">
-                              <p className="text-xs text-gray-500">Target Produksi</p>
-                              <p className="text-lg font-bold text-blue-600">{day.target_quantity?.toLocaleString() || 0} pcs</p>
-                            </div>
-                            <div className="p-3 bg-green-50 rounded-lg">
-                              <p className="text-xs text-gray-500">Aktual Produksi</p>
-                              <p className="text-lg font-bold text-green-600">{day.actual_quantity?.toLocaleString() || 0} pcs</p>
-                            </div>
+                          {/* Production per Shift - Grade A, B, C */}
+                          <div className="mb-4">
+                            <p className="text-sm font-medium text-gray-700 mb-3">📦 Produksi per Shift</p>
+                            {day.shifts && day.shifts.length > 0 ? (
+                              <div className="space-y-2">
+                                {day.shifts.map((shift) => (
+                                  <div key={shift.shift} className="p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-medium text-gray-700">Shift {shift.shift}</span>
+                                      <span className="text-sm text-gray-500">Total: {shift.total.toLocaleString()} pcs</span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 text-sm">
+                                      <div className="p-2 bg-green-100 rounded text-center">
+                                        <p className="text-xs text-gray-500">Grade A</p>
+                                        <p className="font-bold text-green-600">{shift.grade_a.toLocaleString()}</p>
+                                      </div>
+                                      <div className="p-2 bg-yellow-100 rounded text-center">
+                                        <p className="text-xs text-gray-500">Grade B</p>
+                                        <p className="font-bold text-yellow-600">{shift.grade_b.toLocaleString()}</p>
+                                      </div>
+                                      <div className="p-2 bg-red-100 rounded text-center">
+                                        <p className="text-xs text-gray-500">Grade C</p>
+                                        <p className="font-bold text-red-600">{shift.grade_c.toLocaleString()}</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-400 italic">No shift data available</p>
+                            )}
                           </div>
 
                           {/* OEE Components */}

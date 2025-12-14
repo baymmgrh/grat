@@ -1,10 +1,12 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeftIcon, CalendarIcon, ClockIcon, CubeIcon, PlayIcon, PlusIcon, ChartBarIcon, PencilIcon, TrashIcon, ExclamationTriangleIcon, DocumentCheckIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, CalendarIcon, ClockIcon, CubeIcon, PlayIcon, PlusIcon, ChartBarIcon, PencilIcon, TrashIcon, ExclamationTriangleIcon, DocumentCheckIcon, ClipboardDocumentListIcon, WrenchScrewdriverIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 import DocumentGenerateButton from '../../components/DocumentGenerateButton';
 import { useGetWorkOrderByIdQuery } from '../../services/api';
 import { useState, useEffect } from 'react';
 import axiosInstance from '../../utils/axiosConfig';
 import { toast } from 'react-hot-toast';
+import PackingListTab from '../../components/Production/PackingListTab';
+import ActivityLogModal from '../../components/ActivityLogModal';
 
 interface ProductionRecord {
   id: number;
@@ -30,6 +32,7 @@ export default function WorkOrderDetail() {
   const [wipBatch, setWipBatch] = useState<any>(null);
   const [approvalStatus, setApprovalStatus] = useState<any>(null);
   const [submittingApproval, setSubmittingApproval] = useState(false);
+  const [showActivityLog, setShowActivityLog] = useState(false);
   
   useEffect(() => {
     if (id) {
@@ -371,11 +374,20 @@ export default function WorkOrderDetail() {
                 </span>
               )}
             </h2>
-            {workOrder.batch_size && (
-              <span className="text-sm text-gray-500">
-                Batch Size: {workOrder.batch_size} {workOrder.uom}
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {workOrder.batch_size && (
+                <span className="text-sm text-gray-500">
+                  Batch Size: {workOrder.batch_size} {workOrder.uom}
+                </span>
+              )}
+              <Link
+                to={`/app/production/work-orders/${id}/bom-edit`}
+                className="inline-flex items-center px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 text-sm font-medium"
+              >
+                <WrenchScrewdriverIcon className="h-4 w-4 mr-1" />
+                Edit BOM WO
+              </Link>
+            </div>
           </div>
           
           <div className="overflow-x-auto">
@@ -468,6 +480,7 @@ export default function WorkOrderDetail() {
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Downtime</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Operator</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -481,6 +494,15 @@ export default function WorkOrderDetail() {
                     <td className="px-4 py-3 text-sm text-right text-orange-600">{record.downtime_minutes} min</td>
                     <td className="px-4 py-3 text-sm">{record.operator_name || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">{record.notes || '-'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <Link
+                        to={`/app/production/work-orders/${id}/records/${record.id}/edit`}
+                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                      >
+                        <PencilIcon className="h-3 w-3 mr-1" />
+                        Edit
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -503,9 +525,38 @@ export default function WorkOrderDetail() {
         )}
       </div>
 
+      {/* Packing List Section - Only show when WO has production */}
+      {totalProduced > 0 && workOrder.pack_per_carton > 0 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-900 flex items-center">
+              <ClipboardDocumentListIcon className="h-5 w-5 mr-2 text-green-600" />
+              Packing List
+            </h2>
+            <div className="text-sm text-gray-500">
+              Total Karton: <span className="font-bold text-green-600">{Math.floor(totalProduced / workOrder.pack_per_carton)}</span>
+            </div>
+          </div>
+          <PackingListTab
+            workOrderId={parseInt(id || '0')}
+            productName={workOrder.product_name || 'Unknown'}
+            totalAktualKarton={Math.floor(totalProduced / workOrder.pack_per_carton)}
+            packPerCarton={workOrder.pack_per_carton}
+          />
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex flex-wrap gap-3">
+          {/* Activity Log Button */}
+          <button
+            onClick={() => setShowActivityLog(true)}
+            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 inline-flex items-center"
+          >
+            <DocumentTextIcon className="h-4 w-4 mr-2" />
+            Log Aktivitas
+          </button>
           {/* Edit Button - available for planned, released, in_progress */}
           {['planned', 'released', 'in_progress'].includes(workOrder.status) && (
             <Link
@@ -651,6 +702,15 @@ export default function WorkOrderDetail() {
           </div>
         </div>
       )}
+
+      {/* Activity Log Modal */}
+      <ActivityLogModal
+        isOpen={showActivityLog}
+        onClose={() => setShowActivityLog(false)}
+        resourceType="work_order"
+        resourceId={id}
+        title={`Log Aktivitas WO ${workOrder?.wo_number || ''}`}
+      />
     </div>
   );
 }

@@ -28,7 +28,6 @@ def create_tables():
                 qty_per_ctn INTEGER DEFAULT 0,
                 spek_kain VARCHAR(100),
                 no_spk VARCHAR(50),
-                wo_id INTEGER,
                 color VARCHAR(50) DEFAULT 'bg-blue-500',
                 schedule_days TEXT,
                 status VARCHAR(50) DEFAULT 'planned',
