@@ -3,9 +3,12 @@ import { Dialog, Transition } from '@headlessui/react'
 import { NavLink } from 'react-router-dom'
 import {
   ArrowPathIcon,
+  ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
   BanknotesIcon,
   BeakerIcon,
   BookOpenIcon,
+  BuildingOfficeIcon,
   BuildingStorefrontIcon,
   ChatBubbleLeftRightIcon,
   ChartBarIcon,
@@ -16,7 +19,9 @@ import {
   DocumentChartBarIcon,
   DocumentTextIcon,
   HomeIcon,
+  PencilSquareIcon,
   QuestionMarkCircleIcon,
+  ReceiptPercentIcon,
   ShoppingBagIcon,
   ShoppingCartIcon,
   TrashIcon,
@@ -193,7 +198,7 @@ function SidebarContent() {
     },
     {
       groupName: 'FINANCE & HR',
-      show: canViewAny(['finance', 'hr', 'employees', 'payroll']),
+      show: canViewAny(['finance', 'accounting', 'hr', 'employees', 'payroll']),
       items: [
         { 
           name: 'Finance', 
@@ -202,12 +207,26 @@ function SidebarContent() {
           permission: 'finance',
           children: [
             { name: 'Dashboard', href: '/app/finance', icon: PresentationChartLineIcon },
-            { name: 'Accounting', href: '/app/finance/accounting', icon: CalculatorIcon },
             { name: 'Budget', href: '/app/finance/budget', icon: CurrencyDollarIcon },
             { name: 'Cash Flow', href: '/app/finance/cash-flow', icon: ArrowsRightLeftIcon },
-            { name: 'WIP Ledger', href: '/app/finance/wip-ledger', icon: DocumentTextIcon },
-            { name: 'Reports', href: '/app/finance/reports', icon: DocumentChartBarIcon },
             { name: 'Approvals', href: '/app/approval', icon: DocumentCheckIcon, permission: 'approval' },
+          ]
+        },
+        { 
+          name: 'Accounting', 
+          href: '/app/accounting', 
+          icon: CalculatorIcon,
+          permission: 'accounting',
+          children: [
+            { name: 'Chart of Accounts', href: '/app/accounting/chart-of-accounts', icon: DocumentTextIcon },
+            { name: 'General Ledger', href: '/app/accounting/general-ledger', icon: DocumentChartBarIcon },
+            { name: 'Journal Entry', href: '/app/accounting/journal', icon: PencilSquareIcon },
+            { name: 'Accounts Receivable', href: '/app/accounting/receivable', icon: ArrowDownTrayIcon },
+            { name: 'Accounts Payable', href: '/app/accounting/payable', icon: ArrowUpTrayIcon },
+            { name: 'Fixed Assets', href: '/app/accounting/fixed-assets', icon: BuildingOfficeIcon },
+            { name: 'Tax Management', href: '/app/accounting/tax', icon: ReceiptPercentIcon },
+            { name: 'WIP Ledger', href: '/app/finance/wip-ledger', icon: CubeIcon },
+            { name: 'Financial Reports', href: '/app/accounting/reports', icon: DocumentChartBarIcon },
           ]
         },
         { 

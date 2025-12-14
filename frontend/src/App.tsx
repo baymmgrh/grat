@@ -208,6 +208,7 @@ import Reports from './pages/Reports/ReportsFixed'
 import AdvancedReportBuilder from './pages/Reports/AdvancedReportBuilder'
 import ScheduledReports from './pages/Reports/ScheduledReports'
 import ExecutiveDashboard from './pages/Reports/ExecutiveDashboard'
+import ProductionByProductReport from './pages/Reports/ProductionByProductReport'
 import ExecutiveDashboardAdvanced from './pages/Executive/ExecutiveDashboard'
 import ReportGenerator from './pages/Reports/ReportGenerator'
 import CustomReportBuilder from './pages/Reports/CustomReportBuilder'
@@ -657,6 +658,17 @@ function App() {
         <Route path="finance/expenses/new" element={<ExpenseForm />} />
         <Route path="finance/expenses/:id/edit" element={<ExpenseForm />} />
         
+        {/* Accounting - Separated module for accountants */}
+        <Route path="accounting" element={<AccountingManagement />} />
+        <Route path="accounting/chart-of-accounts" element={<ChartOfAccounts />} />
+        <Route path="accounting/general-ledger" element={<GeneralLedger />} />
+        <Route path="accounting/journal" element={<AccountingManagement />} />
+        <Route path="accounting/receivable" element={<AccountsReceivable />} />
+        <Route path="accounting/payable" element={<AccountsPayable />} />
+        <Route path="accounting/fixed-assets" element={<FixedAssets />} />
+        <Route path="accounting/tax" element={<TaxManagement />} />
+        <Route path="accounting/reports" element={<FinancialReports />} />
+        
         {/* Approval Workflow */}
         <Route path="approval" element={<ApprovalDashboard />} />
         <Route path="approval/:id" element={<ApprovalDetail />} />
@@ -820,6 +832,7 @@ function App() {
         <Route path="reports/generate/:reportId" element={<ReportGenerator />} />
         <Route path="reports/custom" element={<CustomReportBuilder />} />
         <Route path="reports/scheduler" element={<ReportScheduler />} />
+        <Route path="reports/production-by-product" element={<ProductionByProductReport />} />
       </Route>
     </Routes>
         </PermissionProvider>
