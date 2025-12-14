@@ -1,12 +1,15 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required
 from models import db, SalesOrder, WorkOrder, Inventory, Product, Customer, WasteRecord, MaintenanceRecord, QualityTest
 from models.hr import Employee, Attendance
 from models.hr_extended import PayrollRecord
 from models.finance import Invoice
+from models.production import ProductionRecord
 from utils.i18n import success_response, error_response, get_message
-from sqlalchemy import func
+from sqlalchemy import func, extract
 from datetime import datetime, timedelta
+from calendar import monthrange
+import io
 
 reports_bp = Blueprint('reports', __name__)
 
@@ -409,4 +412,319 @@ def dashboard_summary():
             }
         }), 200
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@reports_bp.route('/production-by-product', methods=['GET'])
+@jwt_required()
+def production_by_product_report():
+    """Get production report grouped by product and period"""
+    try:
+        period_type = request.args.get('period_type', 'monthly')  # daily, weekly, monthly, yearly
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        product_id = request.args.get('product_id', type=int)
+        
+        # Parse dates
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str)
+        else:
+            start_date = datetime.now() - timedelta(days=30)
+        
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str)
+        else:
+            end_date = datetime.now()
+        
+        # Ensure end_date includes the full day
+        end_date = end_date.replace(hour=23, minute=59, second=59)
+        
+        # Build base query for production records
+        query = db.session.query(
+            ProductionRecord.production_date,
+            ProductionRecord.work_order_id,
+            WorkOrder.product_id,
+            Product.code.label('product_code'),
+            Product.name.label('product_name'),
+            ProductionRecord.quantity_produced,
+            ProductionRecord.quantity_good,
+            ProductionRecord.quantity_reject,
+            ProductionRecord.waste_kg
+        ).join(
+            WorkOrder, ProductionRecord.work_order_id == WorkOrder.id
+        ).join(
+            Product, WorkOrder.product_id == Product.id
+        ).filter(
+            ProductionRecord.production_date >= start_date.date(),
+            ProductionRecord.production_date <= end_date.date()
+        )
+        
+        if product_id:
+            query = query.filter(WorkOrder.product_id == product_id)
+        
+        records = query.all()
+        
+        # Group by period
+        periods_data = {}
+        
+        for record in records:
+            # Determine period key based on period_type
+            prod_date = record.production_date
+            if period_type == 'daily':
+                period_key = prod_date.strftime('%Y-%m-%d')
+                period_label = prod_date.strftime('%d %b %Y')
+            elif period_type == 'weekly':
+                # Get week start (Monday)
+                week_start = prod_date - timedelta(days=prod_date.weekday())
+                period_key = week_start.strftime('%Y-W%W')
+                week_end = week_start + timedelta(days=6)
+                period_label = f"{week_start.strftime('%d %b')} - {week_end.strftime('%d %b %Y')}"
+            elif period_type == 'monthly':
+                period_key = prod_date.strftime('%Y-%m')
+                period_label = prod_date.strftime('%B %Y')
+            else:  # yearly
+                period_key = prod_date.strftime('%Y')
+                period_label = f"Tahun {prod_date.strftime('%Y')}"
+            
+            # Initialize period if not exists
+            if period_key not in periods_data:
+                periods_data[period_key] = {
+                    'period': period_key,
+                    'period_label': period_label,
+                    'total_produced': 0,
+                    'total_good': 0,
+                    'total_reject': 0,
+                    'products': {}
+                }
+            
+            period = periods_data[period_key]
+            
+            # Add to period totals
+            qty_produced = float(record.quantity_produced or 0)
+            qty_good = float(record.quantity_good or 0)
+            qty_reject = float(record.quantity_reject or 0)
+            waste = float(record.waste_kg or 0)
+            
+            period['total_produced'] += qty_produced
+            period['total_good'] += qty_good
+            period['total_reject'] += qty_reject
+            
+            # Group by product within period
+            prod_id = record.product_id
+            if prod_id not in period['products']:
+                period['products'][prod_id] = {
+                    'product_id': prod_id,
+                    'product_code': record.product_code,
+                    'product_name': record.product_name,
+                    'total_produced': 0,
+                    'total_good': 0,
+                    'total_reject': 0,
+                    'total_waste': 0,
+                    'work_order_ids': set()
+                }
+            
+            prod_data = period['products'][prod_id]
+            prod_data['total_produced'] += qty_produced
+            prod_data['total_good'] += qty_good
+            prod_data['total_reject'] += qty_reject
+            prod_data['total_waste'] += waste
+            prod_data['work_order_ids'].add(record.work_order_id)
+        
+        # Convert to list and calculate rates
+        result = []
+        for period_key in sorted(periods_data.keys(), reverse=True):
+            period = periods_data[period_key]
+            
+            # Convert products dict to list
+            products_list = []
+            for prod_data in period['products'].values():
+                prod_data['work_order_count'] = len(prod_data['work_order_ids'])
+                del prod_data['work_order_ids']  # Remove set before JSON serialization
+                prod_data['reject_rate'] = (prod_data['total_reject'] / prod_data['total_produced'] * 100) if prod_data['total_produced'] > 0 else 0
+                products_list.append(prod_data)
+            
+            # Sort products by total_produced descending
+            products_list.sort(key=lambda x: x['total_produced'], reverse=True)
+            period['products'] = products_list
+            
+            result.append(period)
+        
+        return jsonify({
+            'periods': result,
+            'period_type': period_type,
+            'start_date': start_date.date().isoformat(),
+            'end_date': end_date.date().isoformat()
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@reports_bp.route('/production-by-product/export', methods=['GET'])
+@jwt_required()
+def export_production_by_product():
+    """Export production by product report to Excel"""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+        
+        period_type = request.args.get('period_type', 'monthly')
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        product_id = request.args.get('product_id', type=int)
+        
+        # Parse dates
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str)
+        else:
+            start_date = datetime.now() - timedelta(days=30)
+        
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str)
+        else:
+            end_date = datetime.now()
+        
+        end_date = end_date.replace(hour=23, minute=59, second=59)
+        
+        # Get data (reuse logic from above)
+        query = db.session.query(
+            ProductionRecord.production_date,
+            WorkOrder.product_id,
+            Product.code.label('product_code'),
+            Product.name.label('product_name'),
+            func.sum(ProductionRecord.quantity_produced).label('total_produced'),
+            func.sum(ProductionRecord.quantity_good).label('total_good'),
+            func.sum(ProductionRecord.quantity_reject).label('total_reject'),
+            func.sum(ProductionRecord.waste_kg).label('total_waste'),
+            func.count(func.distinct(ProductionRecord.work_order_id)).label('wo_count')
+        ).join(
+            WorkOrder, ProductionRecord.work_order_id == WorkOrder.id
+        ).join(
+            Product, WorkOrder.product_id == Product.id
+        ).filter(
+            ProductionRecord.production_date >= start_date.date(),
+            ProductionRecord.production_date <= end_date.date()
+        )
+        
+        if product_id:
+            query = query.filter(WorkOrder.product_id == product_id)
+        
+        # Group by product
+        query = query.group_by(
+            WorkOrder.product_id,
+            Product.code,
+            Product.name
+        ).order_by(func.sum(ProductionRecord.quantity_produced).desc())
+        
+        records = query.all()
+        
+        # Create Excel workbook
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Produksi per Produk"
+        
+        # Styles
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+        border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Title
+        ws.merge_cells('A1:H1')
+        ws['A1'] = f"Laporan Produksi per Produk ({period_type.title()})"
+        ws['A1'].font = Font(bold=True, size=14)
+        ws['A1'].alignment = Alignment(horizontal='center')
+        
+        ws.merge_cells('A2:H2')
+        ws['A2'] = f"Periode: {start_date.strftime('%d %b %Y')} - {end_date.strftime('%d %b %Y')}"
+        ws['A2'].alignment = Alignment(horizontal='center')
+        
+        # Headers
+        headers = ['No', 'Kode Produk', 'Nama Produk', 'Total Produksi', 'Baik', 'Reject', 'Waste (kg)', 'Reject Rate (%)']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.border = border
+            cell.alignment = Alignment(horizontal='center')
+        
+        # Data rows
+        total_produced = 0
+        total_good = 0
+        total_reject = 0
+        total_waste = 0
+        
+        for idx, record in enumerate(records, 1):
+            row = idx + 4
+            produced = float(record.total_produced or 0)
+            good = float(record.total_good or 0)
+            reject = float(record.total_reject or 0)
+            waste = float(record.total_waste or 0)
+            reject_rate = (reject / produced * 100) if produced > 0 else 0
+            
+            total_produced += produced
+            total_good += good
+            total_reject += reject
+            total_waste += waste
+            
+            ws.cell(row=row, column=1, value=idx).border = border
+            ws.cell(row=row, column=2, value=record.product_code).border = border
+            ws.cell(row=row, column=3, value=record.product_name).border = border
+            ws.cell(row=row, column=4, value=produced).border = border
+            ws.cell(row=row, column=5, value=good).border = border
+            ws.cell(row=row, column=6, value=reject).border = border
+            ws.cell(row=row, column=7, value=waste).border = border
+            ws.cell(row=row, column=8, value=round(reject_rate, 2)).border = border
+        
+        # Total row
+        total_row = len(records) + 5
+        ws.cell(row=total_row, column=1, value='').border = border
+        ws.cell(row=total_row, column=2, value='TOTAL').font = Font(bold=True)
+        ws.cell(row=total_row, column=2).border = border
+        ws.cell(row=total_row, column=3, value='').border = border
+        ws.cell(row=total_row, column=4, value=total_produced).font = Font(bold=True)
+        ws.cell(row=total_row, column=4).border = border
+        ws.cell(row=total_row, column=5, value=total_good).font = Font(bold=True)
+        ws.cell(row=total_row, column=5).border = border
+        ws.cell(row=total_row, column=6, value=total_reject).font = Font(bold=True)
+        ws.cell(row=total_row, column=6).border = border
+        ws.cell(row=total_row, column=7, value=total_waste).font = Font(bold=True)
+        ws.cell(row=total_row, column=7).border = border
+        total_reject_rate = (total_reject / total_produced * 100) if total_produced > 0 else 0
+        ws.cell(row=total_row, column=8, value=round(total_reject_rate, 2)).font = Font(bold=True)
+        ws.cell(row=total_row, column=8).border = border
+        
+        # Adjust column widths
+        ws.column_dimensions['A'].width = 5
+        ws.column_dimensions['B'].width = 15
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 15
+        ws.column_dimensions['E'].width = 12
+        ws.column_dimensions['F'].width = 12
+        ws.column_dimensions['G'].width = 12
+        ws.column_dimensions['H'].width = 15
+        
+        # Save to buffer
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        
+        filename = f"production_report_{period_type}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx"
+        
+        return send_file(
+            buffer,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
