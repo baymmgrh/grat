@@ -30,6 +30,7 @@ def create_tables():
                 no_spk VARCHAR(50),
                 color VARCHAR(50) DEFAULT 'bg-blue-500',
                 schedule_days TEXT,
+                wo_id INTEGER,
                 status VARCHAR(50) DEFAULT 'planned',
                 notes TEXT,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
