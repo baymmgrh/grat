@@ -1460,9 +1460,9 @@ def update_production_record(record_id):
         
         # Update work order totals with difference
         if wo:
-            wo.quantity_produced = (wo.quantity_produced or 0) - old_produced + new_produced
-            wo.quantity_good = (wo.quantity_good or 0) - old_good + new_good
-            wo.quantity_scrap = (wo.quantity_scrap or 0) - old_scrap + new_scrap
+            wo.quantity_produced = float(wo.quantity_produced or 0) - old_produced + new_produced
+            wo.quantity_good = float(wo.quantity_good or 0) - old_good + new_good
+            wo.quantity_scrap = float(wo.quantity_scrap or 0) - old_scrap + new_scrap
         
         db.session.commit()
         
