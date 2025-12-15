@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from models import db
-from models.production import WorkOrder, ProductChangeover, Machine, DowntimeRecord
+from models.production import WorkOrder, ProductChangeover, Machine
 from utils.helpers import generate_number
 
 product_changeover_bp = Blueprint('product_changeover', __name__)
@@ -137,20 +137,11 @@ def initiate_changeover(wo_id):
         from_wo.status = 'paused'
         from_wo.updated_at = datetime.utcnow()
         
-        # Create downtime record for changeover
-        downtime = DowntimeRecord(
-            machine_id=from_wo.machine_id,
-            work_order_id=wo_id,
-            downtime_type='planned',
-            category='changeover',
-            start_time=datetime.utcnow(),
-            description=f'Product Changeover: {reason}',
-            notes=data.get('reason_detail'),
-            created_by=user_id
-        )
+        # Note: DowntimeRecord requires shift_production_id which may not exist yet
+        # Store changeover downtime info in the changeover record itself
+        # The downtime will be recorded when production input is submitted
         
         db.session.add(changeover)
-        db.session.add(downtime)
         db.session.commit()
         
         response_data = {
@@ -239,18 +230,7 @@ def complete_changeover(id):
             to_wo.actual_start_date = datetime.utcnow()
         to_wo.updated_at = datetime.utcnow()
         
-        # Close the downtime record
-        downtime = DowntimeRecord.query.filter_by(
-            work_order_id=changeover.from_work_order_id,
-            category='changeover',
-            end_time=None
-        ).first()
-        
-        if downtime:
-            downtime.end_time = datetime.utcnow()
-            duration = downtime.end_time - downtime.start_time
-            downtime.duration_minutes = int(duration.total_seconds() / 60)
-        
+        # Changeover duration is tracked in ProductChangeover record itself
         db.session.commit()
         
         return jsonify({
@@ -299,19 +279,7 @@ def cancel_changeover(id):
         changeover.completed_by = user_id
         changeover.notes = (changeover.notes or '') + f'\nDibatalkan: {data.get("reason", "Tidak ada alasan")}'
         
-        # Close the downtime record
-        downtime = DowntimeRecord.query.filter_by(
-            work_order_id=changeover.from_work_order_id,
-            category='changeover',
-            end_time=None
-        ).first()
-        
-        if downtime:
-            downtime.end_time = datetime.utcnow()
-            duration = downtime.end_time - downtime.start_time
-            downtime.duration_minutes = int(duration.total_seconds() / 60)
-            downtime.notes = (downtime.notes or '') + ' [CANCELLED]'
-        
+        # Changeover duration is tracked in ProductChangeover record itself
         db.session.commit()
         
         return jsonify({
