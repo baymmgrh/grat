@@ -1421,8 +1421,10 @@ def get_production_record(record_id):
 @production_bp.route('/production-records/<int:record_id>', methods=['PUT'])
 @jwt_required()
 def update_production_record(record_id):
-    """Update production record and adjust work order totals"""
+    """Update production record and adjust work order totals and ShiftProduction"""
     try:
+        from models.production import ShiftProduction
+        
         record = ProductionRecord.query.get(record_id)
         if not record:
             return jsonify({'error': 'Production record not found'}), 404
@@ -1434,6 +1436,8 @@ def update_production_record(record_id):
         old_produced = float(record.quantity_produced) if record.quantity_produced else 0
         old_good = float(record.quantity_good) if record.quantity_good else 0
         old_scrap = float(record.quantity_scrap) if record.quantity_scrap else 0
+        old_shift = record.shift
+        old_date = record.production_date.date() if record.production_date else None
         
         # Update record fields
         if 'production_date' in data:
@@ -1446,6 +1450,8 @@ def update_production_record(record_id):
             record.quantity_good = data['quantity_good']
         if 'quantity_scrap' in data:
             record.quantity_scrap = data['quantity_scrap']
+        if 'quantity_rework' in data:
+            record.quantity_rework = data['quantity_rework']
         if 'downtime_minutes' in data:
             record.downtime_minutes = data['downtime_minutes']
         if 'operator_id' in data:
@@ -1457,12 +1463,80 @@ def update_production_record(record_id):
         new_produced = float(record.quantity_produced) if record.quantity_produced else 0
         new_good = float(record.quantity_good) if record.quantity_good else 0
         new_scrap = float(record.quantity_scrap) if record.quantity_scrap else 0
+        new_rework = float(data.get('quantity_rework', 0))
         
         # Update work order totals with difference
         if wo:
             wo.quantity_produced = float(wo.quantity_produced or 0) - old_produced + new_produced
             wo.quantity_good = float(wo.quantity_good or 0) - old_good + new_good
             wo.quantity_scrap = float(wo.quantity_scrap or 0) - old_scrap + new_scrap
+        
+        # Find and update corresponding ShiftProduction record
+        shift_key = f"shift_{record.shift}" if not str(record.shift).startswith('shift_') else record.shift
+        production_date = record.production_date.date() if record.production_date else old_date
+        
+        # Try to find ShiftProduction by work_order_id, date, and shift
+        shift_production = ShiftProduction.query.filter(
+            ShiftProduction.work_order_id == record.work_order_id,
+            ShiftProduction.production_date == production_date,
+            ShiftProduction.shift == shift_key
+        ).first()
+        
+        # If not found, try with old shift
+        if not shift_production and old_shift:
+            old_shift_key = f"shift_{old_shift}" if not str(old_shift).startswith('shift_') else old_shift
+            shift_production = ShiftProduction.query.filter(
+                ShiftProduction.work_order_id == record.work_order_id,
+                ShiftProduction.production_date == old_date,
+                ShiftProduction.shift == old_shift_key
+            ).first()
+        
+        # Update ShiftProduction if found
+        if shift_production:
+            shift_production.actual_quantity = new_produced
+            shift_production.good_quantity = new_good
+            shift_production.reject_quantity = new_scrap
+            shift_production.rework_quantity = new_rework
+            shift_production.downtime_minutes = float(data.get('downtime_minutes', shift_production.downtime_minutes or 0))
+            
+            # Recalculate quality rate and OEE
+            if new_produced > 0:
+                shift_production.quality_rate = round((new_good / new_produced) * 100, 2)
+            
+            # Update downtime by category if provided
+            if 'downtime_entries' in data:
+                downtime_entries = data['downtime_entries']
+                downtime_mesin = sum(e.get('total_minutes', 0) for e in downtime_entries if e.get('category') == 'mesin')
+                downtime_operator = sum(e.get('total_minutes', 0) for e in downtime_entries if e.get('category') == 'operator')
+                downtime_material = sum(e.get('total_minutes', 0) for e in downtime_entries if e.get('category') == 'material')
+                downtime_design = sum(e.get('total_minutes', 0) for e in downtime_entries if e.get('category') == 'design')
+                downtime_others = sum(e.get('total_minutes', 0) for e in downtime_entries if e.get('category') == 'others')
+                
+                shift_production.downtime_mesin = downtime_mesin
+                shift_production.downtime_operator = downtime_operator
+                shift_production.downtime_material = downtime_material
+                shift_production.downtime_design = downtime_design
+                shift_production.downtime_others = downtime_others
+                
+                # Update issues/notes
+                downtime_notes = '; '.join([
+                    f"{e.get('total_minutes', 0)} menit - {e.get('reason', '')} [{e.get('category', 'others')}]" 
+                    for e in downtime_entries if e.get('reason')
+                ])
+                if downtime_notes:
+                    shift_production.issues = downtime_notes
+            
+            # Recalculate efficiency and OEE
+            planned_runtime = shift_production.planned_runtime or 480
+            total_downtime = float(shift_production.downtime_minutes or 0)
+            actual_runtime = planned_runtime - total_downtime
+            shift_production.actual_runtime = actual_runtime
+            
+            efficiency_rate = (actual_runtime / planned_runtime * 100) if planned_runtime > 0 else 100
+            shift_production.efficiency_rate = round(efficiency_rate, 2)
+            
+            quality_rate = shift_production.quality_rate or 100
+            shift_production.oee_score = round((efficiency_rate * quality_rate) / 100, 2)
         
         db.session.commit()
         
@@ -1473,7 +1547,8 @@ def update_production_record(record_id):
                 'quantity_produced': float(record.quantity_produced),
                 'quantity_good': float(record.quantity_good),
                 'quantity_scrap': float(record.quantity_scrap)
-            }
+            },
+            'shift_production_updated': shift_production is not None
         }), 200
     except Exception as e:
         db.session.rollback()

@@ -292,6 +292,14 @@ export default function EditProductionRecord() {
         downtime_minutes: getTotalDowntime(),
         operator_id: formData.operator_id ? parseInt(formData.operator_id) : null,
         notes: finalNotes,
+        downtime_entries: downtimeEntries.filter(e => e.reason && e.duration_minutes).map(e => ({
+          reason: e.reason,
+          category: e.category,
+          duration_minutes: parseInt(e.duration_minutes) || 0,
+          frequency: parseInt(e.frequency) || 1,
+          total_minutes: (parseInt(e.duration_minutes) || 0) * (parseInt(e.frequency) || 1),
+          pic: e.pic
+        })),
       };
       
       await axiosInstance.put(`/api/production/production-records/${recordId}`, payload);

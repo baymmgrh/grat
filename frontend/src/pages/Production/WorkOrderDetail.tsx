@@ -33,6 +33,8 @@ export default function WorkOrderDetail() {
   const [approvalStatus, setApprovalStatus] = useState<any>(null);
   const [submittingApproval, setSubmittingApproval] = useState(false);
   const [showActivityLog, setShowActivityLog] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completing, setCompleting] = useState(false);
   
   useEffect(() => {
     if (id) {
@@ -81,6 +83,22 @@ export default function WorkOrderDetail() {
       toast.error(error.response?.data?.error || 'Gagal submit approval');
     } finally {
       setSubmittingApproval(false);
+    }
+  };
+
+  const handleCompleteWorkOrder = async () => {
+    try {
+      setCompleting(true);
+      await axiosInstance.put(`/api/production/work-orders/${id}/status`, {
+        status: 'completed'
+      });
+      toast.success('Work Order berhasil diselesaikan!');
+      setShowCompleteModal(false);
+      refetch();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Gagal menyelesaikan Work Order');
+    } finally {
+      setCompleting(false);
     }
   };
   
@@ -585,6 +603,13 @@ export default function WorkOrderDetail() {
                 </svg>
                 Ganti Produk
               </Link>
+              <button
+                onClick={() => setShowCompleteModal(true)}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 inline-flex items-center"
+              >
+                <DocumentCheckIcon className="h-4 w-4 mr-2" />
+                Selesaikan Work Order
+              </button>
             </>
           )}
           {/* Submit for Approval - Only for completed WO without approval */}
@@ -694,6 +719,77 @@ export default function WorkOrderDetail() {
                     <>
                       <TrashIcon className="h-4 w-4 mr-2" />
                       Hapus
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Complete Work Order Modal */}
+      {showCompleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-3 bg-emerald-100 rounded-full">
+                  <DocumentCheckIcon className="h-6 w-6 text-emerald-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Selesaikan Work Order</h3>
+              </div>
+              
+              <p className="text-gray-600 mb-4">
+                Apakah Anda yakin ingin menyelesaikan Work Order <strong>{workOrder.wo_number}</strong>?
+              </p>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-blue-800">
+                  <strong>Info:</strong> Setelah diselesaikan, Anda dapat melanjutkan ke input Packing List dan Submit for Approval.
+                </p>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-gray-50 rounded-lg p-3 mb-4 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Target Quantity:</span>
+                  <span className="font-medium">{workOrder.quantity?.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Quantity Produced:</span>
+                  <span className="font-medium text-green-600">{workOrder.quantity_produced?.toLocaleString() || 0}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Production Records:</span>
+                  <span className="font-medium">{productionRecords.length} records</span>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowCompleteModal(false)}
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleCompleteWorkOrder}
+                  disabled={completing}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 inline-flex items-center"
+                >
+                  {completing ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 mr-2" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Memproses...
+                    </>
+                  ) : (
+                    <>
+                      <DocumentCheckIcon className="h-4 w-4 mr-2" />
+                      Selesaikan
                     </>
                   )}
                 </button>
