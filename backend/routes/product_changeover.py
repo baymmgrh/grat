@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime
 from models import db
-from models.production import WorkOrder, ProductChangeover, Machine
+from models.production import WorkOrder, ProductChangeover, Machine, ShiftProduction
 from utils.helpers import generate_number
 
 product_changeover_bp = Blueprint('product_changeover', __name__)
@@ -230,7 +230,48 @@ def complete_changeover(id):
             to_wo.actual_start_date = datetime.utcnow()
         to_wo.updated_at = datetime.utcnow()
         
-        # Changeover duration is tracked in ProductChangeover record itself
+        # Record changeover downtime to the PREVIOUS WO's ShiftProduction
+        from_wo = WorkOrder.query.get(changeover.from_work_order_id)
+        if from_wo:
+            # Find or create ShiftProduction for the previous WO on today's date
+            today = datetime.utcnow().date()
+            current_hour = datetime.utcnow().hour
+            # Determine shift based on current time (shift 1: 06-14, shift 2: 14-22, shift 3: 22-06)
+            if 6 <= current_hour < 14:
+                shift = '1'
+            elif 14 <= current_hour < 22:
+                shift = '2'
+            else:
+                shift = '3'
+            
+            shift_production = ShiftProduction.query.filter_by(
+                work_order_id=from_wo.id,
+                machine_id=changeover.machine_id,
+                production_date=today,
+                shift=shift
+            ).first()
+            
+            if shift_production:
+                # Add changeover downtime to design category
+                shift_production.downtime_design = (shift_production.downtime_design or 0) + setup_time
+                
+                # Add to issues string
+                to_product_name = to_wo.product.name if to_wo.product else f'WO-{to_wo.id}'
+                changeover_issue = f"{setup_time} menit - Changeover ke {to_product_name} [design]"
+                if shift_production.issues:
+                    shift_production.issues = shift_production.issues + '; ' + changeover_issue
+                else:
+                    shift_production.issues = changeover_issue
+                
+                # Recalculate total downtime
+                shift_production.downtime_minutes = (
+                    (shift_production.downtime_mesin or 0) +
+                    (shift_production.downtime_operator or 0) +
+                    (shift_production.downtime_material or 0) +
+                    (shift_production.downtime_design or 0) +
+                    (shift_production.downtime_others or 0)
+                )
+        
         db.session.commit()
         
         return jsonify({
@@ -273,13 +314,57 @@ def cancel_changeover(id):
             from_wo.status = 'in_progress'
             from_wo.updated_at = datetime.utcnow()
         
+        # Calculate cancelled changeover duration
+        cancel_time = datetime.utcnow()
+        duration = cancel_time - changeover.changeover_start
+        setup_time = int(duration.total_seconds() / 60)
+        
         # Update changeover
         changeover.status = 'cancelled'
-        changeover.changeover_end = datetime.utcnow()
+        changeover.changeover_end = cancel_time
+        changeover.setup_time_minutes = setup_time
         changeover.completed_by = user_id
         changeover.notes = (changeover.notes or '') + f'\nDibatalkan: {data.get("reason", "Tidak ada alasan")}'
         
-        # Changeover duration is tracked in ProductChangeover record itself
+        # Record cancelled changeover downtime to the WO's ShiftProduction
+        if from_wo and setup_time > 0:
+            today = datetime.utcnow().date()
+            current_hour = datetime.utcnow().hour
+            # Determine shift based on current time
+            if 6 <= current_hour < 14:
+                shift = '1'
+            elif 14 <= current_hour < 22:
+                shift = '2'
+            else:
+                shift = '3'
+            
+            shift_production = ShiftProduction.query.filter_by(
+                work_order_id=from_wo.id,
+                machine_id=changeover.machine_id,
+                production_date=today,
+                shift=shift
+            ).first()
+            
+            if shift_production:
+                # Add cancelled changeover downtime to design category
+                shift_production.downtime_design = (shift_production.downtime_design or 0) + setup_time
+                
+                # Add to issues string with CANCELLED note
+                changeover_issue = f"{setup_time} menit - Changeover dibatalkan [design]"
+                if shift_production.issues:
+                    shift_production.issues = shift_production.issues + '; ' + changeover_issue
+                else:
+                    shift_production.issues = changeover_issue
+                
+                # Recalculate total downtime
+                shift_production.downtime_minutes = (
+                    (shift_production.downtime_mesin or 0) +
+                    (shift_production.downtime_operator or 0) +
+                    (shift_production.downtime_material or 0) +
+                    (shift_production.downtime_design or 0) +
+                    (shift_production.downtime_others or 0)
+                )
+        
         db.session.commit()
         
         return jsonify({
