@@ -834,3 +834,270 @@ def get_active_users():
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@executive_dashboard_bp.route('/production-executive', methods=['GET'])
+@jwt_required()
+def get_production_executive_dashboard():
+    """
+    Executive Production Dashboard - Monthly Target vs Actual with Downtime Analysis
+    For Top Management and Superadmin
+    """
+    try:
+        from routes.schedule_grid import MonthlySchedule, ScheduleGridItem
+        from models.production import ProductionRecord
+        
+        # Get parameters
+        year = request.args.get('year', datetime.now().year, type=int)
+        month = request.args.get('month', datetime.now().month, type=int)
+        
+        # Calculate date range for the month
+        start_date = datetime(year, month, 1).date()
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
+        
+        month_names = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+        
+        # ===== 1. GET MONTHLY TARGETS =====
+        monthly_schedules = MonthlySchedule.query.filter_by(year=year, month=month).all()
+        
+        # Build target data per product
+        targets_by_product = {}
+        total_target_ctn = 0
+        total_target_pcs = 0
+        
+        for ms in monthly_schedules:
+            product_name = ms.product.name if ms.product else f"Product {ms.product_id}"
+            machine_name = ms.machine.name if ms.machine else "Unassigned"
+            
+            pack_per_ctn = 50  # Default
+            if ms.product and ms.product.packaging:
+                pack_per_ctn = ms.product.packaging.packs_per_karton or 50
+            
+            target_ctn = float(ms.target_ctn or 0)
+            target_pcs = target_ctn * pack_per_ctn
+            
+            if product_name not in targets_by_product:
+                targets_by_product[product_name] = {
+                    'product_id': ms.product_id,
+                    'product_name': product_name,
+                    'target_ctn': 0,
+                    'target_pcs': 0,
+                    'actual_ctn': 0,
+                    'actual_pcs': 0,
+                    'good_pcs': 0,
+                    'reject_pcs': 0,
+                    'machines': [],
+                    'pack_per_ctn': pack_per_ctn
+                }
+            
+            targets_by_product[product_name]['target_ctn'] += target_ctn
+            targets_by_product[product_name]['target_pcs'] += target_pcs
+            targets_by_product[product_name]['machines'].append({
+                'machine_id': ms.machine_id,
+                'machine_name': machine_name,
+                'target_ctn': target_ctn
+            })
+            
+            total_target_ctn += target_ctn
+            total_target_pcs += target_pcs
+        
+        # ===== 2. GET ACTUAL PRODUCTION =====
+        # From ShiftProduction for the month
+        shift_productions = ShiftProduction.query.filter(
+            ShiftProduction.production_date >= start_date,
+            ShiftProduction.production_date <= end_date
+        ).all()
+        
+        total_actual_pcs = 0
+        total_good_pcs = 0
+        total_reject_pcs = 0
+        total_downtime_minutes = 0
+        
+        # Downtime analysis
+        downtime_by_category = {
+            'mesin': 0,
+            'operator': 0,
+            'material': 0,
+            'design': 0,
+            'others': 0
+        }
+        
+        # Downtime reasons aggregation
+        downtime_reasons = {}
+        
+        # Machine performance
+        machine_performance = {}
+        
+        for sp in shift_productions:
+            # Get product name
+            product_name = None
+            if sp.product:
+                product_name = sp.product.name
+            elif sp.work_order and sp.work_order.product:
+                product_name = sp.work_order.product.name
+            
+            actual_qty = float(sp.actual_quantity or 0)
+            good_qty = float(sp.good_quantity or 0)
+            reject_qty = float(sp.reject_quantity or 0)
+            
+            total_actual_pcs += actual_qty
+            total_good_pcs += good_qty
+            total_reject_pcs += reject_qty
+            total_downtime_minutes += float(sp.downtime_minutes or 0)
+            
+            # Aggregate by product
+            if product_name and product_name in targets_by_product:
+                targets_by_product[product_name]['actual_pcs'] += actual_qty
+                targets_by_product[product_name]['good_pcs'] += good_qty
+                targets_by_product[product_name]['reject_pcs'] += reject_qty
+                pack_per_ctn = targets_by_product[product_name]['pack_per_ctn']
+                targets_by_product[product_name]['actual_ctn'] = targets_by_product[product_name]['actual_pcs'] / pack_per_ctn
+            
+            # Downtime by category
+            downtime_by_category['mesin'] += float(sp.downtime_mesin or 0)
+            downtime_by_category['operator'] += float(sp.downtime_operator or 0)
+            downtime_by_category['material'] += float(sp.downtime_material or 0)
+            downtime_by_category['design'] += float(sp.downtime_design or 0)
+            downtime_by_category['others'] += float(sp.downtime_others or 0)
+            
+            # Parse downtime reasons from issues
+            if sp.issues:
+                import re
+                issue_parts = sp.issues.split(';')
+                for part in issue_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[.+\])?$', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason = match.group(2).strip()
+                        reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
+                        
+                        # Skip biological needs
+                        excluded = ['istirahat', 'sholat', 'solat', 'toilet', 'makan', 'minum']
+                        if any(kw in reason.lower() for kw in excluded):
+                            continue
+                        
+                        if reason not in downtime_reasons:
+                            downtime_reasons[reason] = {'count': 0, 'total_minutes': 0}
+                        downtime_reasons[reason]['count'] += 1
+                        downtime_reasons[reason]['total_minutes'] += duration
+            
+            # Machine performance
+            machine_name = sp.machine.name if sp.machine else f"Machine {sp.machine_id}"
+            if machine_name not in machine_performance:
+                machine_performance[machine_name] = {
+                    'machine_id': sp.machine_id,
+                    'machine_name': machine_name,
+                    'total_produced': 0,
+                    'total_good': 0,
+                    'total_reject': 0,
+                    'total_downtime': 0,
+                    'shift_count': 0,
+                    'avg_oee': 0,
+                    'oee_sum': 0
+                }
+            
+            machine_performance[machine_name]['total_produced'] += actual_qty
+            machine_performance[machine_name]['total_good'] += good_qty
+            machine_performance[machine_name]['total_reject'] += reject_qty
+            machine_performance[machine_name]['total_downtime'] += float(sp.downtime_minutes or 0)
+            machine_performance[machine_name]['shift_count'] += 1
+            machine_performance[machine_name]['oee_sum'] += float(sp.oee_score or 0)
+        
+        # Calculate averages for machines
+        for machine in machine_performance.values():
+            if machine['shift_count'] > 0:
+                machine['avg_oee'] = round(machine['oee_sum'] / machine['shift_count'], 2)
+            machine['quality_rate'] = round((machine['total_good'] / machine['total_produced'] * 100), 2) if machine['total_produced'] > 0 else 0
+        
+        # ===== 3. CALCULATE ACHIEVEMENT =====
+        total_actual_ctn = total_actual_pcs / 50 if total_target_ctn > 0 else 0  # Use average pack per ctn
+        achievement_pct = round((total_actual_pcs / total_target_pcs * 100), 2) if total_target_pcs > 0 else 0
+        gap_pcs = total_target_pcs - total_actual_pcs
+        gap_ctn = total_target_ctn - total_actual_ctn
+        
+        # ===== 4. TOP DOWNTIME REASONS =====
+        top_downtime = sorted(
+            [{'reason': k, **v} for k, v in downtime_reasons.items()],
+            key=lambda x: x['total_minutes'],
+            reverse=True
+        )[:10]
+        
+        # ===== 5. PRODUCTS BY ACHIEVEMENT =====
+        products_list = []
+        for product_name, data in targets_by_product.items():
+            achievement = round((data['actual_pcs'] / data['target_pcs'] * 100), 2) if data['target_pcs'] > 0 else 0
+            gap = data['target_pcs'] - data['actual_pcs']
+            products_list.append({
+                **data,
+                'achievement_pct': achievement,
+                'gap_pcs': gap,
+                'gap_ctn': gap / data['pack_per_ctn'] if data['pack_per_ctn'] > 0 else 0,
+                'quality_rate': round((data['good_pcs'] / data['actual_pcs'] * 100), 2) if data['actual_pcs'] > 0 else 0
+            })
+        
+        # Sort by gap (worst first)
+        products_list.sort(key=lambda x: x['achievement_pct'])
+        
+        # ===== 6. MACHINES BY PERFORMANCE =====
+        machines_list = sorted(
+            list(machine_performance.values()),
+            key=lambda x: x['avg_oee']
+        )
+        
+        # ===== 7. DAILY TREND =====
+        daily_trend = {}
+        for sp in shift_productions:
+            date_str = sp.production_date.isoformat() if sp.production_date else None
+            if date_str:
+                if date_str not in daily_trend:
+                    daily_trend[date_str] = {'date': date_str, 'produced': 0, 'good': 0, 'reject': 0, 'downtime': 0}
+                daily_trend[date_str]['produced'] += float(sp.actual_quantity or 0)
+                daily_trend[date_str]['good'] += float(sp.good_quantity or 0)
+                daily_trend[date_str]['reject'] += float(sp.reject_quantity or 0)
+                daily_trend[date_str]['downtime'] += float(sp.downtime_minutes or 0)
+        
+        daily_trend_list = sorted(daily_trend.values(), key=lambda x: x['date'])
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'period': {
+                    'year': year,
+                    'month': month,
+                    'month_name': month_names[month],
+                    'start_date': start_date.isoformat(),
+                    'end_date': end_date.isoformat()
+                },
+                'summary': {
+                    'target_ctn': round(total_target_ctn, 2),
+                    'target_pcs': round(total_target_pcs, 2),
+                    'actual_ctn': round(total_actual_ctn, 2),
+                    'actual_pcs': round(total_actual_pcs, 2),
+                    'good_pcs': round(total_good_pcs, 2),
+                    'reject_pcs': round(total_reject_pcs, 2),
+                    'achievement_pct': achievement_pct,
+                    'gap_pcs': round(gap_pcs, 2),
+                    'gap_ctn': round(gap_ctn, 2),
+                    'quality_rate': round((total_good_pcs / total_actual_pcs * 100), 2) if total_actual_pcs > 0 else 0,
+                    'total_downtime_minutes': round(total_downtime_minutes, 2),
+                    'total_downtime_hours': round(total_downtime_minutes / 60, 2)
+                },
+                'downtime_by_category': downtime_by_category,
+                'top_downtime_reasons': top_downtime,
+                'products': products_list,
+                'machines': machines_list,
+                'daily_trend': daily_trend_list
+            }
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500

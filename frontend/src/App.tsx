@@ -210,6 +210,7 @@ import ScheduledReports from './pages/Reports/ScheduledReports'
 import ExecutiveDashboard from './pages/Reports/ExecutiveDashboard'
 import ProductionByProductReport from './pages/Reports/ProductionByProductReport'
 import ExecutiveDashboardAdvanced from './pages/Executive/ExecutiveDashboard'
+import ProductionExecutiveDashboard from './pages/Executive/ProductionExecutiveDashboard'
 import ReportGenerator from './pages/Reports/ReportGenerator'
 import CustomReportBuilder from './pages/Reports/CustomReportBuilder'
 import ReportScheduler from './pages/Reports/ReportScheduler'
@@ -416,6 +417,7 @@ function App() {
         
         {/* Executive Dashboard */}
         <Route path="executive" element={<ExecutiveDashboardAdvanced />} />
+        <Route path="executive/production" element={<ProductionExecutiveDashboard />} />
         
         {/* Products */}
         <Route path="products" element={<ProductsNewPage />} />

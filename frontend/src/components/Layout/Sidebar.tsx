@@ -75,6 +75,7 @@ function SidebarContent() {
       groupName: 'MAIN',
       items: [
         { name: 'Dashboard', href: '/app', icon: HomeIcon, permission: 'dashboard' },
+        { name: 'Production Executive', href: '/app/executive/production', icon: PresentationChartLineIcon, permission: 'dashboard' },
       ]
     },
     {
