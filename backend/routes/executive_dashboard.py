@@ -967,17 +967,19 @@ def get_production_executive_dashboard():
             # Parse downtime reasons from issues
             if sp.issues:
                 import re
+                from utils import detect_downtime_category
+                
                 issue_parts = sp.issues.split(';')
                 for part in issue_parts:
                     part = part.strip()
                     if not part:
                         continue
-                    # Match pattern: "XX menit - reason [category]"
+                    # Match pattern: "XX menit - reason [category]" or "XX menit - reason"
                     match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[([^\]]+)\])?\s*$', part, re.IGNORECASE)
                     if match:
                         duration = int(match.group(1))
                         reason = match.group(2).strip()
-                        category = match.group(3).strip() if match.group(3) else 'others'
+                        explicit_category = match.group(3).strip() if match.group(3) else None
                         
                         # Clean reason from any remaining brackets
                         reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
@@ -986,6 +988,12 @@ def get_production_executive_dashboard():
                         excluded = ['istirahat', 'sholat', 'solat', 'toilet', 'makan', 'minum']
                         if any(kw in reason.lower() for kw in excluded):
                             continue
+                        
+                        # Auto-detect category if not explicitly provided
+                        if explicit_category:
+                            category = explicit_category.lower()
+                        else:
+                            category = detect_downtime_category(reason)
                         
                         # Use reason + category as unique key
                         key = f"{reason}|{category}"

@@ -75,3 +75,68 @@ def admin_required():
             return fn(*args, **kwargs)
         return decorator
     return wrapper
+
+def detect_downtime_category(issue_text: str) -> str:
+    """
+    Auto-detect downtime category from issue description keywords.
+    Returns: 'mesin', 'operator', 'material', 'design', or 'others'
+    """
+    if not issue_text:
+        return 'others'
+    
+    text_lower = issue_text.lower()
+    
+    # OPERATOR keywords - check first for specific patterns
+    operator_keywords = [
+        'keluar jalur (sambungan)', 'sambungan', 'salah setting', 'salah pasang',
+        'operator error', 'human error', 'kesalahan operator', 'lupa', 'telat',
+        'tidak fokus', 'kurang teliti', 'salah input', 'salah ukur'
+    ]
+    for kw in operator_keywords:
+        if kw in text_lower:
+            return 'operator'
+    
+    # MATERIAL/RAW MATERIAL keywords
+    material_keywords = [
+        'keluar jalur (kain terlalu tipis', 'keluar jalur (kain gembos', 
+        'keluar jalur (kain tidak sesuai', 'kain terlalu tipis', 'kain gembos',
+        'kain tidak sesuai', 'material cacat', 'bahan cacat', 'kain cacat',
+        'material rusak', 'bahan rusak', 'kain rusak', 'material habis',
+        'bahan habis', 'kain habis', 'material kurang', 'bahan kurang',
+        'benang putus', 'benang habis', 'kualitas kain', 'kain tipis',
+        'raw material', 'bahan baku'
+    ]
+    for kw in material_keywords:
+        if kw in text_lower:
+            return 'material'
+    
+    # MESIN keywords - check after material to avoid false positives
+    mesin_keywords = [
+        'keluar jalur (bak mesin', 'bak mesin', 'mesin rusak', 'mesin error',
+        'mesin mati', 'mesin trouble', 'mesin macet', 'breakdown', 'maintenance',
+        'perbaikan mesin', 'ganti sparepart', 'sparepart', 'sensor error',
+        'motor rusak', 'bearing', 'belt putus', 'overheating', 'overheat',
+        'listrik mati', 'power failure', 'angin habis', 'compressor',
+        'pneumatic', 'hidrolik', 'hydraulic', 'kalibrasi', 'calibration',
+        'jarum patah', 'jarum bengkok', 'tension', 'needle'
+    ]
+    for kw in mesin_keywords:
+        if kw in text_lower:
+            return 'mesin'
+    
+    # DESIGN keywords
+    design_keywords = [
+        'design error', 'desain salah', 'pattern salah', 'pola salah',
+        'ukuran salah', 'spec salah', 'spesifikasi salah', 'revisi design',
+        'revisi desain', 'sample', 'prototype', 'trial', 'testing design'
+    ]
+    for kw in design_keywords:
+        if kw in text_lower:
+            return 'design'
+    
+    # Generic "keluar jalur" without specific cause -> check context
+    if 'keluar jalur' in text_lower:
+        # If no specific cause found, default to mesin (most common)
+        return 'mesin'
+    
+    return 'others'

@@ -107,6 +107,8 @@ const CATEGORY_KEYWORDS = {
   // MESIN (Machine/Equipment): Semua masalah teknis mesin dan komponen
   // Referensi: seal bocor, pisau tumpul, belt putus, sensor error, dll
   mesin: [
+    // Kain keluar jalur karena mesin (bak mesin)
+    'keluar jalur (bak mesin)', 'kain keluar jalur (bak mesin)', 'bak mesin',
     // Seal & Sealer
     'seal', 'sealer', 'seal bocor', 'seal samping bocor', 'seal bawah bocor',
     'seal tidak ngeseal', 'seal bawah tdk ngeseal', 'sealer rusak',
@@ -147,6 +149,11 @@ const CATEGORY_KEYWORDS = {
   ],
   // MATERIAL (Raw Material): Masalah bahan baku
   material: [
+    // Kain keluar jalur karena kualitas kain (raw material issue)
+    'keluar jalur (kain terlalu tipis)', 'keluar jalur (kain gembos)', 
+    'keluar jalur (kain tidak sesuai)', 'kain terlalu tipis', 'kain gembos',
+    'kain tidak sesuai',
+    // General material issues
     'kain rusak', 'kain cacat', 'kain sobek', 'kain kotor', 'kain belang',
     'kain jelek', 'kain reject', 'kain defect', 'kain tidak bagus',
     'bahan rusak', 'bahan cacat', 'bahan jelek', 'bahan reject',
@@ -186,6 +193,8 @@ const CATEGORY_KEYWORDS = {
     // Setting (semua yang ada kata "setting" masuk operator)
     'setting', 'setting mc', 'setting mesin', 'setting ulang', 'salah setting',
     'setup produk', 'setup mesin',
+    // Kain keluar jalur karena operator (sambungan)
+    'keluar jalur (sambungan)', 'kain keluar jalur (sambungan)', 'sambungan',
     // Kesalahan operator
     'kesalahan operator', 'operator salah', 'human error',
     'salah parameter', 'salah input', 'salah prosedur', 'kelalaian operator',
@@ -219,13 +228,18 @@ const CATEGORY_KEYWORDS = {
 };
 
 // Function to auto-detect category from reason text
-// Urutan pengecekan: mesin -> material -> design -> operator -> others
-// MESIN dicek duluan karena paling banyak keyword spesifik (pisau, seal, belt, dll)
+// Urutan pengecekan: operator -> material -> mesin -> design -> others
+// OPERATOR dan MATERIAL dicek duluan untuk "keluar jalur" dengan penyebab spesifik
 const detectCategory = (reason: string): string => {
   const lowerReason = reason.toLowerCase();
   
-  // Urutan prioritas pengecekan - MESIN DULUAN karena paling spesifik
-  const categoryOrder = ['mesin', 'material', 'design', 'operator', 'others'];
+  // Urutan prioritas pengecekan:
+  // 1. OPERATOR - untuk "keluar jalur (sambungan)" 
+  // 2. MATERIAL - untuk "keluar jalur (kain tipis/gembos/tidak sesuai)"
+  // 3. MESIN - untuk "keluar jalur (bak mesin)" dan masalah mesin lainnya
+  // 4. DESIGN - untuk changeover, sanitasi
+  // 5. OTHERS - default
+  const categoryOrder = ['operator', 'material', 'mesin', 'design', 'others'];
   
   for (const category of categoryOrder) {
     const keywords = CATEGORY_KEYWORDS[category as keyof typeof CATEGORY_KEYWORDS];
