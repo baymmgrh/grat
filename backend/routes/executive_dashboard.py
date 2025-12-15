@@ -972,10 +972,14 @@ def get_production_executive_dashboard():
                     part = part.strip()
                     if not part:
                         continue
-                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[.+\])?$', part, re.IGNORECASE)
+                    # Match pattern: "XX menit - reason [category]"
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[([^\]]+)\])?\s*$', part, re.IGNORECASE)
                     if match:
                         duration = int(match.group(1))
                         reason = match.group(2).strip()
+                        category = match.group(3).strip() if match.group(3) else 'others'
+                        
+                        # Clean reason from any remaining brackets
                         reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
                         
                         # Skip biological needs
@@ -983,10 +987,12 @@ def get_production_executive_dashboard():
                         if any(kw in reason.lower() for kw in excluded):
                             continue
                         
-                        if reason not in downtime_reasons:
-                            downtime_reasons[reason] = {'count': 0, 'total_minutes': 0}
-                        downtime_reasons[reason]['count'] += 1
-                        downtime_reasons[reason]['total_minutes'] += duration
+                        # Use reason + category as unique key
+                        key = f"{reason}|{category}"
+                        if key not in downtime_reasons:
+                            downtime_reasons[key] = {'reason': reason, 'category': category, 'count': 0, 'total_minutes': 0}
+                        downtime_reasons[key]['count'] += 1
+                        downtime_reasons[key]['total_minutes'] += duration
             
             # Machine performance
             machine_name = sp.machine.name if sp.machine else f"Machine {sp.machine_id}"
@@ -1024,7 +1030,7 @@ def get_production_executive_dashboard():
         
         # ===== 4. TOP DOWNTIME REASONS =====
         top_downtime = sorted(
-            [{'reason': k, **v} for k, v in downtime_reasons.items()],
+            list(downtime_reasons.values()),
             key=lambda x: x['total_minutes'],
             reverse=True
         )[:10]

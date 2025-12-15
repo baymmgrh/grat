@@ -48,6 +48,7 @@ interface DashboardData {
   };
   top_downtime_reasons: Array<{
     reason: string;
+    category: string;
     count: number;
     total_minutes: number;
   }>;
@@ -363,6 +364,7 @@ const ProductionExecutiveDashboard: React.FC = () => {
                 <tr className="bg-gray-50">
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">#</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Penyebab</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Kategori</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Frekuensi</th>
                   <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Waktu</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Impact</th>
@@ -372,10 +374,29 @@ const ProductionExecutiveDashboard: React.FC = () => {
                 {top_downtime_reasons.map((item, index) => {
                   const maxMinutes = top_downtime_reasons[0]?.total_minutes || 1;
                   const percentage = (item.total_minutes / maxMinutes) * 100;
+                  const categoryColors: Record<string, string> = {
+                    mesin: 'bg-red-100 text-red-700',
+                    operator: 'bg-yellow-100 text-yellow-700',
+                    material: 'bg-blue-100 text-blue-700',
+                    design: 'bg-purple-100 text-purple-700',
+                    others: 'bg-gray-100 text-gray-700'
+                  };
+                  const categoryLabels: Record<string, string> = {
+                    mesin: 'Mesin',
+                    operator: 'Operator',
+                    material: 'Material',
+                    design: 'Design',
+                    others: 'Lainnya'
+                  };
                   return (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{index + 1}</td>
                       <td className="px-4 py-3 text-sm text-gray-700">{item.reason}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryColors[item.category] || categoryColors.others}`}>
+                          {categoryLabels[item.category] || item.category}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-sm text-right text-gray-600">{item.count}x</td>
                       <td className="px-4 py-3 text-sm text-right font-medium text-red-600">
                         {item.total_minutes} menit
