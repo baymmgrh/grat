@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import axiosInstance from '../../utils/axiosConfig';
+import SearchableSelect from '../../components/SearchableSelect';
 import {
   CalendarDaysIcon,
   PlusIcon,
@@ -449,16 +450,16 @@ const WeeklyPlanDetail: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Produk *</label>
-                <select
-                  value={formData.product_id}
-                  onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                >
-                  <option value="">Pilih Produk</option>
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  options={products.map((p) => ({
+                    id: p.id,
+                    code: p.code,
+                    name: p.name
+                  }))}
+                  value={formData.product_id ? parseInt(formData.product_id) : null}
+                  onChange={(val) => setFormData({ ...formData, product_id: val ? String(val) : '' })}
+                  placeholder="Ketik untuk mencari produk..."
+                />
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -499,16 +500,16 @@ const WeeklyPlanDetail: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Mesin</label>
-                  <select
-                    value={formData.machine_id}
-                    onChange={(e) => setFormData({ ...formData, machine_id: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="">Pilih Mesin</option>
-                    {machines.map((m) => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    options={machines.map((m) => ({
+                      id: m.id,
+                      code: m.code || m.name,
+                      name: m.name
+                    }))}
+                    value={formData.machine_id ? parseInt(formData.machine_id) : null}
+                    onChange={(val) => setFormData({ ...formData, machine_id: val ? String(val) : '' })}
+                    placeholder="Ketik untuk mencari mesin..."
+                  />
                 </div>
               </div>
               

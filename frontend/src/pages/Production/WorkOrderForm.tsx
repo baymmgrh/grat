@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import axiosInstance from '../../utils/axiosConfig'
 import LoadingSpinner from '../../components/Common/LoadingSpinner'
+import SearchableSelect from '../../components/SearchableSelect'
 import {
   ArrowLeftIcon,
   CalendarDaysIcon,
@@ -134,7 +135,7 @@ const navigate = useNavigate()
   // Pack per Karton override (can be edited by user)
   const [packPerKarton, setPackPerKarton] = useState<number>(1)
   
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<WorkOrderFormData>({
+  const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<WorkOrderFormData>({
     defaultValues: {
       priority: 'medium'
     }
@@ -420,18 +421,24 @@ const navigate = useNavigate()
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Product *
               </label>
-              <select
-                {...register('product_id', { required: 'Product is required' })}
-                className="input"
-                disabled={isEdit}
-              >
-                <option value="">Select a product</option>
-                {bomProducts.map((product) => (
-                  <option key={product.product_id} value={product.product_id}>
-                    {product.product_code} - {product.product_name}
-                  </option>
-                ))}
-              </select>
+              <Controller
+                name="product_id"
+                control={control}
+                rules={{ required: 'Product is required' }}
+                render={({ field }) => (
+                  <SearchableSelect
+                    options={bomProducts.map(p => ({
+                      id: p.product_id,
+                      code: p.product_code,
+                      name: p.product_name
+                    }))}
+                    value={field.value}
+                    onChange={(val) => field.onChange(val)}
+                    placeholder="Ketik untuk mencari produk..."
+                    disabled={isEdit}
+                  />
+                )}
+              />
               {errors.product_id && (
                 <p className="mt-1 text-sm text-red-600">{errors.product_id.message}</p>
               )}

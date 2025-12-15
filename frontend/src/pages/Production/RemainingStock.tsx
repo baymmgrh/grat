@@ -9,6 +9,7 @@ import {
   ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 import axiosInstance from '../../utils/axiosConfig';
+import SearchableSelect from '../../components/SearchableSelect';
 import { toast } from 'react-hot-toast';
 
 interface RemainingStockItem {
@@ -379,18 +380,16 @@ export default function RemainingStock() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Pilih dari Database (Opsional)
                 </label>
-                <select
-                  value={formData.product_id}
-                  onChange={(e) => handleProductSelect(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">-- Input Manual --</option>
-                  {products.map(product => (
-                    <option key={product.id} value={product.id}>
-                      {product.kode_produk} - {product.nama_produk}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  options={products.map(product => ({
+                    id: product.id,
+                    code: product.kode_produk,
+                    name: product.nama_produk
+                  }))}
+                  value={formData.product_id ? parseInt(formData.product_id) : null}
+                  onChange={(val) => handleProductSelect(val ? String(val) : '')}
+                  placeholder="Ketik untuk mencari produk atau input manual..."
+                />
               </div>
 
               {/* Product Name */}

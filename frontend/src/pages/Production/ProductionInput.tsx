@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
+import SearchableSelect from '../../components/SearchableSelect';
 import {
   ExclamationTriangleIcon as AlertTriangle,
   ArrowPathIcon as RefreshCw,
@@ -516,22 +517,16 @@ const ProductionInput: React.FC = () => {
                 <label htmlFor="product_id" className="block text-sm font-medium text-gray-700 mb-1">
                   Produk *
                 </label>
-                <select
-                  id="product_id"
-                  value={formData.product_id}
-                  onChange={(e) => handleInputChange('product_id', e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                    validationErrors.product_id ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  required
-                >
-                  <option value="">Pilih Produk</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id.toString()}>
-                      {product.code} - {product.name}
-                    </option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  options={products.map((product) => ({
+                    id: product.id,
+                    code: product.code,
+                    name: product.name
+                  }))}
+                  value={formData.product_id ? parseInt(formData.product_id) : null}
+                  onChange={(val) => handleInputChange('product_id', val ? String(val) : '')}
+                  placeholder="Ketik untuk mencari produk..."
+                />
                 {validationErrors.product_id && (
                   <p className="text-red-500 text-sm mt-1">{validationErrors.product_id}</p>
                 )}
