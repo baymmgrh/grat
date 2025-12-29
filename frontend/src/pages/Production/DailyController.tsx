@@ -1,0 +1,489 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  CalendarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  CogIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+  PauseIcon,
+  CubeIcon,
+  ChartBarIcon,
+  EyeIcon
+} from '@heroicons/react/24/outline';
+import axiosInstance from '../../utils/axiosConfig';
+import LoadingSpinner from '../../components/Common/LoadingSpinner';
+
+interface ShiftData {
+  shift: number;
+  runtime_minutes: number;
+  downtime_minutes: number;
+  idle_time_minutes: number;
+  grade_a: number;
+  grade_a_carton: number;
+  grade_b: number;
+  grade_c: number;
+  total: number;
+  product_name?: string;
+  pack_per_carton?: number;
+  wo_number?: string;
+}
+
+interface DowntimeItem {
+  reason: string;
+  duration_minutes: number;
+}
+
+interface MachineData {
+  machine_id: number;
+  machine_name: string;
+  machine_code?: string;
+  target_efficiency: number;
+  date: string;
+  shifts: ShiftData[];
+  total_planned: number;
+  total_runtime: number;
+  total_downtime: number;
+  total_idle: number;
+  total_output: number;
+  total_grade_a: number;
+  total_grade_b: number;
+  total_grade_c: number;
+  total_target: number;
+  products: string[];
+  top_3_downtime: DowntimeItem[];
+  efficiency: number;
+  machine_efficiency: number;
+  quality: number;
+  mrt: number;
+  total_time: number;
+  machine_speed: number;
+}
+
+const DailyController: React.FC = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [machines, setMachines] = useState<MachineData[]>([]);
+  const [expandedMachine, setExpandedMachine] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchDailyData();
+  }, [selectedDate]);
+
+  const fetchDailyData = async () => {
+    setLoading(true);
+    try {
+      const response = await axiosInstance.get(`/api/oee/daily-controller?date=${selectedDate}`);
+      setMachines(response.data.machines || []);
+    } catch (error) {
+      console.error('Error fetching daily controller data:', error);
+      setMachines([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const changeDate = (days: number) => {
+    const date = new Date(selectedDate);
+    date.setDate(date.getDate() + days);
+    setSelectedDate(date.toISOString().split('T')[0]);
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    return `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  };
+
+  const getShiftLabel = (shift: number) => {
+    switch (shift) {
+      case 1: return '06:30-15:00';
+      case 2: return '15:00-23:00';
+      case 3: return '23:00-06:30';
+      default: return '';
+    }
+  };
+
+  const toggleExpand = (machineId: number) => {
+    setExpandedMachine(expandedMachine === machineId ? null : machineId);
+  };
+
+  // Calculate totals
+  const totalMachines = machines.length;
+  const totalOutput = machines.reduce((sum, m) => sum + m.total_output, 0);
+  const totalRuntime = machines.reduce((sum, m) => sum + m.total_runtime, 0);
+  const totalDowntime = machines.reduce((sum, m) => sum + m.total_downtime, 0);
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+          <ChartBarIcon className="h-7 w-7 text-blue-600" />
+          Daily Controller
+        </h1>
+        <p className="text-slate-500 mt-1">Monitoring produksi semua mesin per hari</p>
+      </div>
+
+      {/* Date Selector */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => changeDate(-1)}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <ChevronLeftIcon className="h-5 w-5 text-slate-600" />
+          </button>
+          
+          <div className="flex items-center gap-3">
+            <CalendarIcon className="h-5 w-5 text-blue-600" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="text-lg font-semibold text-slate-800 border-none focus:ring-0 cursor-pointer"
+            />
+            <span className="text-slate-500">|</span>
+            <span className="text-slate-600">{formatDate(selectedDate)}</span>
+          </div>
+
+          <button
+            onClick={() => changeDate(1)}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            <ChevronRightIcon className="h-5 w-5 text-slate-600" />
+          </button>
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-4 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <CogIcon className="h-5 w-5 opacity-80" />
+            <span className="text-sm opacity-80">Mesin Aktif</span>
+          </div>
+          <p className="text-3xl font-bold">{totalMachines}</p>
+        </div>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-4 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <CubeIcon className="h-5 w-5 opacity-80" />
+            <span className="text-sm opacity-80">Total Output</span>
+          </div>
+          <p className="text-3xl font-bold">{totalOutput.toLocaleString()}</p>
+        </div>
+        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-4 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <ClockIcon className="h-5 w-5 opacity-80" />
+            <span className="text-sm opacity-80">Total Runtime</span>
+          </div>
+          <p className="text-3xl font-bold">{totalRuntime} <span className="text-lg">menit</span></p>
+        </div>
+        <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl p-4 text-white">
+          <div className="flex items-center gap-2 mb-2">
+            <ExclamationTriangleIcon className="h-5 w-5 opacity-80" />
+            <span className="text-sm opacity-80">Total Downtime</span>
+          </div>
+          <p className="text-3xl font-bold">{totalDowntime} <span className="text-lg">menit</span></p>
+        </div>
+      </div>
+
+      {/* Machines List */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <LoadingSpinner />
+        </div>
+      ) : machines.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
+          <CogIcon className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-slate-600">Tidak ada data produksi</h3>
+          <p className="text-slate-400 mt-1">Belum ada hasil produksi yang diinput untuk tanggal ini</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {machines.map((machine) => (
+            <div
+              key={machine.machine_id}
+              className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+            >
+              {/* Machine Header - Always visible */}
+              <div
+                className="p-4 cursor-pointer hover:bg-slate-50 transition-colors"
+                onClick={() => toggleExpand(machine.machine_id)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center">
+                      <CogIcon className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-800 text-lg">{machine.machine_name}</h3>
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                          📅 {new Date(machine.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-500">
+                        {machine.products.length > 0 ? machine.products.join(', ') : 'No product'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick Stats */}
+                  <div className="flex items-center gap-4">
+                    <div className="text-center px-2">
+                      <p className="text-xs text-slate-400">Eff. Waktu (Target: {machine.target_efficiency || 60}%)</p>
+                      <p className={`text-lg font-bold ${machine.efficiency >= (machine.target_efficiency || 60) ? 'text-green-600' : machine.efficiency >= (machine.target_efficiency || 60) * 0.7 ? 'text-yellow-600' : 'text-red-600'}`}>
+                        {machine.efficiency}%
+                        {machine.efficiency >= (machine.target_efficiency || 60) && <span className="ml-1 text-xs">✓</span>}
+                        {machine.efficiency < (machine.target_efficiency || 60) * 0.7 && <span className="ml-1 text-xs">⚠</span>}
+                      </p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-slate-400">Eff. Mesin (Target: 60%)</p>
+                      <p className={`text-lg font-bold ${machine.machine_efficiency >= 60 ? 'text-green-600' : machine.machine_efficiency >= 42 ? 'text-yellow-600' : 'text-red-600'}`}>
+                        {machine.machine_efficiency || 0}%
+                        {machine.machine_efficiency >= 60 && <span className="ml-1 text-xs">✓</span>}
+                        {machine.machine_efficiency < 42 && <span className="ml-1 text-xs">⚠</span>}
+                      </p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-slate-400">Quality</p>
+                      <p className={`text-lg font-bold ${machine.quality >= 95 ? 'text-green-600' : machine.quality >= 85 ? 'text-yellow-600' : 'text-red-600'}`}>
+                        {machine.quality}%
+                      </p>
+                    </div>
+                    <div className="h-8 w-px bg-slate-200"></div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-slate-400">Output</p>
+                      <p className="text-lg font-bold text-slate-800">{machine.total_output.toLocaleString()}</p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-slate-400">Runtime</p>
+                      <p className="text-lg font-bold text-green-600">{machine.total_runtime}m</p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-slate-400">Down</p>
+                      <p className="text-lg font-bold text-red-600">{machine.total_downtime}m</p>
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs text-slate-400">Idle</p>
+                      <p className="text-lg font-bold text-orange-600">{machine.total_idle}m</p>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/app/production/machines/${machine.machine_id}`);
+                      }}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="View Detail"
+                    >
+                      <EyeIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expanded Details */}
+              {expandedMachine === machine.machine_id && (
+                <div className="border-t border-slate-200 p-4 bg-slate-50">
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Shift Details */}
+                    <div>
+                      <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                        <ClockIcon className="h-4 w-4" />
+                        Detail per Shift
+                      </h4>
+                      <div className="space-y-2">
+                        {machine.shifts.map((shift) => (
+                          <div key={shift.shift} className="bg-white rounded-lg p-3 border border-slate-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-medium text-slate-800">
+                                Shift {shift.shift} <span className="text-xs text-slate-400">({getShiftLabel(shift.shift)})</span>
+                              </span>
+                              <span className="text-sm text-blue-600 font-medium">{shift.total.toLocaleString()} pcs</span>
+                            </div>
+                            <div className="grid grid-cols-6 gap-2 text-xs">
+                              <div className="bg-green-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Grade A</p>
+                                <p className="font-bold text-green-600">{shift.grade_a.toLocaleString()}</p>
+                                {shift.grade_a_carton > 0 && (
+                                  <p className="text-xs text-green-500">{shift.grade_a_carton} ctn</p>
+                                )}
+                              </div>
+                              <div className="bg-yellow-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Grade B</p>
+                                <p className="font-bold text-yellow-600">{shift.grade_b.toLocaleString()}</p>
+                              </div>
+                              <div className="bg-red-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Grade C</p>
+                                <p className="font-bold text-red-600">{shift.grade_c.toLocaleString()}</p>
+                              </div>
+                              <div className="bg-emerald-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Runtime</p>
+                                <p className="font-bold text-emerald-600">{shift.runtime_minutes}m</p>
+                              </div>
+                              <div className="bg-red-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Down</p>
+                                <p className="font-bold text-red-600">{shift.downtime_minutes}m</p>
+                              </div>
+                              <div className="bg-orange-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Idle</p>
+                                <p className="font-bold text-orange-600">{shift.idle_time_minutes}m</p>
+                              </div>
+                            </div>
+                            {shift.wo_number && (
+                              <p className="text-xs text-slate-400 mt-2">WO: {shift.wo_number}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Daily Summary & Top Downtime */}
+                    <div className="space-y-4">
+                      {/* Efficiency Calculation */}
+                      <div>
+                        <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                          <ChartBarIcon className="h-4 w-4" />
+                          Perhitungan Efisiensi
+                        </h4>
+                        <div className="bg-white rounded-lg p-4 border border-slate-200">
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Speed Mesin:</span>
+                              <span className="font-medium">{machine.machine_speed?.toLocaleString() || 0} pcs/menit</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Grade A:</span>
+                              <div className="text-right">
+                                <span className="font-medium text-green-600">{machine.total_grade_a?.toLocaleString() || 0} pcs</span>
+                                {machine.shifts[0]?.pack_per_carton > 0 && (
+                                  <p className="text-xs text-green-500">
+                                    = {Math.floor(machine.total_grade_a / machine.shifts[0].pack_per_carton)} ctn
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex justify-between border-t pt-2">
+                              <span className="text-slate-500">MRT (Grade A ÷ Speed):</span>
+                              <span className="font-bold text-blue-600">{machine.mrt || 0} menit</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Downtime:</span>
+                              <span className="font-medium text-red-600">{machine.total_downtime || 0} menit</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Idle Time:</span>
+                              <span className="font-medium text-orange-600">{machine.total_idle || 0} menit</span>
+                            </div>
+                            <div className="flex justify-between border-t pt-2">
+                              <span className="text-slate-500">Total Waktu:</span>
+                              <span className="font-bold">{machine.total_time || 0} menit</span>
+                            </div>
+                            <div className={`flex justify-between p-2 rounded mt-2 ${machine.efficiency >= (machine.target_efficiency || 60) ? 'bg-green-50' : machine.efficiency >= (machine.target_efficiency || 60) * 0.7 ? 'bg-yellow-50' : 'bg-red-50'}`}>
+                              <span className="font-semibold text-slate-700">Efisiensi Waktu (MRT ÷ Total):</span>
+                              <div className="text-right">
+                                <span className={`text-xl font-bold ${machine.efficiency >= (machine.target_efficiency || 60) ? 'text-green-600' : machine.efficiency >= (machine.target_efficiency || 60) * 0.7 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {machine.efficiency || 0}%
+                                </span>
+                                <p className="text-xs text-slate-500">
+                                  Target: {machine.target_efficiency || 60}%
+                                  {machine.efficiency >= (machine.target_efficiency || 60) ? ' ✓ Tercapai' : ' ✗ Belum tercapai'}
+                                </p>
+                              </div>
+                            </div>
+                            {/* Machine Efficiency = Grade A / Target */}
+                            <div className={`flex justify-between p-2 rounded mt-2 ${machine.machine_efficiency >= 60 ? 'bg-green-50' : machine.machine_efficiency >= 42 ? 'bg-yellow-50' : 'bg-red-50'}`}>
+                              <span className="font-semibold text-slate-700">Efisiensi Mesin (A ÷ Target):</span>
+                              <div className="text-right">
+                                <span className={`text-xl font-bold ${machine.machine_efficiency >= 60 ? 'text-green-600' : machine.machine_efficiency >= 42 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                  {machine.machine_efficiency || 0}%
+                                </span>
+                                <p className="text-xs text-slate-500">
+                                  Target: 60% | {machine.total_grade_a?.toLocaleString() || 0} / {machine.total_target?.toLocaleString() || 0}
+                                  {machine.machine_efficiency >= 60 ? ' ✓ Tercapai' : ' ✗ Belum tercapai'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Daily Summary */}
+                      <div>
+                        <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                          <CubeIcon className="h-4 w-4" />
+                          Ringkasan Output
+                        </h4>
+                        <div className="bg-white rounded-lg p-4 border border-slate-200">
+                          <div className="grid grid-cols-4 gap-3">
+                            <div className="text-center">
+                              <p className="text-xs text-slate-400">Grade A</p>
+                              <p className="text-xl font-bold text-green-600">{machine.total_grade_a?.toLocaleString() || 0}</p>
+                              {machine.shifts[0]?.pack_per_carton > 0 && (
+                                <p className="text-xs text-green-500">
+                                  {Math.floor(machine.total_grade_a / machine.shifts[0].pack_per_carton)} ctn
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-slate-400">Grade B</p>
+                              <p className="text-xl font-bold text-yellow-600">{machine.total_grade_b?.toLocaleString() || 0}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-slate-400">Grade C</p>
+                              <p className="text-xl font-bold text-red-600">{machine.total_grade_c?.toLocaleString() || 0}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-xs text-slate-400">Total</p>
+                              <p className="text-xl font-bold text-blue-600">{machine.total_output?.toLocaleString() || 0}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Top 3 Downtime */}
+                      <div>
+                        <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                          <ExclamationTriangleIcon className="h-4 w-4" />
+                          Top 3 Downtime
+                        </h4>
+                        <div className="bg-white rounded-lg p-4 border border-slate-200">
+                          {machine.top_3_downtime.length > 0 ? (
+                            <div className="space-y-2">
+                              {machine.top_3_downtime.map((dt, idx) => (
+                                <div key={idx} className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                                      idx === 0 ? 'bg-red-500' : idx === 1 ? 'bg-orange-500' : 'bg-yellow-500'
+                                    }`}>
+                                      {idx + 1}
+                                    </span>
+                                    <span className="text-sm text-slate-700">{dt.reason}</span>
+                                  </div>
+                                  <span className="text-sm font-medium text-red-600">{dt.duration_minutes} menit</span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-400 text-center">Tidak ada downtime</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default DailyController;
