@@ -19,7 +19,8 @@ from .hr import Employee, Department, ShiftSchedule, Attendance, Leave, Employee
 from .hr_extended import (
     PayrollPeriod, PayrollRecord, SalaryComponent, EmployeeSalaryComponent,
     AppraisalCycle, AppraisalTemplate, AppraisalCriteria, EmployeeAppraisal, AppraisalScore,
-    TrainingCategory, TrainingProgram, TrainingSession, TrainingEnrollment, TrainingRequest
+    TrainingCategory, TrainingProgram, TrainingSession, TrainingEnrollment, TrainingRequest,
+    WorkRoster, WorkRosterAssignment, EmployeeSkill, RosterTemplate
 )
 from .maintenance import MaintenanceSchedule, MaintenanceRecord, MaintenanceTask, EquipmentHistory
 from .rd import ResearchProject, Experiment, ProductDevelopment, RDMaterial, ResearchReport, Prototype, ProductTestResult
@@ -33,6 +34,7 @@ from .warehouse_enhanced import (
     WarehouseAnalytics, ProductABCClassification, InventoryReorderPoint,
     WarehouseAlert, WarehouseOptimization, StockMovementForecast
 )
+from .stock_opname import StockOpnameOrder, StockOpnameItem
 from .notification import Notification, SystemAlert
 from .backup import BackupRecord
 from .integration import IntegrationLog, ThirdPartyAPI
@@ -92,6 +94,7 @@ __all__ = [
     'PayrollPeriod', 'PayrollRecord', 'SalaryComponent', 'EmployeeSalaryComponent',
     'AppraisalCycle', 'AppraisalTemplate', 'AppraisalCriteria', 'EmployeeAppraisal', 'AppraisalScore',
     'TrainingCategory', 'TrainingProgram', 'TrainingSession', 'TrainingEnrollment', 'TrainingRequest',
+    'WorkRoster', 'WorkRosterAssignment', 'EmployeeSkill', 'RosterTemplate',
     # Maintenance models
     'MaintenanceSchedule', 'MaintenanceRecord', 'MaintenanceTask', 'EquipmentHistory',
     # R&D models

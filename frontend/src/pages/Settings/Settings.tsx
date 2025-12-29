@@ -181,7 +181,6 @@ const Settings: React.FC = () => {
     { id: 'backup', name: t('settings.backup_restore'), icon: DocumentArrowDownIcon },
     { id: 'notifications', name: t('settings.notifications'), icon: BellIcon },
     { id: 'email', name: 'Email Settings', icon: EnvelopeIcon },
-    { id: 'kpi', name: 'KPI Targets', icon: ChartBarIcon },
     { id: 'import', name: t('settings.data_import'), icon: DocumentArrowUpIcon },
     { id: 'advanced', name: 'Advanced Settings', icon: KeyIcon },
     { id: 'integration', name: 'Integration', icon: LinkIcon },
@@ -1181,74 +1180,6 @@ const Settings: React.FC = () => {
               <p className="text-sm text-yellow-800">
                 <strong>Note:</strong> Email configuration is done in the backend <code className="bg-yellow-100 px-1 rounded">.env</code> file. 
                 Visit the Email Settings page for detailed setup instructions.
-              </p>
-            </div>
-          </div>
-        );
-
-      case 'kpi':
-        return (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="text-lg font-semibold">KPI Target Settings</h3>
-              <button
-                onClick={() => navigate('/app/settings/kpi-targets')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center"
-              >
-                <ChartBarIcon className="h-4 w-4 mr-2" />
-                Open KPI Settings
-              </button>
-            </div>
-
-            {/* KPI Settings Info Card */}
-            <div className="bg-indigo-50 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-700 rounded-lg p-6">
-              <div className="flex items-center mb-4">
-                <ChartBarIcon className="h-8 w-8 text-indigo-600 mr-3" />
-                <div>
-                  <h4 className="text-lg font-semibold text-indigo-900 dark:text-indigo-100">Performance Scorecard Configuration</h4>
-                  <p className="text-sm text-indigo-700 dark:text-indigo-200">Configure KPI targets for executive dashboard</p>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-4">
-                  <h5 className="font-medium text-gray-900 dark:text-white mb-2">📊 Available KPIs:</h5>
-                  <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
-                    <li>• Revenue Achievement</li>
-                    <li>• OEE (Overall Equipment Effectiveness)</li>
-                    <li>• Quality Pass Rate</li>
-                    <li>• On-Time Delivery Rate</li>
-                    <li>• Inventory Turnover</li>
-                    <li>• Production Output</li>
-                  </ul>
-                </div>
-                
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-4">
-                  <h5 className="font-medium text-gray-900 dark:text-white mb-2">⚙️ Configurable Settings:</h5>
-                  <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
-                    <li>• Target values per KPI</li>
-                    <li>• Warning thresholds</li>
-                    <li>• Critical thresholds</li>
-                    <li>• Period type (monthly/yearly)</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="flex justify-center">
-                <button
-                  onClick={() => navigate('/app/settings/kpi-targets')}
-                  className="bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700 flex items-center"
-                >
-                  <ChartBarIcon className="h-5 w-5 mr-2" />
-                  Configure KPI Targets
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                <strong>Tip:</strong> KPI targets are used in the Executive Dashboard Performance Scorecard. 
-                Adjust targets based on your company's goals and industry benchmarks.
               </p>
             </div>
           </div>

@@ -108,12 +108,19 @@ const WeeklyPlanDetail: React.FC = () => {
       setLoading(true);
       const [planRes, productsRes, machinesRes] = await Promise.all([
         axiosInstance.get(`/api/production/weekly-plans/${id}`),
-        axiosInstance.get('/api/products'),
+        axiosInstance.get('/api/products-new/?per_page=1000'),
         axiosInstance.get('/api/production/machines'),
       ]);
       
       setPlan(planRes.data.weekly_plan);
-      setProducts(productsRes.data.products || []);
+      // Map products-new fields to expected format
+      const mappedProducts = (productsRes.data.products || []).map((p: any) => ({
+        id: p.id,
+        code: p.kode_produk || p.code,
+        name: p.nama_produk || p.name,
+        primary_uom: p.satuan || p.primary_uom || 'pcs',
+      }));
+      setProducts(mappedProducts);
       setMachines(machinesRes.data.machines || []);
     } catch (error) {
       console.error('Error fetching data:', error);

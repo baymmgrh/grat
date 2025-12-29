@@ -16,6 +16,7 @@ import {
   CheckCircleIcon,
   ClockIcon,
   ExclamationTriangleIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 
 interface MonthlySchedule {
@@ -108,12 +109,19 @@ const MonthlyProductionPlan: React.FC = () => {
       setLoading(true);
       const [machinesRes, productsRes, schedulesRes] = await Promise.all([
         axiosInstance.get('/api/production/machines'),
-        axiosInstance.get('/api/products?all=true'),
+        axiosInstance.get('/api/products-new/?per_page=1000'),
         axiosInstance.get(`/api/production/monthly-schedule?year=${currentYear}&month=${currentMonth}`),
       ]);
       
       setMachines(machinesRes.data.machines || []);
-      setProducts(productsRes.data.products || []);
+      // Map products-new fields to expected format
+      const mappedProducts = (productsRes.data.products || []).map((p: any) => ({
+        id: p.id,
+        code: p.kode_produk || p.code,
+        name: p.nama_produk || p.name,
+        primary_uom: p.satuan || p.primary_uom || 'pcs',
+      }));
+      setProducts(mappedProducts);
       setSchedules(schedulesRes.data.schedules || []);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -223,8 +231,33 @@ const MonthlyProductionPlan: React.FC = () => {
     });
   };
 
+  const handleSubmitForApproval = async () => {
+    if (!confirm(`Submit rencana produksi ${MONTHS[currentMonth - 1]} ${currentYear} untuk approval?`)) return;
+    
+    try {
+      await axiosInstance.post(`/api/production/monthly-schedule/submit-approval`, {
+        year: currentYear,
+        month: currentMonth,
+      });
+      alert('Rencana produksi berhasil disubmit untuk approval!');
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Gagal submit untuk approval');
+    }
+  };
+
+  const handlePrintPDF = () => {
+    // Get token from localStorage
+    const token = localStorage.getItem('token');
+    // Open print page in new tab
+    const printUrl = `/api/production/monthly-schedule/print?year=${currentYear}&month=${currentMonth}&token=${token}`;
+    window.open(printUrl, '_blank');
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'submitted':
+        return { bg: 'bg-yellow-100 text-yellow-700', label: 'Menunggu Approval' };
       case 'approved':
         return { bg: 'bg-green-100 text-green-700', label: 'Approved' };
       case 'in_progress':
@@ -261,9 +294,28 @@ const MonthlyProductionPlan: React.FC = () => {
             <CalendarDaysIcon className="h-5 w-5" />
             Jadwal Mingguan
           </button>
+          {schedules.length > 0 && schedules.some(s => s.status === 'draft') && (
+            <button
+              onClick={handleSubmitForApproval}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+            >
+              <CheckCircleIcon className="h-5 w-5" />
+              Submit for Approval
+            </button>
+          )}
+          {schedules.length > 0 && (
+            <button
+              onClick={handlePrintPDF}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2"
+            >
+              <DocumentTextIcon className="h-5 w-5" />
+              Print PDF
+            </button>
+          )}
           <button
             onClick={() => { resetForm(); setShowAddModal(true); }}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            disabled={schedules.some(s => s.status === 'in_progress')}
           >
             <PlusIcon className="h-5 w-5" />
             Tambah Target

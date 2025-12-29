@@ -5,7 +5,7 @@ API endpoints for ProductNew model with all Excel fields
 
 from flask import Blueprint, request, jsonify
 from models import db
-from models.product_new_schema import ProductNew, ProductVersion
+from models.product_excel_schema import ProductNew, ProductVersion
 from datetime import datetime
 import traceback
 import sys

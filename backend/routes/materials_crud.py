@@ -48,7 +48,17 @@ def update_material(material_id):
         material = Material.query.get_or_404(material_id)
         data = request.get_json()
         
-        # Update fields
+        # Update fields - allow full editing including code
+        if 'code' in data and data['code'] != material.code:
+            # Check if new code is unique
+            existing = Material.query.filter(
+                Material.code == data['code'],
+                Material.id != material_id
+            ).first()
+            if existing:
+                return jsonify({'error': 'Material code already exists'}), 400
+            material.code = data['code']
+        
         if 'name' in data:
             material.name = data['name']
         if 'description' in data:

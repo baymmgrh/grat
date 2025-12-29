@@ -3,12 +3,22 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db
 from models.production import BillOfMaterials, BOMItem
 from models.product import Product, Material
+from models.product_excel_schema import ProductNew
 from models.warehouse import Inventory
 from models.purchasing import Supplier
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import func, desc, and_
+
+def get_product_name_from_new(product_code):
+    """Get updated product name from ProductNew model"""
+    if not product_code:
+        return None
+    product_new = ProductNew.query.filter_by(kode_produk=product_code).first()
+    if product_new:
+        return product_new.nama_produk
+    return None
 
 bom_bp = Blueprint('bom', __name__)
 
@@ -47,7 +57,7 @@ def get_boms():
                     'id': bom.id,
                     'bom_number': bom.bom_number,
                     'product_id': bom.product_id,
-                    'product_name': bom.product.name if bom.product else None,
+                    'product_name': get_product_name_from_new(bom.product.code) or (bom.product.name if bom.product else None),
                     'product_code': bom.product.code if bom.product else None,
                     'version': bom.version,
                     'is_active': bom.is_active,
@@ -74,7 +84,7 @@ def get_boms():
                 'id': bom.id,
                 'bom_number': bom.bom_number,
                 'product_id': bom.product_id,
-                'product_name': bom.product.name if bom.product else None,
+                'product_name': get_product_name_from_new(bom.product.code) or (bom.product.name if bom.product else None),
                 'product_code': bom.product.code if bom.product else None,
                 'version': bom.version,
                 'is_active': bom.is_active,
@@ -138,7 +148,7 @@ def get_bom(bom_id):
                 'id': bom.id,
                 'bom_number': bom.bom_number,
                 'product_id': bom.product_id,
-                'product_name': bom.product.name,
+                'product_name': get_product_name_from_new(bom.product.code) or bom.product.name,
                 'product_code': bom.product.code,
                 'version': bom.version,
                 'is_active': bom.is_active,
@@ -239,7 +249,24 @@ def update_bom(bom_id):
 
         # Skip version history for now (can be added later)
 
-        # Update BOM
+        # Update BOM - allow full editing including name and product
+        if 'bom_number' in data and data['bom_number'] != bom.bom_number:
+            # Check if new bom_number is unique
+            existing = BillOfMaterials.query.filter(
+                BillOfMaterials.bom_number == data['bom_number'],
+                BillOfMaterials.id != bom_id
+            ).first()
+            if existing:
+                return error_response('BOM number already exists'), 400
+            bom.bom_number = data['bom_number']
+        
+        if 'product_id' in data and data['product_id'] != bom.product_id:
+            # Check if product exists
+            product = Product.query.get(data['product_id'])
+            if not product:
+                return error_response('Product not found'), 404
+            bom.product_id = data['product_id']
+        
         bom.version = data.get('version', bom.version)
         bom.is_active = data.get('is_active', bom.is_active)
         bom.effective_date = datetime.fromisoformat(data['effective_date']).date() if data.get('effective_date') else bom.effective_date
@@ -341,7 +368,7 @@ def get_bom_shortage_analysis(bom_id):
 
         return jsonify({
             'bom_number': bom.bom_number,
-            'product_name': bom.product.name,
+            'product_name': get_product_name_from_new(bom.product.code) or bom.product.name,
             'production_quantity': production_qty,
             'total_shortage_items': len(shortage_items),
             'total_shortage_cost': total_shortage_cost,

@@ -10,10 +10,94 @@ import {
   CubeIcon,
   ClockIcon,
   UserIcon,
-  CurrencyDollarIcon
+  CurrencyDollarIcon,
+  BeakerIcon,
+  WrenchScrewdriverIcon,
+  ExclamationTriangleIcon,
+  CalendarDaysIcon
 } from '@heroicons/react/24/outline';
 import axiosInstance from '../../utils/axiosConfig';
 import toast from 'react-hot-toast';
+
+interface MaterialUsage {
+  material_name: string;
+  material_code: string;
+  category: string;
+  material_type: string;
+  qty_per_karton: number;
+  qty_per_pack: number;
+  qty_needed: number;
+  scrap_percent: number;
+  qty_effective: number;
+  uom: string;
+  unit_cost: number;
+  total_cost: number;
+  is_critical: boolean;
+  packs_per_karton: number;
+  qty_produced_packs: number;
+  qty_produced_kartons: number;
+}
+
+interface ShiftProduction {
+  id: number;
+  production_date: string;
+  shift: string;
+  target_quantity: number;
+  actual_quantity: number;
+  good_quantity: number;
+  reject_quantity: number;
+  efficiency_rate: number;
+  quality_rate: number;
+  oee_score: number;
+  downtime_minutes: number;
+  operator_name: string | null;
+  notes: string | null;
+  issues: string | null;
+}
+
+interface ConsumptionPerGrade {
+  grade: string;
+  qty_pack: number;
+  kain_kg: number;
+  ingredient_kg: number;
+  packaging_pcs: number;
+  stiker_pcs: number;
+  color: string;
+}
+
+interface ConsumptionTotals {
+  total_kain_kg: number;
+  total_ingredient_kg: number;
+  total_packaging_pcs: number;
+  total_stiker_pcs: number;
+}
+
+interface ProductionSummary {
+  total_shifts: number;
+  total_runtime_minutes: number;
+  total_downtime_minutes: number;
+  downtime_breakdown: {
+    mesin: number;
+    operator: number;
+    material: number;
+    design: number;
+    others: number;
+  };
+  grade_summary: {
+    grade_a: number;
+    grade_b: number;
+    grade_c: number;
+  };
+  consumption_per_grade?: ConsumptionPerGrade[];
+  consumption_totals?: ConsumptionTotals;
+  grade_breakdown?: {
+    grade_a: number;
+    grade_b: number;
+    grade_c: number;
+    setting: number;
+    waste: number;
+  };
+}
 
 interface ApprovalDetail {
   id: number;
@@ -50,6 +134,9 @@ interface ApprovalDetail {
   work_order: any;
   wip_batch: any;
   job_cost_entries: any[];
+  material_usage: MaterialUsage[];
+  production_summary: ProductionSummary;
+  shift_productions: ShiftProduction[];
 }
 
 const ProductionApprovalDetail: React.FC = () => {
@@ -379,6 +466,236 @@ const ProductionApprovalDetail: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Material Usage */}
+      {approval.material_usage && approval.material_usage.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium flex items-center gap-2">
+              <BeakerIcon className="h-5 w-5 text-gray-500" />
+              Material yang Dibutuhkan
+            </h2>
+            <div className="text-sm text-gray-500">
+              Batch Size: {approval.material_usage[0]?.packs_per_karton || 1} PCS
+            </div>
+          </div>
+          
+          {/* Production Summary */}
+          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div>
+                <span className="text-blue-600">Pack per Karton:</span>
+                <span className="ml-2 font-bold">{approval.material_usage[0]?.packs_per_karton || 1}</span>
+              </div>
+              <div>
+                <span className="text-blue-600">Total Produksi:</span>
+                <span className="ml-2 font-bold">{approval.material_usage[0]?.qty_produced_packs?.toLocaleString()} pack</span>
+              </div>
+              <div>
+                <span className="text-blue-600">Setara Karton:</span>
+                <span className="ml-2 font-bold">{approval.material_usage[0]?.qty_produced_kartons?.toLocaleString()} karton</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">No</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Kode</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Material</th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Tipe</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty/Karton</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty/Pack</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-blue-600 uppercase">Qty Dibutuhkan</th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">UOM</th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-orange-600 uppercase">Scrap %</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-green-600 uppercase">Qty Efektif</th>
+                  <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Critical</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {approval.material_usage.map((mat, idx) => (
+                  <tr key={idx} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 text-sm text-gray-500">{idx + 1}</td>
+                    <td className="px-3 py-2 text-sm font-medium text-gray-900">{mat.material_code}</td>
+                    <td className="px-3 py-2">
+                      <div className="text-sm font-medium text-gray-900">{mat.material_name}</div>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={`px-2 py-0.5 text-xs rounded-full ${
+                        mat.material_type === 'wip' ? 'bg-purple-100 text-purple-700' :
+                        mat.material_type === 'packaging materials' ? 'bg-blue-100 text-blue-700' :
+                        mat.material_type === 'chemical materials' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-700'
+                      }`}>
+                        {mat.material_type || mat.category}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-sm text-right">{mat.qty_per_karton?.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
+                    <td className="px-3 py-2 text-sm text-right">{mat.qty_per_pack?.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium text-blue-600">{mat.qty_needed?.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
+                    <td className="px-3 py-2 text-sm text-center">{mat.uom}</td>
+                    <td className="px-3 py-2 text-sm text-center text-orange-600">{mat.scrap_percent}%</td>
+                    <td className="px-3 py-2 text-sm text-right font-bold text-green-700">{mat.qty_effective?.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
+                    <td className="px-3 py-2 text-center">
+                      {mat.is_critical && <span className="text-red-500 font-bold">⚠</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Consumption per Grade */}
+      {approval.production_summary?.consumption_per_grade && approval.production_summary.consumption_per_grade.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium mb-4 flex items-center gap-2">
+            <BeakerIcon className="h-5 w-5 text-gray-500" />
+            Consumption per Grade (Auto-calculated)
+          </h2>
+          
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Grade</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Qty (pack)</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Kain (kg)</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ingredient (kg)</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Packaging (pcs)</th>
+                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Stiker (pcs)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {approval.production_summary.consumption_per_grade.map((row: any, idx: number) => (
+                  <tr key={idx} className={`${
+                    row.grade === 'TOTAL' ? 'bg-blue-50 font-bold' :
+                    row.color === 'green' ? 'bg-green-50' :
+                    row.color === 'yellow' ? 'bg-yellow-50' :
+                    row.color === 'red' ? 'bg-red-50' :
+                    row.color === 'gray' ? 'bg-gray-50' : ''
+                  }`}>
+                    <td className={`px-4 py-2 text-sm font-medium ${
+                      row.color === 'green' ? 'text-green-700' :
+                      row.color === 'yellow' ? 'text-yellow-700' :
+                      row.color === 'red' ? 'text-red-700' :
+                      row.color === 'gray' ? 'text-gray-700' :
+                      row.color === 'blue' ? 'text-blue-700' : 'text-gray-900'
+                    }`}>{row.grade}</td>
+                    <td className="px-4 py-2 text-sm text-right">{row.qty_pack?.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-sm text-right">{row.kain_kg?.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
+                    <td className="px-4 py-2 text-sm text-right">{row.ingredient_kg?.toLocaleString(undefined, {maximumFractionDigits: 4})}</td>
+                    <td className="px-4 py-2 text-sm text-right">{row.packaging_pcs?.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-sm text-right">{row.stiker_pcs?.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {/* Consumption Totals Summary */}
+          {approval.production_summary.consumption_totals && (
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
+                <p className="text-xs text-amber-600">Total Kain</p>
+                <p className="text-lg font-bold text-amber-800">{approval.production_summary.consumption_totals.total_kain_kg?.toLocaleString(undefined, {maximumFractionDigits: 4})} kg</p>
+              </div>
+              <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                <p className="text-xs text-purple-600">Total Ingredient</p>
+                <p className="text-lg font-bold text-purple-800">{approval.production_summary.consumption_totals.total_ingredient_kg?.toLocaleString(undefined, {maximumFractionDigits: 4})} kg</p>
+              </div>
+              <div className="bg-cyan-50 p-3 rounded-lg border border-cyan-200">
+                <p className="text-xs text-cyan-600">Total Packaging</p>
+                <p className="text-lg font-bold text-cyan-800">{approval.production_summary.consumption_totals.total_packaging_pcs?.toLocaleString()} pcs</p>
+              </div>
+              <div className="bg-pink-50 p-3 rounded-lg border border-pink-200">
+                <p className="text-xs text-pink-600">Total Stiker</p>
+                <p className="text-lg font-bold text-pink-800">{approval.production_summary.consumption_totals.total_stiker_pcs?.toLocaleString()} pcs</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Downtime Breakdown */}
+      {approval.production_summary && approval.production_summary.downtime_breakdown && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium mb-4 flex items-center gap-2">
+            <WrenchScrewdriverIcon className="h-5 w-5 text-gray-500" />
+            Breakdown Downtime
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="bg-red-50 p-4 rounded-lg">
+              <p className="text-sm text-red-600">Mesin</p>
+              <p className="text-xl font-bold text-red-800">{approval.production_summary.downtime_breakdown.mesin} menit</p>
+            </div>
+            <div className="bg-orange-50 p-4 rounded-lg">
+              <p className="text-sm text-orange-600">Operator</p>
+              <p className="text-xl font-bold text-orange-800">{approval.production_summary.downtime_breakdown.operator} menit</p>
+            </div>
+            <div className="bg-yellow-50 p-4 rounded-lg">
+              <p className="text-sm text-yellow-600">Material</p>
+              <p className="text-xl font-bold text-yellow-800">{approval.production_summary.downtime_breakdown.material} menit</p>
+            </div>
+            <div className="bg-blue-50 p-4 rounded-lg">
+              <p className="text-sm text-blue-600">Design</p>
+              <p className="text-xl font-bold text-blue-800">{approval.production_summary.downtime_breakdown.design} menit</p>
+            </div>
+            <div className="bg-gray-100 p-4 rounded-lg">
+              <p className="text-sm text-gray-600">Others</p>
+              <p className="text-xl font-bold text-gray-800">{approval.production_summary.downtime_breakdown.others} menit</p>
+            </div>
+          </div>
+          <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+            <span className="text-gray-600">Total Downtime</span>
+            <span className="text-xl font-bold text-gray-900">{approval.production_summary.total_downtime_minutes} menit</span>
+          </div>
+        </div>
+      )}
+
+      {/* Shift Productions */}
+      {approval.shift_productions && approval.shift_productions.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium mb-4 flex items-center gap-2">
+            <CalendarDaysIcon className="h-5 w-5 text-gray-500" />
+            Riwayat Produksi per Shift ({approval.shift_productions.length} shift)
+          </h2>
+          <div className="overflow-x-auto max-h-64 overflow-y-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Tanggal</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Shift</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Actual</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Good</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Reject</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Efficiency</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">OEE</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Operator</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {approval.shift_productions.map((sp) => (
+                  <tr key={sp.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 text-sm">{new Date(sp.production_date).toLocaleDateString('id-ID')}</td>
+                    <td className="px-3 py-2 text-sm">{sp.shift.replace('shift_', 'Shift ')}</td>
+                    <td className="px-3 py-2 text-sm text-right">{sp.actual_quantity.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-sm text-right text-green-600">{sp.good_quantity.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-sm text-right text-red-600">{sp.reject_quantity.toLocaleString()}</td>
+                    <td className="px-3 py-2 text-sm text-right">{sp.efficiency_rate.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-sm text-right font-medium">{sp.oee_score.toFixed(1)}%</td>
+                    <td className="px-3 py-2 text-sm">{sp.operator_name || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Cost Breakdown */}
       <div className="bg-white shadow rounded-lg p-6">

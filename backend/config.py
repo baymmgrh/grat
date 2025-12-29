@@ -21,9 +21,10 @@ class Config:
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-jwt-secret-key')
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=2)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
-    JWT_TOKEN_LOCATION = ['headers']
+    JWT_TOKEN_LOCATION = ['headers', 'query_string']
     JWT_HEADER_NAME = 'Authorization'
     JWT_HEADER_TYPE = 'Bearer'
+    JWT_QUERY_STRING_NAME = 'token'
     
     # CORS - Allow LAN access
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173,http://192.168.0.75:3000,http://192.168.0.75:3001,http://10.108.237.225:3000,http://10.108.237.225:3001').split(',')

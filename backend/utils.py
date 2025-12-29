@@ -118,7 +118,7 @@ def detect_downtime_category(issue_text: str) -> str:
         'motor rusak', 'bearing', 'belt putus', 'overheating', 'overheat',
         'listrik mati', 'power failure', 'angin habis', 'compressor',
         'pneumatic', 'hidrolik', 'hydraulic', 'kalibrasi', 'calibration',
-        'jarum patah', 'jarum bengkok', 'tension', 'needle'
+        'jarum patah', 'jarum bengkok', 'tension', 'needle', 'inkjet'
     ]
     for kw in mesin_keywords:
         if kw in text_lower:

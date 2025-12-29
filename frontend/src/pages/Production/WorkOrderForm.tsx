@@ -24,6 +24,7 @@ interface WorkOrderFormData {
   scheduled_end_date?: string
   notes?: string
   supervisor_id?: number
+  shift_count?: number
 }
 
 interface Product {
@@ -137,7 +138,8 @@ const navigate = useNavigate()
   
   const { register, handleSubmit, watch, setValue, control, formState: { errors } } = useForm<WorkOrderFormData>({
     defaultValues: {
-      priority: 'medium'
+      priority: 'medium',
+      shift_count: 1
     }
   })
 
@@ -964,7 +966,7 @@ const navigate = useNavigate()
             <h3 className="text-lg font-semibold text-gray-900">Production Schedule</h3>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Scheduled Start Date
@@ -973,7 +975,6 @@ const navigate = useNavigate()
                 type="datetime-local"
                 {...register('scheduled_start_date')}
                 className="input"
-                min={new Date().toISOString().slice(0, 16)}
               />
             </div>
 
@@ -985,8 +986,21 @@ const navigate = useNavigate()
                 type="datetime-local"
                 {...register('scheduled_end_date')}
                 className="input"
-                min={new Date().toISOString().slice(0, 16)}
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Jumlah Shift per Hari
+              </label>
+              <select {...register('shift_count')} className="input">
+                <option value={1}>1 Shift (06:30 - 15:00)</option>
+                <option value={2}>2 Shift (06:30 - 23:00)</option>
+                <option value={3}>3 Shift (24 Jam)</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Pilih berapa shift yang akan digunakan per hari
+              </p>
             </div>
           </div>
         </div>

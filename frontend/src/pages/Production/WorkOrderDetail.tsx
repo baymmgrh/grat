@@ -544,21 +544,21 @@ export default function WorkOrderDetail() {
       </div>
 
       {/* Packing List Section - Only show when WO has production */}
-      {totalProduced > 0 && workOrder.pack_per_carton > 0 && (
+      {totalGood > 0 && workOrder.pack_per_carton > 0 && (
         <div className="bg-white shadow rounded-lg p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900 flex items-center">
               <ClipboardDocumentListIcon className="h-5 w-5 mr-2 text-green-600" />
-              Packing List
+              Packing List (Grade A)
             </h2>
             <div className="text-sm text-gray-500">
-              Total Karton: <span className="font-bold text-green-600">{Math.floor(totalProduced / workOrder.pack_per_carton)}</span>
+              Total Karton: <span className="font-bold text-green-600">{Math.floor(totalGood / workOrder.pack_per_carton)}</span>
             </div>
           </div>
           <PackingListTab
             workOrderId={parseInt(id || '0')}
             productName={workOrder.product_name || 'Unknown'}
-            totalAktualKarton={Math.floor(totalProduced / workOrder.pack_per_carton)}
+            totalAktualKarton={Math.floor(totalGood / workOrder.pack_per_carton)}
             packPerCarton={workOrder.pack_per_carton}
           />
         </div>

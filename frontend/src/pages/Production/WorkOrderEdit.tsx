@@ -64,13 +64,20 @@ export default function WorkOrderEdit() {
       setLoading(true);
       const [woRes, productsRes, machinesRes] = await Promise.all([
         axiosInstance.get(`/api/production/work-orders/${id}`),
-        axiosInstance.get('/api/products'),
+        axiosInstance.get('/api/products-new/?per_page=1000'),
         axiosInstance.get('/api/production/machines')
       ]);
       
       const wo = woRes.data.work_order;
       setWorkOrder(wo);
-      setProducts(productsRes.data.products || []);
+      // Map products-new fields to expected format
+      const mappedProducts = (productsRes.data.products || []).map((p: any) => ({
+        id: p.id,
+        code: p.kode_produk || p.code,
+        name: p.nama_produk || p.name,
+        primary_uom: p.satuan || p.primary_uom || 'pcs',
+      }));
+      setProducts(mappedProducts);
       setMachines(machinesRes.data.machines || []);
       
       // Populate form

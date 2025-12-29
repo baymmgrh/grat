@@ -304,12 +304,12 @@ class WorkflowAutomation:
         movement = InventoryMovement(
             product_id=shift_production.product_id,
             movement_type='production_complete',
-            quantity_in=shift_production.actual_quantity,
+            quantity=shift_production.actual_quantity,
             reference_type='shift_production',
             reference_id=shift_production_id,
-            movement_date=datetime.utcnow(),
-            performed_by=shift_production.operator_id or 1,  # Default to system user
-            notes=f"Production completion from {shift_production.work_order.work_order_number}"
+            movement_date=datetime.utcnow().date(),
+            created_by=shift_production.operator_id or 1,  # Default to system user
+            notes=f"Production completion from {shift_production.work_order.wo_number}"
         )
         db.session.add(movement)
         
@@ -354,10 +354,11 @@ def sales_order_status_changed(mapper, connection, target):
         def trigger_mrp(session):
             WorkflowAutomation.trigger_mrp_from_sales_order(target.id)
 
-@event.listens_for(ShiftProduction, 'after_update')
-def production_completed(mapper, connection, target):
-    """Trigger workflow when production is completed"""
-    if target.status == 'completed':
-        @event.listens_for(db.session, 'after_commit', once=True)
-        def handle_completion(session):
-            WorkflowAutomation.handle_production_completion(target.id)
+# Disabled: Causing session state issues in after_commit handler
+# @event.listens_for(ShiftProduction, 'after_update')
+# def production_completed(mapper, connection, target):
+#     """Trigger workflow when production is completed"""
+#     if target.status == 'completed':
+#         @event.listens_for(db.session, 'after_commit', once=True)
+#         def handle_completion(session):
+#             WorkflowAutomation.handle_production_completion(target.id)

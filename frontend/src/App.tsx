@@ -49,6 +49,9 @@ import MaterialView from './pages/Warehouse/MaterialView'
 import MaterialEdit from './pages/Warehouse/MaterialEdit'
 import MaterialCreate from './pages/Warehouse/MaterialCreate'
 import MaterialStockManagement from './pages/Warehouse/MaterialStockManagement'
+import StockOpnameList from './pages/Warehouse/StockOpnameList'
+import StockOpnameForm from './pages/Warehouse/StockOpnameForm'
+import StockOpnameDetail from './pages/Warehouse/StockOpnameDetail'
 import CustomerList from './pages/Sales/CustomerList'
 import CustomerForm from './pages/Sales/CustomerForm'
 import CustomerDetails from './pages/Sales/CustomerDetails'
@@ -104,6 +107,11 @@ import ChangeoverList from './pages/Production/ChangeoverList'
 import WeeklyProductionPlan from './pages/Production/WeeklyProductionPlan'
 import WeeklyPlanDetail from './pages/Production/WeeklyPlanDetail'
 import MonthlyProductionPlan from './pages/Production/MonthlyProductionPlan'
+import DailyController from './pages/Production/DailyController'
+import WeeklyController from './pages/Production/WeeklyController'
+import MonthlyController from './pages/Production/MonthlyController'
+import WorkOrderMonitoring from './pages/Production/WorkOrderMonitoring'
+import BreakdownSummary from './pages/Production/BreakdownSummary'
 import QualityTestList from './pages/Quality/QualityTestList'
 import QualityTestForm from './pages/Quality/QualityTestForm'
 import QualityDashboardEnhanced from './pages/Quality/QualityDashboardEnhanced'
@@ -148,6 +156,8 @@ import EmployeeList from './pages/HR/EmployeeList'
 import EmployeeForm from './pages/HR/EmployeeForm'
 import RosterCalendar from './pages/HR/RosterCalendar'
 import RosterManagementComplete from './pages/HR/RosterManagementComplete'
+import WorkRosterComplete from './pages/HR/WorkRosterComplete'
+import WorkRosterWeekly from './pages/HR/WorkRosterWeekly'
 import HRDashboard from './pages/HR/HRDashboard'
 import PayrollList from './pages/HR/PayrollList'
 import PayrollPeriodForm from './pages/HR/PayrollPeriodForm'
@@ -477,6 +487,9 @@ function App() {
         <Route path="warehouse/materials/new" element={<MaterialCreate />} />
         <Route path="warehouse/materials/:id" element={<MaterialView />} />
         <Route path="warehouse/materials/:id/edit" element={<MaterialEdit />} />
+        <Route path="warehouse/stock-opname" element={<StockOpnameList />} />
+        <Route path="warehouse/stock-opname/new" element={<StockOpnameForm />} />
+        <Route path="warehouse/stock-opname/:id" element={<StockOpnameDetail />} />
         
         {/* Sales */}
         <Route path="sales" element={<Navigate to="/app/sales/dashboard" replace />} />
@@ -551,7 +564,12 @@ function App() {
         <Route path="production/machines/:id/edit" element={<MachineForm />} />
         <Route path="production/machines/:id/efficiency" element={<MachineDetail />} />
         <Route path="production/machines/:id/analytics" element={<MachineDetail />} />
+        <Route path="production/controller" element={<DailyController />} />
+        <Route path="production/weekly-controller" element={<WeeklyController />} />
+        <Route path="production/monthly-controller" element={<MonthlyController />} />
         <Route path="production/work-orders" element={<WorkOrderList />} />
+        <Route path="production/work-orders-monitoring" element={<WorkOrderMonitoring />} />
+        <Route path="production/breakdown-summary" element={<BreakdownSummary />} />
         <Route path="production/work-orders/new" element={<WorkOrderForm />} />
         <Route path="production/work-orders/:id" element={<WorkOrderDetail />} />
         <Route path="production/work-orders/:id/edit" element={<WorkOrderEdit />} />
@@ -714,7 +732,8 @@ function App() {
         <Route path="hr/roster/integrated" element={<RosterManagementComplete key="integrated" />} />
         <Route path="hr/roster/manage" element={<RosterManagementComplete key="manage" />} />
         <Route path="hr/roster/calendar" element={<RosterCalendar />} />
-        <Route path="hr/roster" element={<RosterCalendar />} />
+        <Route path="hr/roster/daily" element={<WorkRosterComplete />} />
+        <Route path="hr/roster" element={<WorkRosterWeekly />} />
         
         {/* Maintenance */}
         <Route path="maintenance" element={<MaintenanceDashboardEnhanced />} />

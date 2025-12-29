@@ -38,6 +38,60 @@ def get_invoices():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@finance_bp.route('/invoices/<int:id>', methods=['GET'])
+@jwt_required()
+def get_invoice(id):
+    """Get single invoice by ID with items and related data"""
+    try:
+        invoice = Invoice.query.get_or_404(id)
+        
+        # Get invoice items
+        items = InvoiceItem.query.filter_by(invoice_id=id).order_by(InvoiceItem.line_number).all()
+        
+        # Get work order number if production_cost type
+        work_order_number = None
+        if invoice.work_order_id:
+            from models.production import WorkOrder
+            wo = WorkOrder.query.get(invoice.work_order_id)
+            if wo:
+                work_order_number = wo.wo_number
+        
+        return jsonify({
+            'invoice': {
+                'id': invoice.id,
+                'invoice_number': invoice.invoice_number,
+                'invoice_type': invoice.invoice_type,
+                'invoice_date': invoice.invoice_date.isoformat() if invoice.invoice_date else None,
+                'due_date': invoice.due_date.isoformat() if invoice.due_date else None,
+                'customer_id': invoice.customer_id,
+                'supplier_id': invoice.supplier_id,
+                'work_order_id': invoice.work_order_id,
+                'work_order_number': work_order_number,
+                'subtotal': float(invoice.subtotal) if invoice.subtotal else 0,
+                'tax_amount': float(invoice.tax_amount) if invoice.tax_amount else 0,
+                'discount_amount': float(invoice.discount_amount) if invoice.discount_amount else 0,
+                'total_amount': float(invoice.total_amount) if invoice.total_amount else 0,
+                'paid_amount': float(invoice.paid_amount) if invoice.paid_amount else 0,
+                'balance_due': float(invoice.balance_due) if invoice.balance_due else 0,
+                'status': invoice.status,
+                'notes': invoice.notes,
+                'items': [{
+                    'id': item.id,
+                    'line_number': item.line_number,
+                    'description': item.description,
+                    'quantity': float(item.quantity) if item.quantity else 0,
+                    'unit_price': float(item.unit_price) if item.unit_price else 0,
+                    'amount': float(item.amount) if item.amount else 0,
+                    'discount_percent': float(item.discount_percent) if item.discount_percent else 0,
+                    'tax_amount': float(item.tax_amount) if item.tax_amount else 0
+                } for item in items]
+            }
+        }), 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @finance_bp.route('/invoices', methods=['POST'])
 @jwt_required()
 def create_invoice():

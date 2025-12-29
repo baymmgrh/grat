@@ -16,6 +16,8 @@ class Machine(db.Model):
     department = db.Column(db.String(100), nullable=True)
     capacity_per_hour = db.Column(db.Numeric(15, 2), nullable=True)
     capacity_uom = db.Column(db.String(20), nullable=True)
+    default_speed = db.Column(db.Integer, default=0)  # Default speed pcs/menit for efficiency calculation
+    target_efficiency = db.Column(db.Integer, default=60)  # Target efficiency percentage (default 60%)
     efficiency = db.Column(db.Numeric(5, 2), default=100)  # percentage
     availability = db.Column(db.Numeric(5, 2), default=100)  # percentage
     last_maintenance = db.Column(db.Date, nullable=True)
@@ -246,6 +248,24 @@ class ProductionPlan(db.Model):
     def __repr__(self):
         return f'<ProductionPlan {self.plan_number} - {self.plan_name}>'
 
+class WorkOrderStatusHistory(db.Model):
+    __tablename__ = 'work_order_status_history'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=False)
+    from_status = db.Column(db.String(50), nullable=True)
+    to_status = db.Column(db.String(50), nullable=False)
+    changed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    changed_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    notes = db.Column(db.Text, nullable=True)
+    
+    # Relationships
+    work_order = db.relationship('WorkOrder', back_populates='status_history')
+    changed_by_user = db.relationship('User')
+    
+    def __repr__(self):
+        return f'<WOStatusHistory WO#{self.work_order_id} {self.from_status} → {self.to_status}>'
+
 class WorkOrder(db.Model):
     __tablename__ = 'work_orders'
     
@@ -293,6 +313,7 @@ class WorkOrder(db.Model):
     sales_order = db.relationship('SalesOrder')
     machine = db.relationship('Machine', back_populates='work_orders')
     production_records = db.relationship('ProductionRecord', back_populates='work_order', cascade='all, delete-orphan')
+    status_history = db.relationship('WorkOrderStatusHistory', back_populates='work_order', cascade='all, delete-orphan', order_by='WorkOrderStatusHistory.changed_at')
     created_by_user = db.relationship('User')
     supervisor = db.relationship('Employee')
 
@@ -354,7 +375,7 @@ class ShiftProduction(db.Model):
     shift = db.Column(db.String(20), nullable=False)  # shift_1, shift_2, shift_3
     shift_start = db.Column(db.Time, nullable=False)
     shift_end = db.Column(db.Time, nullable=False)
-    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=False)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=True)
     
@@ -371,6 +392,7 @@ class ShiftProduction(db.Model):
     actual_runtime = db.Column(db.Integer, nullable=False)  # minutes
     downtime_minutes = db.Column(db.Integer, default=0)
     setup_time = db.Column(db.Integer, default=0)  # minutes
+    machine_speed = db.Column(db.Integer, default=0)  # pcs per hour - for efficiency calculation
     
     # Downtime by Category (in minutes) - for OEE calculation
     downtime_mesin = db.Column(db.Integer, default=0)  # Machine downtime - max 15%
@@ -532,41 +554,46 @@ class ProductionApproval(db.Model):
     reviewer = db.relationship('User', foreign_keys=[reviewed_by], backref='reviewed_approvals')
     
     def to_dict(self):
-        return {
-            'id': self.id,
-            'approval_number': self.approval_number,
-            'work_order_id': self.work_order_id,
-            'wo_number': self.work_order.wo_number if self.work_order else None,
-            'product_name': self.work_order.product.name if self.work_order and self.work_order.product else None,
-            'wip_batch_id': self.wip_batch_id,
-            'quantity_produced': float(self.quantity_produced),
-            'quantity_good': float(self.quantity_good),
-            'quantity_reject': float(self.quantity_reject or 0),
-            'material_cost': float(self.material_cost or 0),
-            'labor_cost': float(self.labor_cost or 0),
-            'overhead_cost': float(self.overhead_cost or 0),
-            'total_cost': float(self.total_cost or 0),
-            'cost_per_unit': float(self.cost_per_unit or 0),
-            'oee_score': float(self.oee_score or 0),
-            'efficiency_rate': float(self.efficiency_rate or 0),
-            'quality_rate': float(self.quality_rate or 0),
-            'total_downtime_minutes': self.total_downtime_minutes,
-            'downtime_cost': float(self.downtime_cost or 0),
-            'status': self.status,
-            'manager_notes': self.manager_notes,
-            'adjustment_reason': self.adjustment_reason,
-            'original_quantity_good': float(self.original_quantity_good) if self.original_quantity_good else None,
-            'original_total_cost': float(self.original_total_cost) if self.original_total_cost else None,
-            'submitted_by': self.submitted_by,
-            'submitter_name': self.submitter.full_name if self.submitter else None,
-            'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
-            'reviewed_by': self.reviewed_by,
-            'reviewer_name': self.reviewer.full_name if self.reviewer else None,
-            'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
-            'forwarded_to_finance': self.forwarded_to_finance,
-            'forwarded_at': self.forwarded_at.isoformat() if self.forwarded_at else None,
-            'invoice_id': self.invoice_id
-        }
+        try:
+            return {
+                'id': self.id,
+                'approval_number': self.approval_number,
+                'work_order_id': self.work_order_id,
+                'wo_number': self.work_order.wo_number if self.work_order else None,
+                'product_name': self.work_order.product.name if self.work_order and self.work_order.product else None,
+                'wip_batch_id': self.wip_batch_id,
+                'quantity_produced': float(self.quantity_produced) if self.quantity_produced else 0,
+                'quantity_good': float(self.quantity_good) if self.quantity_good else 0,
+                'quantity_reject': float(self.quantity_reject) if self.quantity_reject else 0,
+                'material_cost': float(self.material_cost) if self.material_cost else 0,
+                'labor_cost': float(self.labor_cost) if self.labor_cost else 0,
+                'overhead_cost': float(self.overhead_cost) if self.overhead_cost else 0,
+                'total_cost': float(self.total_cost) if self.total_cost else 0,
+                'cost_per_unit': float(self.cost_per_unit) if self.cost_per_unit else 0,
+                'oee_score': float(self.oee_score) if self.oee_score else 0,
+                'efficiency_rate': float(self.efficiency_rate) if self.efficiency_rate else 0,
+                'quality_rate': float(self.quality_rate) if self.quality_rate else 0,
+                'total_downtime_minutes': self.total_downtime_minutes or 0,
+                'downtime_cost': float(self.downtime_cost) if self.downtime_cost else 0,
+                'status': self.status,
+                'manager_notes': self.manager_notes,
+                'adjustment_reason': self.adjustment_reason,
+                'original_quantity_good': float(self.original_quantity_good) if self.original_quantity_good else None,
+                'original_total_cost': float(self.original_total_cost) if self.original_total_cost else None,
+                'submitted_by': self.submitted_by,
+                'submitter_name': self.submitter.full_name if self.submitter else None,
+                'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
+                'reviewed_by': self.reviewed_by,
+                'reviewer_name': self.reviewer.full_name if self.reviewer else None,
+                'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None,
+                'forwarded_to_finance': self.forwarded_to_finance or False,
+                'forwarded_at': self.forwarded_at.isoformat() if self.forwarded_at else None,
+                'invoice_id': self.invoice_id
+            }
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise e
 
 
 class WeeklyProductionPlan(db.Model):

@@ -107,6 +107,7 @@ function SidebarContent() {
             { name: 'Inventory', href: '/app/warehouse/inventory', icon: ArchiveBoxIcon, permission: 'inventory' },
             { name: 'Materials', href: '/app/warehouse/materials', icon: CubeIcon, permission: 'materials' },
             { name: 'Stock Input', href: '/app/warehouse/stock-input', icon: ClipboardDocumentCheckIcon },
+            { name: 'Stok Opname', href: '/app/warehouse/stock-opname', icon: ClipboardDocumentCheckIcon },
             { name: 'Locations', href: '/app/warehouse/locations', icon: MapPinIcon },
             { name: 'Movements', href: '/app/warehouse/movements', icon: ArrowsRightLeftIcon },
             { name: 'Analytics', href: '/app/warehouse/analytics', icon: ChartPieIcon },
@@ -120,11 +121,21 @@ function SidebarContent() {
           children: [
             { name: 'Dashboard', href: '/app/production', icon: PresentationChartLineIcon },
             { name: 'Work Orders', href: '/app/production/work-orders', icon: ClipboardDocumentListIcon, permission: 'work_orders' },
+            { name: 'WO Monitoring', href: '/app/production/work-orders-monitoring', icon: ChartBarIcon },
+            { name: 'Machine Data', href: '/app/production/machines', icon: CogIcon },
+            { name: 'Controller', icon: ChartBarIcon, isSubMenu: true, subChildren: [
+              { name: 'Harian', href: '/app/production/controller' },
+              { name: 'Mingguan', href: '/app/production/weekly-controller' },
+              { name: 'Bulanan', href: '/app/production/monthly-controller' },
+            ]},
+            { name: 'Jadwal', icon: CalendarDaysIcon, isSubMenu: true, subChildren: [
+              { name: 'Mingguan', href: '/app/production/scheduling' },
+              { name: 'Bulanan', href: '/app/production/monthly-schedule' },
+            ]},
+            { name: 'Work Roster', href: '/app/hr/roster', icon: UserGroupIcon },
             { name: 'Sisa Order', href: '/app/production/remaining-stock', icon: ArchiveBoxIcon },
             { name: 'Changeover', href: '/app/production/changeovers', icon: ArrowsRightLeftIcon },
             { name: 'Approval', href: '/app/production/approvals', icon: ClipboardDocumentCheckIcon },
-            { name: 'Jadwal Bulanan', href: '/app/production/monthly-schedule', icon: CalendarDaysIcon },
-            { name: 'Jadwal Mingguan', href: '/app/production/scheduling', icon: CalendarDaysIcon },
             { name: 'MRP', href: '/app/production/mrp', icon: CalculatorIcon, permission: 'mrp' },
             { name: 'Demand Planning', href: '/app/production/demand-planning', icon: ChartBarIcon, permission: 'mrp' },
             { name: 'Capacity', href: '/app/production/capacity-planning', icon: ScaleIcon, permission: 'mrp' },
@@ -407,27 +418,74 @@ function SidebarContent() {
                             {/* Submenu with animation */}
                             <div className={clsx(
                               'overflow-hidden transition-all duration-200',
-                              expandedItems.includes(item.name.toLowerCase()) ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                              expandedItems.includes(item.name.toLowerCase()) ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'
                             )}>
                               <ul className="mt-1 ml-4 border-l border-slate-700/50 pl-3 space-y-0.5">
                                 {item.children
                                   .filter((child: any) => !child.permission || canView(child.permission))
                                   .map((child: any) => (
                                   <li key={child.name}>
-                                    <NavLink
-                                      to={child.href}
-                                      className={({ isActive }) =>
-                                        clsx(
-                                          isActive
-                                            ? 'bg-blue-600/20 text-blue-400 border-l-2 border-blue-400 -ml-[13px] pl-[11px]'
-                                            : 'text-slate-400 hover:text-white hover:bg-slate-700/30',
-                                          'group flex items-center gap-x-2.5 rounded-md py-2 px-2.5 text-sm transition-all duration-150'
-                                        )
-                                      }
-                                    >
-                                      {child.icon && <child.icon className="h-4 w-4 shrink-0" />}
-                                      {child.name}
-                                    </NavLink>
+                                    {child.isSubMenu ? (
+                                      // Sub-sub-menu (nested)
+                                      <div>
+                                        <button
+                                          onClick={() => toggleExpanded(`${item.name}-${child.name}`.toLowerCase())}
+                                          className={clsx(
+                                            expandedItems.includes(`${item.name}-${child.name}`.toLowerCase())
+                                              ? 'bg-slate-700/30 text-white'
+                                              : 'text-slate-400 hover:text-white hover:bg-slate-700/30',
+                                            'group flex w-full items-center gap-x-2.5 rounded-md py-2 px-2.5 text-sm transition-all duration-150'
+                                          )}
+                                        >
+                                          {child.icon && <child.icon className="h-4 w-4 shrink-0" />}
+                                          <span className="flex-1 text-left">{child.name}</span>
+                                          <ChevronDownIcon className={clsx(
+                                            'h-3 w-3 transition-transform duration-200',
+                                            expandedItems.includes(`${item.name}-${child.name}`.toLowerCase()) ? 'rotate-180 text-blue-400' : 'text-slate-500'
+                                          )} />
+                                        </button>
+                                        <div className={clsx(
+                                          'overflow-hidden transition-all duration-200',
+                                          expandedItems.includes(`${item.name}-${child.name}`.toLowerCase()) ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+                                        )}>
+                                          <ul className="mt-1 ml-3 border-l border-slate-600/50 pl-2 space-y-0.5">
+                                            {child.subChildren?.map((subChild: any) => (
+                                              <li key={subChild.name}>
+                                                <NavLink
+                                                  to={subChild.href}
+                                                  className={({ isActive }) =>
+                                                    clsx(
+                                                      isActive
+                                                        ? 'bg-blue-600/20 text-blue-400'
+                                                        : 'text-slate-400 hover:text-white hover:bg-slate-700/30',
+                                                      'group flex items-center gap-x-2 rounded-md py-1.5 px-2 text-xs transition-all duration-150'
+                                                    )
+                                                  }
+                                                >
+                                                  {subChild.name}
+                                                </NavLink>
+                                              </li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      // Regular child item
+                                      <NavLink
+                                        to={child.href}
+                                        className={({ isActive }) =>
+                                          clsx(
+                                            isActive
+                                              ? 'bg-blue-600/20 text-blue-400 border-l-2 border-blue-400 -ml-[13px] pl-[11px]'
+                                              : 'text-slate-400 hover:text-white hover:bg-slate-700/30',
+                                            'group flex items-center gap-x-2.5 rounded-md py-2 px-2.5 text-sm transition-all duration-150'
+                                          )
+                                        }
+                                      >
+                                        {child.icon && <child.icon className="h-4 w-4 shrink-0" />}
+                                        {child.name}
+                                      </NavLink>
+                                    )}
                                   </li>
                                 ))}
                               </ul>

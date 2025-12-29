@@ -53,6 +53,9 @@ interface ShiftData {
   grade_b: number;
   grade_c: number;
   total: number;
+  runtime_minutes?: number;
+  downtime_minutes?: number;
+  idle_time_minutes?: number;
 }
 
 interface OEEData {
@@ -67,6 +70,11 @@ interface OEEData {
   top_3_downtime?: DowntimeItem[];
   shifts?: ShiftData[];
   pack_per_karton?: number;
+  // New fields for runtime/downtime tracking
+  runtime_minutes?: number;
+  total_downtime_minutes?: number;
+  idle_time_minutes?: number;
+  planned_runtime_minutes?: number;
 }
 
 interface MaintenanceRecord {
@@ -525,18 +533,25 @@ const MachineDetail: React.FC = () => {
                       {/* Expanded Detail */}
                       {isExpanded && (
                         <div className="p-4 bg-white border-t">
-                          {/* Production per Shift - Grade A, B, C */}
+                          {/* Production per Shift - with Runtime, Downtime, Idle Time */}
                           <div className="mb-4">
-                            <p className="text-sm font-medium text-gray-700 mb-3">📦 Produksi per Shift</p>
+                            <p className="text-sm font-medium text-gray-700 mb-3">📦 Detail per Shift</p>
                             {day.shifts && day.shifts.length > 0 ? (
-                              <div className="space-y-2">
+                              <div className="space-y-3">
                                 {day.shifts.map((shift) => (
-                                  <div key={shift.shift} className="p-3 bg-gray-50 rounded-lg">
-                                    <div className="flex items-center justify-between mb-2">
-                                      <span className="font-medium text-gray-700">Shift {shift.shift}</span>
-                                      <span className="text-sm text-gray-500">Total: {shift.total.toLocaleString()} pcs</span>
+                                  <div key={shift.shift} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <div className="flex items-center justify-between mb-3">
+                                      <span className="font-semibold text-gray-800 text-base">
+                                        Shift {shift.shift} 
+                                        <span className="text-xs font-normal text-gray-500 ml-2">
+                                          ({shift.shift === 1 ? '06:30-15:00' : shift.shift === 2 ? '15:00-23:00' : '23:00-06:30'})
+                                        </span>
+                                      </span>
+                                      <span className="text-sm font-medium text-blue-600">Total: {shift.total.toLocaleString()} pcs</span>
                                     </div>
-                                    <div className="grid grid-cols-3 gap-2 text-sm">
+                                    
+                                    {/* Production Grades */}
+                                    <div className="grid grid-cols-3 gap-2 text-sm mb-3">
                                       <div className="p-2 bg-green-100 rounded text-center">
                                         <p className="text-xs text-gray-500">Grade A</p>
                                         <p className="font-bold text-green-600">{shift.grade_a.toLocaleString()}</p>
@@ -550,6 +565,22 @@ const MachineDetail: React.FC = () => {
                                         <p className="font-bold text-red-600">{shift.grade_c.toLocaleString()}</p>
                                       </div>
                                     </div>
+                                    
+                                    {/* Runtime, Downtime, Idle per Shift */}
+                                    <div className="grid grid-cols-3 gap-2 text-sm">
+                                      <div className="p-2 bg-green-50 rounded text-center border border-green-200">
+                                        <p className="text-xs text-gray-500">Runtime</p>
+                                        <p className="font-bold text-green-600">{shift.runtime_minutes || 480} menit</p>
+                                      </div>
+                                      <div className="p-2 bg-red-50 rounded text-center border border-red-200">
+                                        <p className="text-xs text-gray-500">Downtime</p>
+                                        <p className="font-bold text-red-600">{shift.downtime_minutes || 0} menit</p>
+                                      </div>
+                                      <div className="p-2 bg-orange-50 rounded text-center border border-orange-200">
+                                        <p className="text-xs text-gray-500">Idle Time</p>
+                                        <p className="font-bold text-orange-600">{shift.idle_time_minutes || 0} menit</p>
+                                      </div>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -558,38 +589,59 @@ const MachineDetail: React.FC = () => {
                             )}
                           </div>
 
-                          {/* OEE Components */}
-                          <div className="grid grid-cols-3 gap-4 mb-4">
-                            <div className="p-3 bg-blue-50 rounded-lg">
-                              <p className="text-xs text-gray-500">Availability</p>
-                              <p className="text-lg font-bold text-blue-600">{day.availability?.toFixed(1) || 0}%</p>
-                            </div>
-                            <div className="p-3 bg-yellow-50 rounded-lg">
-                              <p className="text-xs text-gray-500">Performance</p>
-                              <p className="text-lg font-bold text-yellow-600">{day.performance?.toFixed(1) || 0}%</p>
-                            </div>
-                            <div className="p-3 bg-purple-50 rounded-lg">
-                              <p className="text-xs text-gray-500">Quality</p>
-                              <p className="text-lg font-bold text-purple-600">{day.quality?.toFixed(1) || 0}%</p>
+                          {/* Daily Total Summary */}
+                          <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <p className="text-sm font-semibold text-blue-800 mb-2">📊 Total Hari Ini</p>
+                            <div className="grid grid-cols-4 gap-3">
+                              <div className="p-2 bg-white rounded text-center">
+                                <p className="text-xs text-gray-500">Runtime</p>
+                                <p className="text-lg font-bold text-green-600">
+                                  {day.runtime_minutes !== undefined ? day.runtime_minutes : 
+                                    Math.round((day.planned_runtime_minutes || 480))} menit
+                                </p>
+                              </div>
+                              <div className="p-2 bg-white rounded text-center">
+                                <p className="text-xs text-gray-500">Total Downtime</p>
+                                <p className="text-lg font-bold text-red-600">
+                                  {day.total_downtime_minutes !== undefined ? day.total_downtime_minutes : 0} menit
+                                </p>
+                              </div>
+                              <div className="p-2 bg-white rounded text-center">
+                                <p className="text-xs text-gray-500">Idle Time</p>
+                                <p className="text-lg font-bold text-orange-600">
+                                  {day.idle_time_minutes || 0} menit
+                                </p>
+                              </div>
+                              <div className="p-2 bg-white rounded text-center">
+                                <p className="text-xs text-gray-500">Quality</p>
+                                <p className="text-lg font-bold text-purple-600">{day.quality?.toFixed(1) || 0}%</p>
+                              </div>
                             </div>
                           </div>
                           
                           {/* Top 3 Downtime */}
                           <div className="mt-4">
-                            <p className="text-sm font-medium text-gray-700 mb-2">🔴 Top 3 Downtime Terlama</p>
+                            <p className="text-sm font-medium text-gray-700 mb-2">🔴 Top 3 Downtime</p>
                             {dayDowntimes.length > 0 ? (
                               <div className="space-y-2">
-                                {dayDowntimes.map((dt, idx) => (
-                                  <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded">
-                                    <div className="flex items-center gap-2">
-                                      <span className="w-5 h-5 flex items-center justify-center bg-red-100 text-red-600 text-xs font-bold rounded">
-                                        {idx + 1}
-                                      </span>
-                                      <span className="text-sm text-gray-700">{dt.reason}</span>
+                                {dayDowntimes.map((dt, idx) => {
+                                  const runtimeVal = day.runtime_minutes || (day.planned_runtime_minutes || 480) - (day.total_downtime_minutes || 0);
+                                  const percentage = runtimeVal > 0 ? ((dt.duration_minutes / runtimeVal) * 100).toFixed(1) : 0;
+                                  return (
+                                    <div key={idx} className="flex items-center justify-between p-2 bg-red-50 rounded">
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-5 h-5 flex items-center justify-center bg-red-100 text-red-600 text-xs font-bold rounded">
+                                          {idx + 1}
+                                        </span>
+                                        <span className="text-sm text-gray-700">{dt.reason}</span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-red-600">{dt.duration_minutes} menit</span>
+                                        <span className="text-xs text-red-500">({percentage}%)</span>
+                                      </div>
                                     </div>
-                                    <span className="text-sm font-medium text-red-600">{dt.duration_minutes} min</span>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             ) : (
                               <p className="text-sm text-gray-400 italic">No downtime recorded</p>

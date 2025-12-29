@@ -5,7 +5,7 @@ Auto-calculate product metrics based on specifications
 
 from flask import Blueprint, request, jsonify
 from models import db
-from models.product_new_schema import ProductNew
+from models.product_excel_schema import ProductNew
 from datetime import datetime
 import traceback
 import sys

@@ -14,10 +14,10 @@ def calculate_standard_costs_from_bom(product_id, quantity):
     Returns:
         tuple: (material_cost, labor_cost, overhead_cost)
     """
-    from models.production import BOM
+    from models.production import BillOfMaterials
     
     # Get active BOM for product
-    bom = BOM.query.filter_by(
+    bom = BillOfMaterials.query.filter_by(
         product_id=product_id,
         is_active=True
     ).first()
@@ -137,9 +137,9 @@ def get_bom_details(product_id):
     Returns:
         dict: BOM details or None
     """
-    from models.production import BOM
+    from models.production import BillOfMaterials
     
-    bom = BOM.query.filter_by(
+    bom = BillOfMaterials.query.filter_by(
         product_id=product_id,
         is_active=True
     ).first()
@@ -183,9 +183,9 @@ def validate_bom_exists(product_id):
     Returns:
         bool: True if BOM exists
     """
-    from models.production import BOM
+    from models.production import BillOfMaterials
     
-    bom = BOM.query.filter_by(
+    bom = BillOfMaterials.query.filter_by(
         product_id=product_id,
         is_active=True
     ).first()

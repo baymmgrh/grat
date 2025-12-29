@@ -50,6 +50,7 @@ def create_app(config_class=Config):
     from routes.hr_appraisal import hr_appraisal_bp
     from routes.hr_training import hr_training_bp
     from routes.hr_extended import hr_extended_bp
+    from routes.work_roster import work_roster_bp
     from routes.settings import settings_bp
     from routes.mrp import mrp_bp
     from routes.quality import quality_bp
@@ -66,6 +67,7 @@ def create_app(config_class=Config):
     from routes.import_data import import_bp
     from routes.returns import returns_bp
     from routes.warehouse_enhanced import warehouse_enhanced_bp
+    from routes.stock_opname import stock_opname_bp
     from routes.settings_extended import settings_extended_bp
     from routes.integration_extended import integration_bp
     from routes.tv_display import tv_display_bp
@@ -114,6 +116,7 @@ def create_app(config_class=Config):
     app.register_blueprint(hr_appraisal_bp, url_prefix='/api/hr/appraisal')
     app.register_blueprint(hr_training_bp, url_prefix='/api/hr/training')
     app.register_blueprint(hr_extended_bp, url_prefix='/api/hr')
+    app.register_blueprint(work_roster_bp, url_prefix='/api/hr/work-roster')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(mrp_bp, url_prefix='/api/mrp')
     app.register_blueprint(quality_bp, url_prefix='/api/quality')
@@ -129,6 +132,7 @@ def create_app(config_class=Config):
     app.register_blueprint(oee_bp, url_prefix='/api/oee')
     app.register_blueprint(returns_bp, url_prefix='/api/returns')
     app.register_blueprint(warehouse_enhanced_bp, url_prefix='/api/warehouse-enhanced')
+    app.register_blueprint(stock_opname_bp, url_prefix='/api/stock-opname')
     app.register_blueprint(settings_extended_bp, url_prefix='/api/settings')
     app.register_blueprint(integration_bp, url_prefix='/api/integration')
     app.register_blueprint(tv_display_bp, url_prefix='/api/tv-display')
@@ -163,6 +167,14 @@ def create_app(config_class=Config):
     # Import and register Weekly Production Plan blueprint
     from routes.weekly_production_plan import weekly_plan_bp
     app.register_blueprint(weekly_plan_bp, url_prefix='/api/production')
+    
+    # Import and register Work Order Monitoring blueprint
+    from routes.work_order_monitoring import wo_monitoring_bp
+    app.register_blueprint(wo_monitoring_bp)
+    
+    # Import and register Production Integration blueprint
+    from routes.production_integration import production_integration_bp
+    app.register_blueprint(production_integration_bp)
     
     # Import and register Schedule Grid blueprint
     from routes.schedule_grid import schedule_grid_bp

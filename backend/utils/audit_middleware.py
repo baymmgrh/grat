@@ -20,6 +20,7 @@ def should_track_request():
         '/api/auth/logout',
         '/api/auth/refresh',
         '/api/system/metrics',
+        '/api/notifications',
         '/static/',
         '/favicon.ico'
     ]
@@ -33,10 +34,18 @@ def should_track_request():
 def get_user_info():
     """Get current user information"""
     try:
+        # Skip JWT verification for OPTIONS requests (CORS preflight)
+        if request.method == 'OPTIONS':
+            return None, False
+        
         verify_jwt_in_request(optional=True)
         user_id = get_jwt_identity()
         
         if user_id:
+            # Convert to int if string
+            if isinstance(user_id, str):
+                user_id = int(user_id)
+            
             user = User.query.get(user_id)
             if user:
                 # Skip tracking for admin users
@@ -44,7 +53,8 @@ def get_user_info():
                     return None, True  # user_id, is_admin
                 return user_id, False
         return None, False
-    except:
+    except Exception as e:
+        # Silently handle JWT errors for unauthenticated requests
         return None, False
 
 def determine_action(method, path):
@@ -103,11 +113,15 @@ def log_audit_trail(user_id, action, resource_type, resource_id=None, resource_n
 
 def track_request():
     """Middleware to track all requests"""
+    # Reset g values at start of each request to prevent stale data
+    g.user_id = None
+    g.start_time = None
+    
     # Check if should track
     if not should_track_request():
         return
     
-    # Get user info
+    # Get user info - fresh for each request
     user_id, is_admin = get_user_info()
     
     # Skip if admin
@@ -118,14 +132,14 @@ def track_request():
     if not user_id:
         return
     
-    # Store start time
+    # Store start time and user_id for this request
     g.start_time = time.time()
     g.user_id = user_id
 
 def log_response(response):
     """Log response after request completes"""
     # Check if tracking is enabled for this request
-    if not hasattr(g, 'user_id'):
+    if not hasattr(g, 'user_id') or g.user_id is None:
         return response
     
     try:

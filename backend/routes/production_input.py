@@ -286,7 +286,8 @@ def create_shift_production():
             notes=data.get('notes'),
             issues=data.get('issues'),
             status=data.get('status', 'completed'),
-            created_by=current_user_id
+            created_by=current_user_id,
+            machine_speed=int(data.get('machine_speed', 0))
         )
         
         db.session.add(shift_production)

@@ -189,9 +189,9 @@ const WIPBatchForm: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
-                    <option value="shift_1">Shift 1 (07:00 - 15:00)</option>
+                    <option value="shift_1">Shift 1 (06:30 - 15:00)</option>
                     <option value="shift_2">Shift 2 (15:00 - 23:00)</option>
-                    <option value="shift_3">Shift 3 (23:00 - 07:00)</option>
+                    <option value="shift_3">Shift 3 (23:00 - 06:30)</option>
                   </select>
                 </div>
               </div>

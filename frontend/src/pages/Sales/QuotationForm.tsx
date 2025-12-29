@@ -97,11 +97,18 @@ const QuotationForm = () => {
       
       const [customersRes, productsRes] = await Promise.all([
         axiosInstance.get('/api/sales/customers'),
-        axiosInstance.get('/api/products')
+        axiosInstance.get('/api/products-new/?per_page=1000')
       ])
       
       setCustomers(customersRes.data.customers || [])
-      setProducts(productsRes.data.products || [])
+      const mappedProducts = (productsRes.data.products || []).map((p: any) => ({
+        id: p.id,
+        code: p.kode_produk || p.code,
+        name: p.nama_produk || p.name,
+        primary_uom: p.satuan || p.primary_uom || 'pcs',
+        price: p.harga_jual || p.price || 0,
+      }))
+      setProducts(mappedProducts)
     } catch (error) {
       console.error('Error loading form data:', error)
     } finally {

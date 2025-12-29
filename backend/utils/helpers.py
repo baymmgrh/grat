@@ -114,3 +114,103 @@ def truncate_string(text: str, max_length: int = 50) -> str:
     if len(text) <= max_length:
         return text
     return text[:max_length-3] + "..."
+
+
+def detect_downtime_category(issue_text: str, is_first_entry: bool = False) -> str:
+    """
+    Auto-detect downtime category from issue description keywords.
+    Returns: 'mesin', 'operator', 'material', 'design', 'idle', or 'others'
+    
+    Args:
+        issue_text: The downtime reason/issue description
+        is_first_entry: Whether this is the first downtime entry (affects 'setting mc/mesin' categorization)
+    """
+    if not issue_text:
+        return 'others'
+    
+    text_lower = issue_text.lower()
+    
+    # IDLE TIME keywords - waiting for materials/resources (check first - high priority)
+    idle_keywords = [
+        'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
+        'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
+        'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
+        'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
+        'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
+        'waiting for', 'idle', 'standby'
+    ]
+    for kw in idle_keywords:
+        if kw in text_lower:
+            return 'idle'
+    
+    # SPECIAL CASE: "setting mc/mesin" - depends on position
+    # If first entry → design (changeover/setup awal)
+    # If not first → mesin (adjustment mesin)
+    if 'setting mc' in text_lower or 'setting mesin' in text_lower:
+        return 'design' if is_first_entry else 'mesin'
+    
+    # INKJET keywords - categorize as mesin
+    inkjet_keywords = [
+        'inkjet', 'ink jet', 'ink-jet', 'inkjet error', 'inkjet macet', 
+        'printer inkjet', 'head inkjet', 'tinta inkjet', 'cartridge inkjet'
+    ]
+    for kw in inkjet_keywords:
+        if kw in text_lower:
+            return 'mesin'
+    
+    # OPERATOR keywords - check first for specific patterns
+    operator_keywords = [
+        'keluar jalur (sambungan)', 'sambungan', 'salah setting', 'salah pasang',
+        'operator error', 'human error', 'kesalahan operator', 'lupa', 'telat',
+        'tidak fokus', 'kurang teliti', 'salah input', 'salah ukur', 'setting'
+    ]
+    for kw in operator_keywords:
+        if kw in text_lower:
+            return 'operator'
+    
+    # MATERIAL/RAW MATERIAL keywords
+    material_keywords = [
+        'keluar jalur (kain terlalu tipis', 'keluar jalur (kain gembos', 
+        'keluar jalur (kain tidak sesuai', 'kain terlalu tipis', 'kain gembos',
+        'kain tidak sesuai', 'material cacat', 'bahan cacat', 'kain cacat',
+        'material rusak', 'bahan rusak', 'kain rusak', 'material habis',
+        'bahan habis', 'kain habis', 'material kurang', 'bahan kurang',
+        'benang putus', 'benang habis', 'kualitas kain', 'kain tipis',
+        'raw material', 'bahan baku'
+    ]
+    for kw in material_keywords:
+        if kw in text_lower:
+            return 'material'
+    
+    # MESIN keywords - check after material to avoid false positives
+    mesin_keywords = [
+        'keluar jalur (bak mesin', 'bak mesin', 'mesin rusak', 'mesin error',
+        'mesin mati', 'mesin trouble', 'mesin macet', 'breakdown', 'maintenance',
+        'perbaikan mesin', 'ganti sparepart', 'sparepart', 'sensor error',
+        'motor rusak', 'bearing', 'belt putus', 'overheating', 'overheat',
+        'listrik mati', 'power failure', 'angin habis', 'compressor',
+        'pneumatic', 'hidrolik', 'hydraulic', 'kalibrasi', 'calibration',
+        'jarum patah', 'jarum bengkok', 'tension', 'needle'
+    ]
+    for kw in mesin_keywords:
+        if kw in text_lower:
+            return 'mesin'
+    
+    # DESIGN keywords
+    design_keywords = [
+        'design error', 'desain salah', 'pattern salah', 'pola salah',
+        'ukuran salah', 'spec salah', 'spesifikasi salah', 'revisi design',
+        'revisi desain', 'sample', 'prototype', 'trial', 'testing design',
+        'changeover', 'ganti produk', 'ganti order', 'ganti', 'sanitasi',
+        'cleaning', 'warmup', 'persiapan produksi'
+    ]
+    for kw in design_keywords:
+        if kw in text_lower:
+            return 'design'
+    
+    # Generic "keluar jalur" without specific cause -> check context
+    if 'keluar jalur' in text_lower:
+        # If no specific cause found, default to mesin (most common)
+        return 'mesin'
+    
+    return 'others'

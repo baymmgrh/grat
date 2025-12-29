@@ -11,11 +11,14 @@ import {
   InformationCircleIcon as StatusIcon,
   PauseIcon,
   PlayIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  UserGroupIcon,
+  ComputerDesktopIcon
 } from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react'
 import axiosInstance from '../../utils/axiosConfig'
 import LoadingSpinner from '../../components/Common/LoadingSpinner'
+import EfficiencyAlerts from '../../components/Production/EfficiencyAlerts'
 interface DashboardData {
   work_orders: {
     total: number
@@ -144,6 +147,14 @@ const ProductionDashboard = () => {
       href: '/app/production/wip',
       color: 'bg-emerald-500',
       stats: 'Real-time WIP monitoring'
+    },
+    {
+      title: 'Work Roster',
+      description: 'Jadwal kerja operator, QC, maintenance, dan packing',
+      icon: UserGroupIcon,
+      href: '/app/hr/roster',
+      color: 'bg-pink-500',
+      stats: 'Manajemen jadwal lengkap'
     }
   ]
 
@@ -200,6 +211,9 @@ const ProductionDashboard = () => {
           </div>
         ))}
       </div>
+
+      {/* Efficiency Alerts */}
+      <EfficiencyAlerts />
 
       {/* Machine Status Overview */}
       {dashboardData?.machines.status_breakdown && (

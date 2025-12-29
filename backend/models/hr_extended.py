@@ -354,3 +354,159 @@ class TrainingRequest(db.Model):
     employee = db.relationship('Employee')
     program = db.relationship('TrainingProgram')
     approved_by_user = db.relationship('User')
+
+
+# ===============================
+# COMPREHENSIVE WORK ROSTER MODELS
+# ===============================
+
+class WorkRoster(db.Model):
+    """
+    Master Work Roster - represents a WEEKLY roster for production
+    Contains all personnel assignments for a specific week
+    Each week can have multiple shifts (shift_1, shift_2, shift_3)
+    """
+    __tablename__ = 'work_rosters'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # Week identification
+    week_start_date = db.Column(db.Date, nullable=False, index=True)  # Monday of the week
+    week_end_date = db.Column(db.Date, nullable=False)  # Sunday of the week
+    week_number = db.Column(db.Integer, nullable=False)  # Week number in year (1-52)
+    year = db.Column(db.Integer, nullable=False)
+    
+    # Leader assignment per shift for the week
+    leader_shift_1_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
+    leader_shift_2_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
+    leader_shift_3_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
+    
+    # Status
+    status = db.Column(db.String(50), default='draft')  # draft, published, completed
+    notes = db.Column(db.Text, nullable=True)
+    
+    # Audit
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    approved_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    leader_shift_1 = db.relationship('Employee', foreign_keys=[leader_shift_1_id])
+    leader_shift_2 = db.relationship('Employee', foreign_keys=[leader_shift_2_id])
+    leader_shift_3 = db.relationship('Employee', foreign_keys=[leader_shift_3_id])
+    assignments = db.relationship('WorkRosterAssignment', back_populates='roster', cascade='all, delete-orphan')
+    created_by_user = db.relationship('User', foreign_keys=[created_by])
+    approved_by_user = db.relationship('User', foreign_keys=[approved_by])
+    
+    __table_args__ = (
+        db.UniqueConstraint('year', 'week_number', name='unique_roster_year_week'),
+        db.Index('idx_roster_year_week', 'year', 'week_number'),
+    )
+
+
+class WorkRosterAssignment(db.Model):
+    """
+    Individual assignment of employee to a role in the work roster
+    Supports multiple employees per role, machine-specific assignments, and shift-specific
+    """
+    __tablename__ = 'work_roster_assignments'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    roster_id = db.Column(db.Integer, db.ForeignKey('work_rosters.id'), nullable=False)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=False)
+    
+    # Shift assignment (within the week)
+    shift = db.Column(db.String(20), nullable=False)  # shift_1, shift_2, shift_3
+    
+    # Role in production
+    role = db.Column(db.String(50), nullable=False)  
+    # Roles: operator, qc, maintenance, packing_machine, packing_manual, timbang_box, helper
+    
+    # Machine assignment (for operator, qc, packing_machine roles)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
+    
+    # Position/order within role (for display ordering)
+    position = db.Column(db.Integer, default=1)
+    
+    # Status
+    is_backup = db.Column(db.Boolean, default=False)  # Backup/standby assignment
+    status = db.Column(db.String(50), default='assigned')  # assigned, present, absent, replaced
+    
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    roster = db.relationship('WorkRoster', back_populates='assignments')
+    employee = db.relationship('Employee')
+    machine = db.relationship('Machine')
+    
+    __table_args__ = (
+        db.Index('idx_roster_shift_employee', 'roster_id', 'shift', 'employee_id'),
+        db.Index('idx_roster_shift_role', 'roster_id', 'shift', 'role'),
+        db.Index('idx_roster_shift_machine', 'roster_id', 'shift', 'machine_id'),
+    )
+
+
+class EmployeeSkill(db.Model):
+    """
+    Skill matrix - tracks which machines/roles an employee is qualified for
+    Used for rotation planning and assignment validation
+    """
+    __tablename__ = 'employee_skills'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=False)
+    
+    # Skill type
+    skill_type = db.Column(db.String(50), nullable=False)  # machine_operation, qc, maintenance, packing, etc.
+    
+    # Machine qualification (for machine_operation skill)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
+    
+    # Proficiency level
+    proficiency_level = db.Column(db.String(50), default='basic')  # basic, intermediate, advanced, expert
+    
+    # Certification
+    certified = db.Column(db.Boolean, default=False)
+    certification_date = db.Column(db.Date, nullable=True)
+    certification_expiry = db.Column(db.Date, nullable=True)
+    
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    employee = db.relationship('Employee')
+    machine = db.relationship('Machine')
+    
+    __table_args__ = (
+        db.UniqueConstraint('employee_id', 'skill_type', 'machine_id', name='unique_employee_skill'),
+        db.Index('idx_employee_skill', 'employee_id', 'skill_type'),
+    )
+
+
+class RosterTemplate(db.Model):
+    """
+    Template for frequently used roster configurations
+    Can be applied to quickly create rosters
+    """
+    __tablename__ = 'roster_templates'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    shift = db.Column(db.String(20), nullable=False)  # shift_1, shift_2, shift_3
+    
+    # Template data stored as JSON
+    template_data = db.Column(db.JSON, nullable=True)  # Stores role assignments configuration
+    
+    is_active = db.Column(db.Boolean, default=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    created_by_user = db.relationship('User')

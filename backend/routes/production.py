@@ -4,11 +4,21 @@ from models import db, Machine, WorkOrder, ProductionRecord, BillOfMaterials, BO
 from models.production import RemainingStock
 from models.work_order_bom import WorkOrderBOMItem
 from models.product import Material
+from models.product_excel_schema import ProductNew
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_, or_
 from io import BytesIO
+
+def get_product_name_from_new(product_code):
+    """Get updated product name from ProductNew model"""
+    if not product_code:
+        return None
+    product_new = ProductNew.query.filter_by(kode_produk=product_code).first()
+    if product_new:
+        return product_new.nama_produk
+    return None
 
 production_bp = Blueprint('production', __name__)
 
@@ -318,7 +328,7 @@ def get_work_orders():
             'work_orders': [{
                 'id': wo.id,
                 'wo_number': wo.wo_number,
-                'product_name': wo.product.name if wo.product else 'Unknown Product',
+                'product_name': get_product_name_from_new(wo.product.code if wo.product else None) or (wo.product.name if wo.product else 'Unknown Product'),
                 'quantity': float(wo.quantity) if wo.quantity else 0,
                 'quantity_produced': float(wo.quantity_produced) if wo.quantity_produced else 0,
                 'status': wo.status,
@@ -403,6 +413,16 @@ def get_work_order(id):
                 consumption_data['volume_per_pack'] = ingredient / packs if packs > 0 else 0  # liter per pack
                 consumption_data['ratio'] = ratio
                 consumption_data['packs_per_karton'] = packs
+                
+                # Debug logging
+                print(f"DEBUG: WorkOrder {wo.wo_number} - products_new data:")
+                print(f"  - product_code: {product_code}")
+                print(f"  - product_name: {product_name}")
+                print(f"  - packs_per_karton: {packs}")
+                print(f"  - berat_kering_per_karton: {berat_kering}")
+                print(f"  - ingredient_per_karton: {ingredient}")
+                print(f"  - berat_kering_per_pack: {consumption_data['berat_kering_per_pack']}")
+                print(f"  - volume_per_pack: {consumption_data['volume_per_pack']}")
             
             # Fallback to ProductPackaging if products_new doesn't have data
             if not consumption_data['berat_kering_per_pack'] and not consumption_data['volume_per_pack']:
@@ -420,13 +440,19 @@ def get_work_order(id):
                     
                     if packaging.berat_akhir_per_karton:
                         consumption_data['berat_akhir_per_pack'] = float(packaging.berat_akhir_per_karton) / 1000 / packs  # gram to kg per pack
+                else:
+                    # Final fallback - use default values if no data found
+                    # This ensures waste calculation always works
+                    consumption_data['berat_kering_per_pack'] = 0.8  # Default 800g per pack
+                    consumption_data['volume_per_pack'] = 0.5  # Default 500ml per pack
+                    consumption_data['berat_akhir_per_pack'] = 1.2  # Default 1.2kg per pack
         
         # Build response safely
         response_data = {
             'id': wo.id,
             'wo_number': wo.wo_number,
             'product_id': wo.product_id,
-            'product_name': wo.product.name if wo.product else 'Unknown Product',
+            'product_name': get_product_name_from_new(wo.product.code if wo.product else None) or (wo.product.name if wo.product else 'Unknown Product'),
             'product_code': wo.product.code if wo.product else None,
             'bom_id': wo.bom_id,
             'bom_number': wo.bom.bom_number if wo.bom else None,
@@ -439,9 +465,11 @@ def get_work_order(id):
             'priority': wo.priority,
             'source_type': getattr(wo, 'source_type', 'manual'),  # manual, from_bom, from_schedule
             'schedule_grid_id': getattr(wo, 'schedule_grid_id', None),
+            'schedule_days': {},  # Will be populated if from_schedule
             'batch_number': getattr(wo, 'batch_number', None),
             'machine_id': wo.machine_id,
             'machine_name': wo.machine.name if wo.machine else None,
+            'machine_default_speed': int(wo.machine.default_speed) if wo.machine and wo.machine.default_speed else 0,
             'pack_per_carton': pack_per_carton,
             'consumption_data': consumption_data,
             'scheduled_start_date': wo.scheduled_start_date.isoformat() if wo.scheduled_start_date else None,
@@ -543,6 +571,14 @@ def get_work_order(id):
         
         response_data['bom_materials'] = bom_materials
         response_data['batch_size'] = float(bom_to_use.batch_size) if bom_to_use and bom_to_use.batch_size else None
+        
+        # Get schedule_days if WO is from schedule
+        if response_data.get('source_type') == 'from_schedule' and response_data.get('schedule_grid_id'):
+            from routes.schedule_grid import ScheduleGridItem
+            import json
+            schedule_item = ScheduleGridItem.query.get(response_data['schedule_grid_id'])
+            if schedule_item and schedule_item.schedule_days:
+                response_data['schedule_days'] = json.loads(schedule_item.schedule_days)
         
         return jsonify({'work_order': response_data}), 200
     except Exception as e:
@@ -652,11 +688,12 @@ def delete_work_order(id):
         
         force = request.args.get('force', 'false').lower() == 'true'
         
+        # Import all related models
+        from models.production import ShiftProduction, PackingList, PackingListItem, ProductionSchedule, ProductionApproval, ProductChangeover, WeeklyProductionPlanItem
+        from models.wip_job_costing import WIPBatch, WIPStageMovement, JobCostEntry
+        
         # Check if there are production records
         has_production = ProductionRecord.query.filter_by(work_order_id=id).first() is not None
-        
-        # Check ShiftProduction too
-        from models.production import ShiftProduction
         has_shift_production = ShiftProduction.query.filter_by(work_order_id=id).first() is not None
         
         if (has_production or has_shift_production) and not force:
@@ -665,10 +702,65 @@ def delete_work_order(id):
                 'has_production': True
             }), 400
         
-        # Delete related records first if force
+        # Always delete related records to avoid FK constraint errors
+        # 1. Delete packing lists and their items FIRST
+        packing_lists = PackingList.query.filter_by(work_order_id=id).all()
+        for pl in packing_lists:
+            PackingListItem.query.filter_by(packing_list_id=pl.id).delete()
+            db.session.delete(pl)
+        
+        # 2. Delete WIP batches and their related records
+        wip_batches = WIPBatch.query.filter_by(work_order_id=id).all()
+        for wb in wip_batches:
+            WIPStageMovement.query.filter_by(wip_batch_id=wb.id).delete()
+            JobCostEntry.query.filter_by(wip_batch_id=wb.id).delete()
+            db.session.delete(wb)
+        
+        # 3. Delete production approvals
+        ProductionApproval.query.filter_by(work_order_id=id).delete()
+        
+        # 4. Delete production schedules
+        ProductionSchedule.query.filter_by(work_order_id=id).delete()
+        
+        # 5. Handle product changeovers
+        ProductChangeover.query.filter_by(from_work_order_id=id).delete()
+        ProductChangeover.query.filter_by(to_work_order_id=id).update({'to_work_order_id': None})
+        
+        # 6. Update weekly plan items to remove WO reference
+        WeeklyProductionPlanItem.query.filter_by(work_order_id=id).update({'work_order_id': None})
+        
+        # 7. Delete production records if force
         if force:
             ProductionRecord.query.filter_by(work_order_id=id).delete()
             ShiftProduction.query.filter_by(work_order_id=id).delete()
+        
+        # 8. Recalculate machine efficiency after deleting ShiftProduction
+        if wo.machine_id:
+            machine = wo.machine
+            if machine:
+                # Get remaining ShiftProduction for this machine (last 30 days)
+                from datetime import timedelta
+                thirty_days_ago = datetime.utcnow().date() - timedelta(days=30)
+                remaining_shifts = ShiftProduction.query.filter(
+                    ShiftProduction.machine_id == machine.id,
+                    ShiftProduction.production_date >= thirty_days_ago
+                ).all()
+                
+                if remaining_shifts:
+                    # Recalculate average efficiency and availability
+                    total_efficiency = sum(float(sp.efficiency_rate or 0) for sp in remaining_shifts)
+                    total_availability = sum(
+                        (float(sp.actual_runtime or 0) / float(sp.planned_runtime) * 100) 
+                        if sp.planned_runtime and sp.planned_runtime > 0 else 100 
+                        for sp in remaining_shifts
+                    )
+                    machine.efficiency = round(total_efficiency / len(remaining_shifts), 2)
+                    machine.availability = round(total_availability / len(remaining_shifts), 2)
+                else:
+                    # No remaining production data, reset to default
+                    machine.efficiency = 100
+                    machine.availability = 100
+                machine.status = 'idle'
         
         db.session.delete(wo)
         db.session.commit()
@@ -680,18 +772,24 @@ def delete_work_order(id):
 @production_bp.route('/work-orders/<int:id>/status', methods=['PUT'])
 @jwt_required()
 def update_work_order_status(id):
-    """Update work order status"""
+    """Update work order status with auto warehouse integration"""
     try:
+        from routes.production_integration import auto_deduct_materials, auto_receive_finished_goods
+        
         wo = WorkOrder.query.get(id)
         if not wo:
             return jsonify({'error': 'Work order not found'}), 404
         
         data = request.get_json()
         new_status = data.get('status')
+        auto_deduct = data.get('auto_deduct', True)  # Default true for auto-deduction
         
         valid_statuses = ['planned', 'released', 'in_progress', 'completed', 'cancelled']
         if new_status not in valid_statuses:
             return jsonify({'error': f'Invalid status. Must be one of: {valid_statuses}'}), 400
+        
+        old_status = wo.status
+        integration_results = {}
         
         # Update status
         wo.status = new_status
@@ -701,15 +799,63 @@ def update_work_order_status(id):
             wo.actual_start_date = datetime.utcnow()
             if wo.machine:
                 wo.machine.status = 'running'
+            
+            # AUTO-DEDUCT MATERIALS when starting production
+            if auto_deduct and wo.bom_id:
+                user_id = get_jwt_identity()
+                success, message, data_result = auto_deduct_materials(id, user_id)
+                integration_results['material_deduction'] = {
+                    'success': success,
+                    'message': message,
+                    'transactions': data_result if success else [],
+                    'insufficient_materials': data_result if not success else []
+                }
+                
+                if not success:
+                    # Rollback status change if material deduction fails
+                    wo.status = old_status
+                    wo.actual_start_date = None
+                    db.session.rollback()
+                    return jsonify({
+                        'error': 'Cannot start production: Material shortage',
+                        'details': integration_results['material_deduction']
+                    }), 400
+        
         elif new_status == 'completed' and not wo.actual_end_date:
             wo.actual_end_date = datetime.utcnow()
             if wo.machine:
                 wo.machine.status = 'idle'
+            
+            # AUTO-RECEIVE FINISHED GOODS when completing production
+            if auto_deduct and wo.quantity_produced > 0:
+                user_id = get_jwt_identity()
+                qty_good = float(wo.quantity_good) if wo.quantity_good else float(wo.quantity_produced)
+                success, message, inventory_id = auto_receive_finished_goods(id, qty_good, user_id)
+                integration_results['finished_goods_receipt'] = {
+                    'success': success,
+                    'message': message,
+                    'inventory_id': inventory_id,
+                    'quantity_received': qty_good
+                }
         
         db.session.commit()
-        return jsonify({'message': f'Work order status updated to {new_status}'}), 200
+        
+        response = {
+            'message': f'Work order status updated to {new_status}',
+            'wo_number': wo.wo_number,
+            'old_status': old_status,
+            'new_status': new_status
+        }
+        
+        if integration_results:
+            response['integration_results'] = integration_results
+        
+        return jsonify(response), 200
+        
     except Exception as e:
         db.session.rollback()
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @production_bp.route('/work-orders/<int:id>/production-records', methods=['GET'])
@@ -766,10 +912,15 @@ def create_work_order_production_record(id):
         # Parse production date
         production_date = datetime.fromisoformat(data['production_date']).date() if data.get('production_date') else datetime.utcnow().date()
         
+        # Get machine_id from work order or request data
+        machine_id = wo.machine_id or data.get('machine_id')
+        if not machine_id:
+            return jsonify({'error': 'Machine ID is required for production record'}), 400
+        
         # Create production record
         record = ProductionRecord(
             work_order_id=id,
-            machine_id=wo.machine_id,
+            machine_id=machine_id,
             production_date=datetime.fromisoformat(data['production_date']) if data.get('production_date') else datetime.utcnow(),
             shift=data.get('shift', '1'),
             quantity_produced=data.get('quantity_produced', 0),
@@ -795,8 +946,22 @@ def create_work_order_production_record(id):
         downtime_others = int(data.get('downtime_others', 0))
         total_downtime = int(data.get('downtime_minutes', 0))
         
-        # Calculate planned and actual runtime
-        planned_runtime = int(data.get('planned_runtime', 480))
+        # Calculate planned runtime based on shift and day
+        # Shift 1: 06:30-15:00 (510 minutes) - Friday: 06:30-15:30 (540 minutes)
+        # Shift 2: 15:00-23:00 (480 minutes)
+        # Shift 3: 23:00-06:30 (450 minutes)
+        is_friday = production_date.weekday() == 4  # 4 = Friday
+        shift_num = data.get('shift', '1')
+        
+        default_runtime = 480  # Default
+        if shift_num in ['1', 'shift_1']:
+            default_runtime = 540 if is_friday else 510
+        elif shift_num in ['2', 'shift_2']:
+            default_runtime = 480
+        elif shift_num in ['3', 'shift_3']:
+            default_runtime = 450
+        
+        planned_runtime = int(data.get('planned_runtime', default_runtime))
         actual_runtime = int(data.get('actual_runtime', planned_runtime - total_downtime))
         
         # Calculate quality rate
@@ -820,17 +985,27 @@ def create_work_order_production_record(id):
         loss_design = calc_loss(downtime_design, planned_runtime)
         loss_others = calc_loss(downtime_others, planned_runtime)
         
-        # Shift times based on shift number
+        # Shift times based on shift number and day
+        # Shift 1: 06:30-15:00 (normal), 06:30-15:30 (Friday)
+        # Shift 2: 15:00-23:00
+        # Shift 3: 23:00-06:30
         shift_key = f"shift_{data.get('shift', '1')}"
-        shift_times = {
-            'shift_1': ('07:00', '15:00'),
-            'shift_2': ('15:00', '23:00'),
-            'shift_3': ('23:00', '07:00'),
-            '1': ('07:00', '15:00'),
-            '2': ('15:00', '23:00'),
-            '3': ('23:00', '07:00')
-        }
-        shift_start_str, shift_end_str = shift_times.get(shift_key, shift_times.get(data.get('shift', '1'), ('07:00', '15:00')))
+        
+        # Determine shift times based on day and shift
+        if shift_num in ['1', 'shift_1']:
+            shift_start_str = '06:30'
+            shift_end_str = '15:30' if is_friday else '15:00'
+        elif shift_num in ['2', 'shift_2']:
+            shift_start_str = '15:00'
+            shift_end_str = '23:00'
+        elif shift_num in ['3', 'shift_3']:
+            shift_start_str = '23:00'
+            shift_end_str = '06:30'
+        else:
+            # Default to shift 1
+            shift_start_str = '06:30'
+            shift_end_str = '15:30' if is_friday else '15:00'
+        
         shift_start = datetime.strptime(shift_start_str, '%H:%M').time()
         shift_end = datetime.strptime(shift_end_str, '%H:%M').time()
         
@@ -840,7 +1015,7 @@ def create_work_order_production_record(id):
             shift=shift_key if shift_key.startswith('shift_') else f"shift_{data.get('shift', '1')}",
             shift_start=shift_start,
             shift_end=shift_end,
-            machine_id=wo.machine_id,
+            machine_id=machine_id,
             product_id=wo.product_id,
             work_order_id=id,
             target_quantity=wo.quantity,
@@ -852,6 +1027,7 @@ def create_work_order_production_record(id):
             planned_runtime=planned_runtime,
             actual_runtime=actual_runtime,
             downtime_minutes=total_downtime,
+            machine_speed=int(data.get('machine_speed', 0)),
             # Downtime by category
             downtime_mesin=downtime_mesin,
             downtime_operator=downtime_operator,
@@ -943,10 +1119,11 @@ def create_work_order_production_record(id):
             wo.actual_end_date = datetime.utcnow()
         
         # Update machine efficiency and availability based on latest production
-        if wo.machine:
-            wo.machine.efficiency = round(efficiency_rate, 2)
-            wo.machine.availability = round((actual_runtime / planned_runtime * 100) if planned_runtime > 0 else 100, 2)
-            wo.machine.status = 'running' if wo.status == 'in_progress' else wo.machine.status
+        machine = Machine.query.get(machine_id)
+        if machine:
+            machine.efficiency = round(efficiency_rate, 2)
+            machine.availability = round((actual_runtime / planned_runtime * 100) if planned_runtime > 0 else 100, 2)
+            machine.status = 'running' if wo.status == 'in_progress' else machine.status
         
         # ============= JOB COSTING INTEGRATION =============
         # Get or create WIP batch for this work order
@@ -960,7 +1137,7 @@ def create_work_order_production_record(id):
                 qty_started=float(wo.quantity),
                 qty_in_process=float(wo.quantity),
                 status='in_progress',
-                machine_id=wo.machine_id,
+                machine_id=machine_id,
                 shift=data.get('shift', '1'),
                 created_by=int(user_id)
             )
@@ -1563,7 +1740,7 @@ def get_boms():
             'boms': [{
                 'id': b.id,
                 'bom_number': b.bom_number,
-                'product_name': b.product.name,
+                'product_name': get_product_name_from_new(b.product.code if b.product else None) or (b.product.name if b.product else 'Unknown'),
                 'version': b.version,
                 'batch_size': float(b.batch_size),
                 'item_count': len(b.items)
@@ -1678,7 +1855,7 @@ def get_traceability(batch_number):
             'work_order': {
                 'id': work_order.id,
                 'wo_number': work_order.wo_number,
-                'product_name': work_order.product.name,
+                'product_name': get_product_name_from_new(work_order.product.code if work_order.product else None) or (work_order.product.name if work_order.product else 'Unknown'),
                 'quantity': float(work_order.quantity),
                 'quantity_produced': float(work_order.quantity_produced),
                 'status': work_order.status,
@@ -1754,7 +1931,7 @@ def get_packing_list(wo_id):
             # Create new packing list
             packing_list = PackingList(
                 work_order_id=wo_id,
-                product_name=work_order.product.name if work_order.product else 'Unknown',
+                product_name=get_product_name_from_new(work_order.product.code if work_order.product else None) or (work_order.product.name if work_order.product else 'Unknown'),
                 total_karton=0,
                 last_carton_number=0
             )
@@ -1812,7 +1989,7 @@ def sync_packing_list(wo_id):
         if not packing_list:
             packing_list = PackingList(
                 work_order_id=wo_id,
-                product_name=work_order.product.name if work_order.product else 'Unknown',
+                product_name=get_product_name_from_new(work_order.product.code if work_order.product else None) or (work_order.product.name if work_order.product else 'Unknown'),
                 total_karton=total_karton,
                 start_carton_number=start_carton_number,
                 last_carton_number=0

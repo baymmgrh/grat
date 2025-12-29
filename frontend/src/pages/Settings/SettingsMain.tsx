@@ -73,16 +73,6 @@ const SettingsMain: React.FC = () => {
       category: 'system',
       isNew: true
     },
-    {
-      id: 'kpi-targets',
-      title: 'KPI Targets',
-      description: 'Configure KPI targets for Performance Scorecard',
-      icon: ChartBarIcon,
-      path: '/app/settings/kpi-targets',
-      category: 'system',
-      isNew: true
-    },
-    
     // Integration Settings
     {
       id: 'external-connectors',

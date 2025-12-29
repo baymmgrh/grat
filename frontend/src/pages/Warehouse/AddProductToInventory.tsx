@@ -68,8 +68,14 @@ export default function AddProductToInventory() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axiosInstance.get('/api/products?is_active=true&per_page=500')
-      setProducts(response.data.products || [])
+      const response = await axiosInstance.get('/api/products-new/?per_page=1000')
+      const mappedProducts = (response.data.products || []).map((p: any) => ({
+        id: p.id,
+        code: p.kode_produk || p.code,
+        name: p.nama_produk || p.name,
+        primary_uom: p.satuan || p.primary_uom || 'pcs',
+      }))
+      setProducts(mappedProducts)
     } catch (error) {
       console.error('Error fetching products:', error)
     }

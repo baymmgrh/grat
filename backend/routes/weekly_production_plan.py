@@ -427,6 +427,70 @@ def approve_plan(id):
         return jsonify({'error': str(e)}), 500
 
 
+@weekly_plan_bp.route('/weekly-plans/<int:id>/reject', methods=['POST'])
+@jwt_required()
+def reject_plan(id):
+    """Reject weekly plan"""
+    try:
+        current_user_id = get_jwt_identity()
+        plan = WeeklyProductionPlan.query.get_or_404(id)
+        
+        if plan.status != 'submitted':
+            return jsonify({'error': 'Only submitted plans can be rejected'}), 400
+        
+        data = request.get_json() or {}
+        rejection_reason = data.get('reason', '')
+        
+        plan.status = 'rejected'
+        plan.approved_by = current_user_id
+        plan.approved_at = datetime.utcnow()
+        plan.notes = f"[DITOLAK] {rejection_reason}\n\n{plan.notes or ''}"
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Plan rejected',
+            'weekly_plan': plan.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@weekly_plan_bp.route('/weekly-plans/pending-approval', methods=['GET'])
+@jwt_required()
+def get_pending_approval_plans():
+    """Get all plans pending approval for manager"""
+    try:
+        # Get submitted plans (pending approval)
+        pending_plans = WeeklyProductionPlan.query.filter(
+            WeeklyProductionPlan.status == 'submitted'
+        ).order_by(WeeklyProductionPlan.created_at.desc()).all()
+        
+        # Get recently approved/rejected plans
+        recent_reviewed = WeeklyProductionPlan.query.filter(
+            WeeklyProductionPlan.status.in_(['approved', 'rejected'])
+        ).order_by(WeeklyProductionPlan.approved_at.desc()).limit(20).all()
+        
+        # Summary counts
+        summary = {
+            'pending': WeeklyProductionPlan.query.filter_by(status='submitted').count(),
+            'approved': WeeklyProductionPlan.query.filter_by(status='approved').count(),
+            'rejected': WeeklyProductionPlan.query.filter_by(status='rejected').count(),
+            'in_progress': WeeklyProductionPlan.query.filter_by(status='in_progress').count()
+        }
+        
+        return jsonify({
+            'pending_plans': [p.to_dict(include_items=False) for p in pending_plans],
+            'recent_reviewed': [p.to_dict(include_items=False) for p in recent_reviewed],
+            'summary': summary
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @weekly_plan_bp.route('/weekly-plans/<int:id>/generate-work-orders', methods=['POST'])
 @jwt_required()
 def generate_work_orders(id):
@@ -469,13 +533,13 @@ def generate_work_orders(id):
             
             wo_number = f"{wo_prefix}-{wo_num:04d}"
             
-            # Create Work Order
+            # Create Work Order with in_progress status
             wo = WorkOrder(
                 wo_number=wo_number,
                 product_id=item.product_id,
                 quantity=item.planned_quantity,
                 uom=item.uom,
-                status='planned',
+                status='in_progress',
                 priority='normal',
                 start_date=item.planned_date or plan.week_start,
                 end_date=plan.week_end,

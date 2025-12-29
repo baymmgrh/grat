@@ -35,6 +35,7 @@ interface ProductionRecord {
   quantity_rework?: number;
   quantity_setting?: number;
   downtime_minutes: number;
+  planned_runtime?: number;
   operator_id: number | null;
   notes: string;
 }
@@ -54,25 +55,138 @@ const DOWNTIME_CATEGORIES = {
   operator: { label: 'Operator', pic: 'SPV', color: 'orange', bgColor: 'bg-orange-50', borderColor: 'border-orange-300', textColor: 'text-orange-700', icon: UserIcon },
   material: { label: 'Material', pic: 'PPIC', color: 'yellow', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-300', textColor: 'text-yellow-700', icon: CubeIcon },
   design: { label: 'Design/Sanitasi', pic: 'QC', color: 'blue', bgColor: 'bg-blue-50', borderColor: 'border-blue-300', textColor: 'text-blue-700', icon: PaintBrushIcon },
+  idle: { label: 'Idle Time', pic: 'Warehouse/PPIC', color: 'orange', bgColor: 'bg-orange-50', borderColor: 'border-orange-300', textColor: 'text-orange-700', icon: ClockIcon },
   others: { label: 'Others', pic: '-', color: 'gray', bgColor: 'bg-gray-50', borderColor: 'border-gray-300', textColor: 'text-gray-700', icon: EllipsisHorizontalCircleIcon }
 };
 
-// Keywords for auto-detection
+// Keywords untuk auto-detect kategori dari alasan downtime
+// Berdasarkan standar OEE dan referensi lokal pabrik
+// PENTING: Urutan pengecekan = idle -> operator -> material -> mesin -> design -> others
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  mesin: ['mesin', 'pisau', 'cutter', 'folding', 'macet', 'rusak', 'error', 'maintenance', 'belt', 'motor', 'sensor', 'bearing', 'gear', 'pompa', 'valve', 'nozzle', 'heater', 'cooler', 'compressor'],
-  operator: ['setting', 'adjust', 'parameter', 'trial', 'training', 'istirahat', 'pergantian', 'shift'],
-  material: ['kain', 'bahan', 'benang', 'habis', 'cacat', 'tunggu', 'stock', 'material', 'ingredient'],
-  design: ['sanitasi', 'ganti stiker', 'ganti produk', 'ganti packaging', 'repack', 'cleaning', 'cuci', 'steril'],
-  others: ['listrik', 'mati lampu', 'meeting', 'briefing', 'sholat', 'makan']
+  // IDLE: Menunggu material/resource - waktu tidak produktif bukan karena kerusakan
+  idle: [
+    'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
+    'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
+    'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
+    'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
+    'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
+    'waiting for', 'standby material'
+  ],
+  // MESIN (Machine/Equipment): Semua masalah teknis mesin dan komponen
+  mesin: [
+    'keluar jalur (bak mesin)', 'kain keluar jalur (bak mesin)', 'bak mesin',
+    'seal', 'sealer', 'seal bocor', 'seal samping bocor', 'seal bawah bocor',
+    'seal tidak ngeseal', 'seal bawah tdk ngeseal', 'sealer rusak',
+    'pisau', 'pisau tumpul', 'pisau folding tumpul', 'pisau folding kotor',
+    'cutter', 'cutter tumpul', 'blade', 'blade aus',
+    'belt', 'belt putus', 'round belt putus', 'vanbelt', 'vanbelt putus',
+    'conveyor', 'conveyor macet', 'conveyor slip',
+    'folding', 'lipatan', 'lipat', 'kain keluar lajur folding',
+    'tumpukan kain tdk rapih', 'tumpukan kain tidak rapi',
+    'selang', 'selang bocor', 'selang angin bocor',
+    'pneumatic', 'pneumatic error', 'hidrolik', 'hidrolik bocor',
+    'metal detector', 'metal detektor', 'detector putus',
+    'inkjet', 'inkjet error', 'inkjet macet', 'printer inkjet',
+    'temperature', 'temperatur', 'suhu', 'overheat', 'panas berlebih',
+    'low temperature', 'suhu rendah',
+    'motor', 'motor rusak', 'motor mati', 'bearing', 'bearing aus',
+    'gear', 'gear rusak',
+    'sensor', 'sensor error', 'sensor rusak',
+    'pompa', 'pompa rusak', 'kompresor', 'kompresor mati',
+    'heater', 'heater rusak', 'cooling', 'cooling error',
+    'nozzle', 'nozzle mampet', 'valve', 'valve bocor',
+    'cylinder', 'cylinder bocor',
+    'mesin rusak', 'mesin error', 'mesin mati', 'mesin macet', 'mesin trouble',
+    'breakdown', 'break down', 'kerusakan mesin', 'gangguan mesin',
+    'press error', 'sparepart', 'maintenance', 'perbaikan mesin',
+    'kalibrasi', 'service mesin'
+  ],
+  // MATERIAL (Raw Material): Masalah bahan baku
+  material: [
+    'keluar jalur (kain terlalu tipis)', 'keluar jalur (kain gembos)', 
+    'keluar jalur (kain tidak sesuai)', 'kain terlalu tipis', 'kain gembos',
+    'kain tidak sesuai',
+    'kain rusak', 'kain cacat', 'kain sobek', 'kain kotor', 'kain belang',
+    'kain jelek', 'kain reject', 'kain defect', 'kain tidak bagus',
+    'bahan rusak', 'bahan cacat', 'bahan jelek', 'bahan reject',
+    'material rusak', 'material cacat', 'material reject', 'material defect',
+    'benang putus', 'benang kusut', 'roll rusak', 'roll cacat',
+    'tunggu material', 'tunggu bahan', 'tunggu kain', 'material habis',
+    'bahan habis', 'kain habis', 'shortage material', 'material shortage',
+    'terlambat material', 'kurang material', 'tidak sesuai spec material',
+    'fabric defect', 'yarn defect', 'raw material'
+  ],
+  // DESIGN CHANGE: Pergantian produk (kata "ganti"), sanitasi, cleaning
+  design: [
+    'ganti', 'ganti order', 'ganti produk', 'ganti artikel', 'ganti model',
+    'ganti size', 'ganti warna', 'ganti stiker', 'ganti label', 
+    'ganti packaging', 'ganti kemasan', 'ganti design', 'ganti desain',
+    'ganti mixing', 'pergantian produk', 'pergantian artikel',
+    'sanitasi', 'persiapan & sanitasi', 'sterilisasi',
+    'persiapan produksi',
+    'obat habis',
+    'changeover', 'change over',
+    'cleaning', 'cuci mesin', 'bersih-bersih',
+    'warmup', 'pemanasan', 'warm up',
+    'repack', 'repacking'
+  ],
+  // OPERATOR: Kesalahan manusia, setting, training
+  operator: [
+    'setting', 'setting mc', 'setting mesin', 'setting ulang', 'salah setting',
+    'setup produk', 'setup mesin',
+    'keluar jalur (sambungan)', 'kain keluar jalur (sambungan)', 'sambungan',
+    'kesalahan operator', 'operator salah', 'human error',
+    'salah parameter', 'salah input', 'salah prosedur', 'kelalaian operator',
+    'adjust parameter', 'trial error', 'trial produk',
+    'pergantian operator', 'operator baru', 'training operator',
+    'briefing operator', 'operator tidak hadir', 'operator sakit',
+    'operator izin', 'kurang operator', 'shortage operator'
+  ],
+  // OTHERS: Istirahat, ibadah, utilitas, banjir, tunggu air
+  others: [
+    'istirahat', 'istirahat makan', 'istirahat sholat', 'istirahat shalat',
+    'break', 'makan', 'minum',
+    'sholat', 'shalat', 'jumatan', 'ibadah',
+    'listrik mati', 'listrik padam', 'mati lampu', 'power failure',
+    'air mati', 'air habis', 'tunggu air', 'air panas',
+    'sanitasi ruangan', 'banjir',
+    'toilet', 'wc',
+    'meeting', 'rapat', 'briefing', 'koordinasi',
+    'lainnya', 'other', 'dll', 'etc'
+  ]
 };
 
-const detectCategory = (reason: string): string => {
+// Function to auto-detect category from reason text
+// Urutan pengecekan: operator -> material -> mesin -> design -> others
+const detectCategory = (reason: string, isFirstEntry: boolean = false): string => {
   const lowerReason = reason.toLowerCase();
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some(keyword => lowerReason.includes(keyword))) {
-      return category;
+  
+  // SPECIAL CASE: "setting mc/mesin" - depends on position
+  // If first entry → design (changeover/setup awal)
+  // If not first → mesin (adjustment mesin)
+  if (lowerReason.includes('setting mc') || lowerReason.includes('setting mesin')) {
+    return isFirstEntry ? 'design' : 'mesin';
+  }
+  
+  // Urutan prioritas pengecekan:
+  // 0. IDLE - untuk "tunggu kain/stiker/packaging/mixing" (prioritas tertinggi)
+  // 1. OPERATOR - untuk "keluar jalur (sambungan)" 
+  // 2. MATERIAL - untuk "keluar jalur (kain tipis/gembos/tidak sesuai)"
+  // 3. MESIN - untuk "keluar jalur (bak mesin)" dan masalah mesin lainnya
+  // 4. DESIGN - untuk changeover, sanitasi
+  // 5. OTHERS - default
+  const categoryOrder = ['idle', 'operator', 'material', 'mesin', 'design', 'others'];
+  
+  for (const category of categoryOrder) {
+    const keywords = CATEGORY_KEYWORDS[category];
+    for (const keyword of keywords) {
+      if (lowerReason.includes(keyword.toLowerCase())) {
+        return category;
+      }
     }
   }
+  
+  // Default to 'others' if no match
   return 'others';
 };
 
@@ -137,14 +251,16 @@ export default function EditProductionRecord() {
           if (match) {
             const duration = match[1];
             const reason = match[2].trim();
-            const category = match[3];
+            // Re-detect category from reason to fix old data with wrong category
+            const isFirstEntry = idx === 0;
+            const detectedCategory = detectCategory(reason, isFirstEntry);
             parsedEntries.push({
               id: idx + 1,
               reason,
-              category,
+              category: detectedCategory,
               duration_minutes: duration,
               frequency: '1',
-              pic: DOWNTIME_CATEGORIES[category as keyof typeof DOWNTIME_CATEGORIES]?.pic || '-'
+              pic: DOWNTIME_CATEGORIES[detectedCategory as keyof typeof DOWNTIME_CATEGORIES]?.pic || '-'
             });
           }
         });
@@ -230,14 +346,15 @@ export default function EditProductionRecord() {
   };
 
   const updateDowntimeEntry = (entryId: number, field: keyof DowntimeEntry, value: string) => {
-    setDowntimeEntries(prev => prev.map(entry => {
+    setDowntimeEntries(prev => prev.map((entry, index) => {
       if (entry.id !== entryId) return entry;
       
       const updated = { ...entry, [field]: value };
       
       // Auto-detect category when reason changes
       if (field === 'reason') {
-        const detectedCategory = detectCategory(value);
+        const isFirstEntry = index === 0;
+        const detectedCategory = detectCategory(value, isFirstEntry);
         updated.category = detectedCategory;
         updated.pic = DOWNTIME_CATEGORIES[detectedCategory as keyof typeof DOWNTIME_CATEGORIES]?.pic || '';
       }
@@ -380,22 +497,23 @@ export default function EditProductionRecord() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             >
-              <option value="1">Shift 1 (07:00 - 15:00)</option>
+              <option value="1">Shift 1 (06:30 - 15:00)</option>
               <option value="2">Shift 2 (15:00 - 23:00)</option>
-              <option value="3">Shift 3 (23:00 - 07:00)</option>
+              <option value="3">Shift 3 (23:00 - 06:30)</option>
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Downtime (menit)
+              Total Downtime (menit)
             </label>
             <input
               type="number"
-              value={formData.downtime_minutes}
-              onChange={(e) => handleChange('downtime_minutes', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              value={getTotalDowntime()}
+              readOnly
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
               min="0"
             />
+            <p className="text-xs text-gray-500 mt-1">Dihitung dari entries di bawah</p>
           </div>
         </div>
 
@@ -628,6 +746,23 @@ export default function EditProductionRecord() {
                 <span className="font-medium text-orange-800">Total Downtime:</span>
                 <span className="text-xl font-bold text-orange-700">{getTotalDowntime()} menit</span>
               </div>
+              {/* Downtime vs Runtime indicator */}
+              {record?.planned_runtime && getTotalDowntime() > 0 && (
+                <div className="mt-2 text-sm">
+                  <span className="text-orange-600">
+                    ({((getTotalDowntime() / record.planned_runtime) * 100).toFixed(1)}% dari {record.planned_runtime}m)
+                  </span>
+                  <span className={`ml-2 font-medium ${
+                    getTotalDowntime() > record.planned_runtime 
+                      ? 'text-red-600' 
+                      : 'text-green-600'
+                  }`}>
+                    {getTotalDowntime() > record.planned_runtime 
+                      ? `+${getTotalDowntime() - record.planned_runtime}m (melebihi runtime)` 
+                      : `-${record.planned_runtime - getTotalDowntime()}m (sisa runtime)`}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -19,6 +19,8 @@ interface MachineFormData {
   specifications?: string
   capacity?: number
   uom?: string
+  default_speed?: number
+  target_efficiency?: number
   location?: string
   department?: string
   status: string
@@ -43,6 +45,8 @@ const navigate = useNavigate()
       status: 'idle',
       capacity: 0,
       uom: 'units/hour',
+      default_speed: 0,
+      target_efficiency: 60,
       is_active: true
     }
   })
@@ -97,6 +101,8 @@ const navigate = useNavigate()
       const payload = {
         ...data,
         capacity: parseFloat(data.capacity?.toString() || '0'),
+        default_speed: parseInt(data.default_speed?.toString() || '0'),
+        target_efficiency: parseInt(data.target_efficiency?.toString() || '60'),
         installation_date: data.installation_date || null,
         is_active: data.is_active ?? true
       }
@@ -297,6 +303,33 @@ const navigate = useNavigate()
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
+                Default Speed (pcs/menit)
+              </label>
+              <input
+                type="number"
+                {...register('default_speed', { min: 0 })}
+                className="input"
+                placeholder="Speed mesin untuk perhitungan efisiensi"
+              />
+              <p className="mt-1 text-xs text-gray-500">Speed default untuk input produksi (pcs per menit)</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Target Efisiensi (%)
+              </label>
+              <input
+                type="number"
+                {...register('target_efficiency', { min: 0, max: 100 })}
+                className="input"
+                placeholder="60"
+              />
+              <p className="mt-1 text-xs text-gray-500">Target efisiensi mesin (default 60%)</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Location
               </label>
               <input
                 type="text"

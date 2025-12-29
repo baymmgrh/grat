@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import axiosInstance from '../../utils/axiosConfig'
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useForm, useFieldArray } from 'react-hook-form'
 import toast from 'react-hot-toast'
@@ -40,7 +41,11 @@ export default function InvoiceForm() {
     const { t } = useLanguage();
 
 const navigate = useNavigate()
+  const { id } = useParams()
+  const isViewMode = Boolean(id)
   const [isLoading, setIsLoading] = useState(false)
+  const [invoiceData, setInvoiceData] = useState<any>(null)
+  const [loadingInvoice, setLoadingInvoice] = useState(false)
   
   const { data: salesOrders } = useGetSalesOrdersQuery({})
   const { data: purchaseOrders } = useGetPurchaseOrdersQuery({})
@@ -68,6 +73,34 @@ const navigate = useNavigate()
   const watchedItems = watch('items')
   const watchedTaxRate = watch('tax_rate') || 0
   const watchedDiscountAmount = watch('discount_amount') || 0
+
+  // Fetch existing invoice data when id is present
+  useEffect(() => {
+    if (id) {
+      fetchInvoiceData()
+    }
+  }, [id])
+
+  const fetchInvoiceData = async () => {
+    try {
+      setLoadingInvoice(true)
+      const response = await axiosInstance.get(`/api/finance/invoices/${id}`)
+      setInvoiceData(response.data.invoice || response.data)
+    } catch (error) {
+      console.error('Error fetching invoice:', error)
+      toast.error('Gagal memuat data invoice')
+    } finally {
+      setLoadingInvoice(false)
+    }
+  }
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', { 
+      style: 'currency', 
+      currency: 'IDR', 
+      minimumFractionDigits: 0 
+    }).format(value)
+  }
 
   const paymentTermsOptions = [
     { value: 'due_on_receipt', label: 'Due on Receipt' },
@@ -163,6 +196,147 @@ const navigate = useNavigate()
 
   const selectedCustomer = customers?.customers?.find((c: any) => c.id == watch('customer_id'))
   const selectedSupplier = suppliers?.suppliers?.find((s: any) => s.id == watch('supplier_id'))
+
+  // Loading state for view mode
+  if (loadingInvoice) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // View mode for existing invoices (especially production_cost type)
+  if (isViewMode && invoiceData) {
+    const isProductionCost = invoiceData.invoice_type === 'production_cost'
+    
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {isProductionCost ? '🏭 Production Cost' : 'Invoice Detail'}
+            </h1>
+            <p className="text-gray-600">
+              {invoiceData.invoice_number} - {invoiceData.status?.toUpperCase()}
+            </p>
+          </div>
+          <button
+            onClick={() => navigate(-1)}
+            className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Kembali
+          </button>
+        </div>
+
+        {/* Invoice Info Card */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div>
+              <p className="text-sm text-gray-500">Nomor Invoice</p>
+              <p className="text-lg font-semibold">{invoiceData.invoice_number}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Tipe</p>
+              <p className="text-lg font-semibold capitalize">
+                {invoiceData.invoice_type === 'production_cost' ? 'Production Cost' : invoiceData.invoice_type}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Tanggal</p>
+              <p className="text-lg font-semibold">
+                {new Date(invoiceData.invoice_date).toLocaleDateString('id-ID')}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Status</p>
+              <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                invoiceData.status === 'posted' ? 'bg-green-100 text-green-800' :
+                invoiceData.status === 'draft' ? 'bg-gray-100 text-gray-800' :
+                'bg-blue-100 text-blue-800'
+              }`}>
+                {invoiceData.status?.toUpperCase()}
+              </span>
+            </div>
+          </div>
+
+          {/* Work Order Reference */}
+          {invoiceData.work_order_number && (
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-600">Work Order Reference</p>
+              <p className="text-lg font-semibold text-blue-800">{invoiceData.work_order_number}</p>
+            </div>
+          )}
+
+          {invoiceData.notes && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-500">Catatan</p>
+              <p className="text-gray-700">{invoiceData.notes}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Cost Breakdown */}
+        <div className="bg-white rounded-lg shadow overflow-hidden">
+          <div className="px-6 py-4 border-b bg-gray-50">
+            <h3 className="text-lg font-semibold">Rincian Biaya</h3>
+          </div>
+          <div className="p-6">
+            {invoiceData.items && invoiceData.items.length > 0 ? (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left py-3 px-4">Deskripsi</th>
+                    <th className="text-right py-3 px-4">Qty</th>
+                    <th className="text-right py-3 px-4">Harga Satuan</th>
+                    <th className="text-right py-3 px-4">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoiceData.items.map((item: any, index: number) => (
+                    <tr key={index} className="border-b">
+                      <td className="py-3 px-4">{item.description}</td>
+                      <td className="py-3 px-4 text-right">{item.quantity?.toLocaleString()}</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(item.unit_price || 0)}</td>
+                      <td className="py-3 px-4 text-right font-medium">{formatCurrency(item.amount || 0)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-gray-50">
+                    <td colSpan={3} className="py-3 px-4 text-right font-semibold">Subtotal</td>
+                    <td className="py-3 px-4 text-right font-semibold">{formatCurrency(invoiceData.subtotal || 0)}</td>
+                  </tr>
+                  {invoiceData.tax_amount > 0 && (
+                    <tr className="bg-gray-50">
+                      <td colSpan={3} className="py-3 px-4 text-right">Pajak</td>
+                      <td className="py-3 px-4 text-right">{formatCurrency(invoiceData.tax_amount || 0)}</td>
+                    </tr>
+                  )}
+                  <tr className="bg-blue-50">
+                    <td colSpan={3} className="py-4 px-4 text-right text-lg font-bold">Total</td>
+                    <td className="py-4 px-4 text-right text-lg font-bold text-blue-600">
+                      {formatCurrency(invoiceData.total_amount || 0)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <p>Tidak ada rincian item</p>
+                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                  <p className="text-2xl font-bold text-blue-600">
+                    {formatCurrency(invoiceData.total_amount || 0)}
+                  </p>
+                  <p className="text-sm text-gray-500">Total Biaya Produksi</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

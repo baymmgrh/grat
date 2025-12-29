@@ -61,9 +61,9 @@ const ProductionScheduleForm: React.FC = () => {
   const [error, setError] = useState('');
 
   const shifts = [
-    { value: 'shift_1', label: 'Shift 1 (07:00 - 15:00)' },
+    { value: 'shift_1', label: 'Shift 1 (06:30 - 15:00)' },
     { value: 'shift_2', label: 'Shift 2 (15:00 - 23:00)' },
-    { value: 'shift_3', label: 'Shift 3 (23:00 - 07:00)' }
+    { value: 'shift_3', label: 'Shift 3 (23:00 - 06:30)' }
   ];
 
   useEffect(() => {
@@ -89,7 +89,7 @@ const ProductionScheduleForm: React.FC = () => {
           break;
         case 'shift_3':
           endDate.setDate(endDate.getDate() + 1);
-          endDate.setHours(7, 0, 0, 0);
+          endDate.setHours(6, 30, 0, 0);
           break;
       }
 
@@ -360,7 +360,6 @@ const ProductionScheduleForm: React.FC = () => {
                 value={formData.scheduled_start}
                 onChange={handleInputChange}
                 required
-                min={getMinStartTime()}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>

@@ -42,18 +42,20 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
 
   // Get display text for option
   const getOptionDisplay = (option: Option) => {
+    if (!option) return '';
     if (option.code) {
-      return `${option.code} - ${option.name}`;
+      return `${option.code} - ${option.name || ''}`;
     }
-    return option.label || option.name;
+    return option.label || option.name || '';
   };
 
   // Filter options based on search term
   const filteredOptions = options.filter(option => {
+    if (!option) return false;
     const searchLower = searchTerm.toLowerCase();
-    const nameMatch = option.name.toLowerCase().includes(searchLower);
-    const codeMatch = option.code?.toLowerCase().includes(searchLower);
-    const labelMatch = option.label?.toLowerCase().includes(searchLower);
+    const nameMatch = option.name?.toLowerCase().includes(searchLower) || false;
+    const codeMatch = option.code?.toLowerCase().includes(searchLower) || false;
+    const labelMatch = option.label?.toLowerCase().includes(searchLower) || false;
     return nameMatch || codeMatch || labelMatch;
   });
 

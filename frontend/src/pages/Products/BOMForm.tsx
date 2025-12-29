@@ -113,8 +113,8 @@ const BOMForm: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
-      // Fetch ALL active products (not just producible ones)
-      const response = await fetch('/api/products?per_page=1000', {
+      // Fetch from products-new API (updated product data)
+      const response = await fetch('/api/products-new/?per_page=1000', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -122,9 +122,31 @@ const BOMForm: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         console.log('Fetched products:', data.products?.length || 0);
-        setProducts(data.products || []);
+        // Map products-new fields to expected format
+        const mappedProducts = (data.products || []).map((p: any) => ({
+          id: p.id,
+          code: p.kode_produk || p.code,
+          name: p.nama_produk || p.name,
+          material_type: p.material_type || 'finished_goods',
+          primary_uom: p.satuan || p.primary_uom || 'pcs',
+          cost: p.hpp || p.cost || 0,
+          price: p.harga_jual || p.price || 0,
+          category_name: p.kategori || p.category_name,
+          pack_per_carton: p.isi_per_karton || p.pack_per_carton || 1
+        }));
+        setProducts(mappedProducts);
       } else {
-        console.error('Failed to fetch products:', response.status);
+        // Fallback to old API if products-new fails
+        console.log('Falling back to old products API');
+        const fallbackResponse = await fetch('/api/products?per_page=1000', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (fallbackResponse.ok) {
+          const data = await fallbackResponse.json();
+          setProducts(data.products || []);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch products:', error);
@@ -517,8 +539,7 @@ const BOMForm: React.FC = () => {
                   value={formData.bom_number}
                   onChange={handleInputChange}
                   required
-                  readOnly
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-700"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 

@@ -153,12 +153,19 @@ const WeeklyProductionPlan: React.FC = () => {
       setLoading(true);
       const [machinesRes, productsRes, schedulesRes] = await Promise.all([
         axiosInstance.get('/api/production/machines'),
-        axiosInstance.get('/api/products?all=true'),  // Get all products for dropdown
+        axiosInstance.get('/api/products-new/?per_page=1000'),
         axiosInstance.get(`/api/production/schedule-grid?week_start=${weekDates[0]?.toISOString().split('T')[0] || ''}`),
       ]);
       
       setMachines(machinesRes.data.machines || []);
-      setProducts(productsRes.data.products || []);
+      // Map products-new fields to expected format
+      const mappedProducts = (productsRes.data.products || []).map((p: any) => ({
+        id: p.id,
+        code: p.kode_produk || p.code,
+        name: p.nama_produk || p.name,
+        primary_uom: p.satuan || p.primary_uom || 'pcs',
+      }));
+      setProducts(mappedProducts);
       setScheduleItems(schedulesRes.data.schedules || []);
       setNotes(schedulesRes.data.notes || []);
     } catch (error) {
@@ -387,16 +394,45 @@ const WeeklyProductionPlan: React.FC = () => {
     }
   };
 
+  const handleSubmitForApproval = async () => {
+    const weekStartStr = weekDates[0]?.toISOString().split('T')[0];
+    if (!confirm(`Submit jadwal minggu ${weekStartStr} untuk approval?`)) return;
+    try {
+      const response = await axiosInstance.post('/api/production/schedule-grid/submit-approval', {
+        week_start: weekStartStr
+      });
+      alert(response.data.message);
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Gagal submit untuk approval');
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'submitted':
+        return { bg: 'bg-yellow-100 text-yellow-700', icon: ClockIcon, label: 'Menunggu Approval' };
+      case 'approved':
+        return { bg: 'bg-green-100 text-green-700', icon: CheckCircleIcon, label: 'Approved' };
       case 'wo_created':
         return { bg: 'bg-blue-100 text-blue-700', icon: CheckCircleIcon, label: 'WO Dibuat' };
       case 'in_progress':
         return { bg: 'bg-amber-100 text-amber-700', icon: ClockIcon, label: 'Proses' };
       case 'completed':
-        return { bg: 'bg-green-100 text-green-700', icon: CheckCircleIcon, label: 'Selesai' };
+        return { bg: 'bg-emerald-100 text-emerald-700', icon: CheckCircleIcon, label: 'Selesai' };
       default:
         return { bg: 'bg-slate-100 text-slate-600', icon: ClockIcon, label: 'Rencana' };
+    }
+  };
+
+  const handleGenerateWOApproved = async (scheduleId: number) => {
+    if (!confirm('Generate Work Order dari jadwal yang sudah diapprove ini?')) return;
+    try {
+      const response = await axiosInstance.post(`/api/production/schedule-grid/${scheduleId}/generate-wo-approved`);
+      alert(response.data.message);
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Gagal membuat Work Order');
     }
   };
 
@@ -485,14 +521,17 @@ const WeeklyProductionPlan: React.FC = () => {
                 <PlusIcon className="h-5 w-5" />
                 Tambah Manual
               </button>
-              <button
-                onClick={handleGenerateAllWO}
-                className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:from-amber-600 hover:to-orange-600 flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
-                title="Generate semua Work Order untuk jadwal hari ini"
-              >
-                <BoltIcon className="h-5 w-5" />
-                Generate WO Hari Ini
-              </button>
+              {/* Submit for Approval button - only show if there are planned items */}
+              {scheduleItems.filter(s => s.status === 'planned').length > 0 && (
+                <button
+                  onClick={handleSubmitForApproval}
+                  className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl hover:from-amber-600 hover:to-orange-600 flex items-center gap-2 font-medium shadow-md hover:shadow-lg transition-all"
+                  title="Submit jadwal untuk approval"
+                >
+                  <CheckCircleIcon className="h-5 w-5" />
+                  Submit for Approval
+                </button>
+              )}
               <button
                 onClick={handlePrint}
                 className="px-4 py-2.5 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 flex items-center gap-2 font-medium transition-all"
@@ -601,7 +640,7 @@ const WeeklyProductionPlan: React.FC = () => {
                   </div>
                 </th>
                 {DAYS.map((day, idx) => (
-                  <th key={day} className="px-1 py-2 text-center border-l border-blue-500/50" colSpan={2}>
+                  <th key={day} className="px-1 py-2 text-center border-l border-blue-500/50" colSpan={3}>
                     <div className="text-[10px] font-bold text-blue-200 uppercase">{day}</div>
                     <div className="text-xl font-black text-white">{weekDates[idx]?.getDate() || ''}</div>
                   </th>
@@ -611,11 +650,14 @@ const WeeklyProductionPlan: React.FC = () => {
               <tr className="bg-indigo-500/80">
                 {DAYS.map((day) => (
                   <React.Fragment key={`shift-${day}`}>
-                    <th className="px-2 py-1.5 text-center text-[10px] font-bold text-white border-l border-indigo-400/50">
-                      <span className="bg-white/20 px-2 py-0.5 rounded">S1</span>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-white border-l border-indigo-400/50">
+                      <span className="bg-white/20 px-1.5 py-0.5 rounded">S1</span>
                     </th>
-                    <th className="px-2 py-1.5 text-center text-[10px] font-bold text-white">
-                      <span className="bg-white/20 px-2 py-0.5 rounded">S2</span>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-white">
+                      <span className="bg-white/20 px-1.5 py-0.5 rounded">S2</span>
+                    </th>
+                    <th className="px-1 py-1.5 text-center text-[10px] font-bold text-white">
+                      <span className="bg-white/20 px-1.5 py-0.5 rounded">S3</span>
                     </th>
                   </React.Fragment>
                 ))}
@@ -714,20 +756,29 @@ const WeeklyProductionPlan: React.FC = () => {
                             <React.Fragment key={dateStr}>
                               <td className="px-0.5 py-1.5 border-l border-slate-100">
                                 {shifts.includes(1) ? (
-                                  <div className={`mx-auto w-7 h-7 rounded-lg ${item.color || 'bg-blue-500'} shadow-md flex items-center justify-center`}>
-                                    <span className="text-[9px] font-bold text-white/90">S1</span>
+                                  <div className={`mx-auto w-6 h-6 rounded-lg ${item.color || 'bg-blue-500'} shadow-md flex items-center justify-center`}>
+                                    <span className="text-[8px] font-bold text-white/90">S1</span>
                                   </div>
                                 ) : (
-                                  <div className="mx-auto w-7 h-7 rounded-lg border-2 border-dashed border-slate-200"></div>
+                                  <div className="mx-auto w-6 h-6 rounded-lg border-2 border-dashed border-slate-200"></div>
                                 )}
                               </td>
                               <td className="px-0.5 py-1.5">
                                 {shifts.includes(2) ? (
-                                  <div className={`mx-auto w-7 h-7 rounded-lg ${item.color || 'bg-blue-500'} shadow-md flex items-center justify-center`}>
-                                    <span className="text-[9px] font-bold text-white/90">S2</span>
+                                  <div className={`mx-auto w-6 h-6 rounded-lg ${item.color || 'bg-blue-500'} shadow-md flex items-center justify-center`}>
+                                    <span className="text-[8px] font-bold text-white/90">S2</span>
                                   </div>
                                 ) : (
-                                  <div className="mx-auto w-7 h-7 rounded-lg border-2 border-dashed border-slate-200"></div>
+                                  <div className="mx-auto w-6 h-6 rounded-lg border-2 border-dashed border-slate-200"></div>
+                                )}
+                              </td>
+                              <td className="px-0.5 py-1.5">
+                                {shifts.includes(3) ? (
+                                  <div className={`mx-auto w-6 h-6 rounded-lg ${item.color || 'bg-blue-500'} shadow-md flex items-center justify-center`}>
+                                    <span className="text-[8px] font-bold text-white/90">S3</span>
+                                  </div>
+                                ) : (
+                                  <div className="mx-auto w-6 h-6 rounded-lg border-2 border-dashed border-slate-200"></div>
                                 )}
                               </td>
                             </React.Fragment>
@@ -735,9 +786,10 @@ const WeeklyProductionPlan: React.FC = () => {
                         })}
                         <td className="px-2 py-2 text-center print:hidden">
                           <div className="flex items-center justify-center gap-1">
-                            {!item.wo_id && item.status === 'planned' && (
+                            {/* Generate WO button - only show if approved and no WO yet */}
+                            {item.status === 'approved' && !item.wo_id && (
                               <button
-                                onClick={() => handleGenerateWO(item.id)}
+                                onClick={() => handleGenerateWOApproved(item.id)}
                                 className="p-1.5 text-amber-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all"
                                 title="Generate Work Order"
                               >
@@ -964,10 +1016,10 @@ const WeeklyProductionPlan: React.FC = () => {
                         <div key={dateStr} className="text-center">
                           <div className="text-xs font-bold text-slate-500 mb-1">{DAYS[idx]}</div>
                           <div className="text-lg font-bold text-slate-800 mb-2">{date.getDate()}</div>
-                          <div className="flex gap-1 justify-center">
+                          <div className="flex gap-1 justify-center flex-wrap">
                             <button
                               onClick={() => toggleScheduleDay(dateStr, 1)}
-                              className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${
+                              className={`w-9 h-9 rounded-lg text-xs font-bold transition-all ${
                                 shifts.includes(1) 
                                   ? formData.color + ' text-white shadow-md scale-105' 
                                   : 'bg-white border-2 border-slate-200 text-slate-400 hover:border-slate-300'
@@ -977,13 +1029,23 @@ const WeeklyProductionPlan: React.FC = () => {
                             </button>
                             <button
                               onClick={() => toggleScheduleDay(dateStr, 2)}
-                              className={`w-10 h-10 rounded-lg text-sm font-bold transition-all ${
+                              className={`w-9 h-9 rounded-lg text-xs font-bold transition-all ${
                                 shifts.includes(2) 
                                   ? formData.color + ' text-white shadow-md scale-105' 
                                   : 'bg-white border-2 border-slate-200 text-slate-400 hover:border-slate-300'
                               }`}
                             >
                               S2
+                            </button>
+                            <button
+                              onClick={() => toggleScheduleDay(dateStr, 3)}
+                              className={`w-9 h-9 rounded-lg text-xs font-bold transition-all ${
+                                shifts.includes(3) 
+                                  ? formData.color + ' text-white shadow-md scale-105' 
+                                  : 'bg-white border-2 border-slate-200 text-slate-400 hover:border-slate-300'
+                              }`}
+                            >
+                              S3
                             </button>
                           </div>
                         </div>
@@ -1127,10 +1189,10 @@ const WeeklyProductionPlan: React.FC = () => {
                                 <div key={dateStr} className="text-center">
                                   <div className="text-xs font-bold text-gray-500">{DAYS[idx]}</div>
                                   <div className="text-sm font-bold text-gray-800 mb-1">{date.getDate()}</div>
-                                  <div className="flex gap-1 justify-center">
+                                  <div className="flex gap-1 justify-center flex-wrap">
                                     <button
                                       onClick={() => toggleScheduleDay(dateStr, 1)}
-                                      className={`w-8 h-8 rounded text-xs font-bold transition-all ${
+                                      className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
                                         shifts.includes(1) 
                                           ? 'bg-purple-500 text-white' 
                                           : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
@@ -1140,13 +1202,23 @@ const WeeklyProductionPlan: React.FC = () => {
                                     </button>
                                     <button
                                       onClick={() => toggleScheduleDay(dateStr, 2)}
-                                      className={`w-8 h-8 rounded text-xs font-bold transition-all ${
+                                      className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
                                         shifts.includes(2) 
                                           ? 'bg-purple-500 text-white' 
                                           : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
                                       }`}
                                     >
                                       S2
+                                    </button>
+                                    <button
+                                      onClick={() => toggleScheduleDay(dateStr, 3)}
+                                      className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
+                                        shifts.includes(3) 
+                                          ? 'bg-purple-500 text-white' 
+                                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                      }`}
+                                    >
+                                      S3
                                     </button>
                                   </div>
                                 </div>

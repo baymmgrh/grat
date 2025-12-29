@@ -57,8 +57,10 @@ def get_production_approvals():
 @production_approval_bp.route('/production-approvals/<int:id>', methods=['GET'])
 @jwt_required()
 def get_production_approval_detail(id):
-    """Get production approval detail with full data"""
+    """Get production approval detail with full data including material usage"""
     try:
+        from models.production import ShiftProduction, BillOfMaterials, BOMItem
+        
         approval = ProductionApproval.query.get(id)
         if not approval:
             return jsonify({'error': 'Approval tidak ditemukan'}), 404
@@ -95,31 +97,353 @@ def get_production_approval_detail(id):
                     'cost_date': e.cost_date.isoformat() if e.cost_date else None
                 } for e in entries]
         
-        # Get work order details
+        # Get work order details - handle case where WO might be None
         wo = approval.work_order
-        work_order_data = {
-            'id': wo.id,
-            'wo_number': wo.wo_number,
-            'product_name': wo.product.name if wo.product else None,
-            'quantity': float(wo.quantity),
-            'quantity_produced': float(wo.quantity_produced or 0),
-            'quantity_good': float(wo.quantity_good or 0),
-            'quantity_scrap': float(wo.quantity_scrap or 0),
-            'status': wo.status,
-            'machine_name': wo.machine.name if wo.machine else None,
-            'start_date': wo.start_date.isoformat() if wo.start_date else None,
-            'actual_start_date': wo.actual_start_date.isoformat() if wo.actual_start_date else None,
-            'actual_end_date': wo.actual_end_date.isoformat() if wo.actual_end_date else None
-        }
+        work_order_data = None
+        material_usage = []
+        production_summary = {}
+        shift_productions = []
+        
+        if wo:
+            work_order_data = {
+                'id': wo.id,
+                'wo_number': wo.wo_number,
+                'product_name': wo.product.name if wo.product else None,
+                'product_code': wo.product.code if wo.product else None,
+                'quantity': float(wo.quantity) if wo.quantity else 0,
+                'quantity_produced': float(wo.quantity_produced or 0),
+                'quantity_good': float(wo.quantity_good or 0),
+                'quantity_scrap': float(wo.quantity_scrap or 0),
+                'uom': wo.uom,
+                'status': wo.status,
+                'machine_name': wo.machine.name if wo.machine else None,
+                'scheduled_start_date': wo.scheduled_start_date.isoformat() if wo.scheduled_start_date else None,
+                'actual_start_date': wo.actual_start_date.isoformat() if wo.actual_start_date else None,
+                'actual_end_date': wo.actual_end_date.isoformat() if wo.actual_end_date else None
+            }
+            
+            # Get BOM and calculate material usage based on production
+            # Try to get BOM from WO first, then fallback to product's active BOM
+            bom = None
+            if wo.bom_id:
+                bom = BillOfMaterials.query.get(wo.bom_id)
+            
+            # Fallback: get active BOM for product
+            if not bom and wo.product_id:
+                bom = BillOfMaterials.query.filter_by(
+                    product_id=wo.product_id, 
+                    is_active=True
+                ).first()
+            
+            # Second fallback: get any BOM for product
+            if not bom and wo.product_id:
+                bom = BillOfMaterials.query.filter_by(
+                    product_id=wo.product_id
+                ).first()
+            
+            if bom:
+                from models.product import ProductPackaging
+                from sqlalchemy import text
+                
+                # Get packs_per_karton - PRIORITY: BOM > products_new > ProductPackaging
+                packs_per_karton = 1
+                consumption_data = {
+                    'berat_kering_per_pack': 0,
+                    'volume_per_pack': 0,
+                    'berat_akhir_per_pack': 0
+                }
+                
+                # PRIORITY 1: Use BOM pack_per_carton (user has set this when creating BOM)
+                if bom.pack_per_carton and bom.pack_per_carton > 1:
+                    packs_per_karton = bom.pack_per_carton
+                
+                # Get consumption data from products_new (berat_kering, ingredient per karton)
+                if wo.product:
+                    product_code = wo.product.code
+                    product_name = wo.product.name
+                    product_new_data = None
+                    
+                    # Try by code first
+                    if product_code:
+                        product_new_data = db.session.execute(
+                            text('SELECT berat_kering, ingredient, pack_per_karton FROM products_new WHERE kode_produk = :code'),
+                            {'code': product_code}
+                        ).fetchone()
+                    
+                    # If not found by code, try matching by name (remove WIP prefix)
+                    if not product_new_data and product_name:
+                        search_name = product_name
+                        # Remove WIP prefix if present
+                        if search_name.upper().startswith('WIP '):
+                            search_name = search_name[4:]
+                        
+                        product_new_data = db.session.execute(
+                            text('SELECT berat_kering, ingredient, pack_per_karton FROM products_new WHERE nama_produk LIKE :name ORDER BY LENGTH(nama_produk) LIMIT 1'),
+                            {'name': f'%{search_name}%'}
+                        ).fetchone()
+                    
+                    if product_new_data:
+                        berat_kering = float(product_new_data[0]) if product_new_data[0] else 0
+                        ingredient = float(product_new_data[1]) if product_new_data[1] else 0
+                        packs_from_products_new = int(product_new_data[2]) if product_new_data[2] else 1
+                        
+                        # Use pack_per_karton from products_new ONLY if BOM doesn't have it
+                        if packs_per_karton == 1 and packs_from_products_new > 1:
+                            packs_per_karton = packs_from_products_new
+                        
+                        # Calculate consumption per pack using packs_per_karton (from BOM or products_new)
+                        consumption_data['berat_kering_per_pack'] = berat_kering / packs_per_karton if packs_per_karton > 0 else 0
+                        consumption_data['volume_per_pack'] = ingredient / packs_per_karton if packs_per_karton > 0 else 0
+                
+                # PRIORITY 3: Fallback to ProductPackaging
+                if packs_per_karton == 1 and wo.product_id:
+                    packaging = ProductPackaging.query.filter_by(product_id=wo.product_id).first()
+                    if packaging and packaging.packs_per_karton:
+                        packs_per_karton = packaging.packs_per_karton
+                        if packaging.berat_kering_per_karton:
+                            consumption_data['berat_kering_per_pack'] = float(packaging.berat_kering_per_karton) / 1000 / packs_per_karton
+                        if packaging.volume_per_pack:
+                            consumption_data['volume_per_pack'] = float(packaging.volume_per_pack) / 1000
+                        if packaging.berat_akhir_per_karton:
+                            consumption_data['berat_akhir_per_pack'] = float(packaging.berat_akhir_per_karton) / 1000 / packs_per_karton
+                
+                # Production quantities
+                qty_good = float(wo.quantity_good or 0)  # Grade A
+                qty_rework = 0  # Grade B
+                qty_reject = float(wo.quantity_scrap or 0)  # Grade C
+                qty_setting = 0  # Setting/Waste
+                qty_produced_packs = float(wo.quantity_produced or 0)
+                qty_produced_kartons = qty_produced_packs / packs_per_karton if packs_per_karton > 0 else qty_produced_packs
+                
+                # Get rework and setting from ShiftProduction records
+                shift_records = ShiftProduction.query.filter_by(work_order_id=wo.id).all()
+                for shift in shift_records:
+                    qty_rework += float(shift.rework_quantity or 0)
+                    # Setting is calculated as: actual_quantity - good_quantity - reject_quantity - rework_quantity
+                    shift_actual = float(shift.actual_quantity or 0)
+                    shift_good = float(shift.good_quantity or 0)
+                    shift_reject = float(shift.reject_quantity or 0)
+                    shift_rework = float(shift.rework_quantity or 0)
+                    shift_setting = shift_actual - shift_good - shift_reject - shift_rework
+                    if shift_setting > 0:
+                        qty_setting += shift_setting
+                
+                # Calculate waste
+                qty_waste = qty_reject + qty_setting
+                
+                # BOM items
+                bom_items = BOMItem.query.filter_by(bom_id=bom.id).all()
+                for item in bom_items:
+                    qty_per_karton = float(item.quantity) if item.quantity else 0
+                    qty_per_pack = qty_per_karton / packs_per_karton if packs_per_karton > 0 else qty_per_karton
+                    scrap_percent = float(item.scrap_percent) if item.scrap_percent else 0
+                    
+                    # Calculate qty needed based on production
+                    qty_needed = qty_per_pack * qty_produced_packs
+                    qty_effective = qty_needed * (1 + scrap_percent / 100)
+                    
+                    # Get material info
+                    mat_name = 'Unknown'
+                    mat_code = ''
+                    mat_category = ''
+                    mat_type = ''
+                    if item.material:
+                        mat_name = item.material.name
+                        mat_code = item.material.code or ''
+                        mat_category = item.material.category or ''
+                        mat_type = item.material.category or 'material'
+                    elif item.product:
+                        mat_name = item.product.name
+                        mat_code = item.product.code or ''
+                        mat_category = item.product.category or ''
+                        mat_type = 'product'
+                    
+                    material_usage.append({
+                        'material_name': mat_name,
+                        'material_code': mat_code,
+                        'category': mat_category,
+                        'material_type': mat_type,
+                        'qty_per_karton': round(qty_per_karton, 4),
+                        'qty_per_pack': round(qty_per_pack, 4),
+                        'qty_needed': round(qty_needed, 4),
+                        'scrap_percent': scrap_percent,
+                        'qty_effective': round(qty_effective, 4),
+                        'uom': item.uom or 'pcs',
+                        'unit_cost': float(item.unit_cost) if item.unit_cost else 0,
+                        'total_cost': round(qty_effective * (float(item.unit_cost) if item.unit_cost else 0), 2),
+                        'is_critical': item.is_critical,
+                        'packs_per_karton': packs_per_karton,
+                        'qty_produced_packs': qty_produced_packs,
+                        'qty_produced_kartons': round(qty_produced_kartons, 2)
+                    })
+                
+                # Calculate Consumption per Grade based on BOM items
+                # Categorize BOM items by type
+                total_kain_per_pack = 0
+                total_ingredient_per_pack = 0
+                total_packaging_per_pack = 0
+                total_stiker_per_pack = 0
+                
+                for item in bom_items:
+                    qty_per_pack = float(item.quantity) / packs_per_karton if packs_per_karton > 0 else float(item.quantity)
+                    
+                    # Get material info for categorization
+                    mat_category = ''
+                    mat_name = ''
+                    item_type = (item.item_type or '').lower()
+                    
+                    if item.material:
+                        mat_category = (item.material.category or '').lower()
+                        mat_name = (item.material.name or '').lower()
+                    elif item.product:
+                        mat_category = (item.product.category or '').lower()
+                        mat_name = (item.product.name or '').lower()
+                    
+                    # Stiker materials - CHECK FIRST (before packaging, since STC has packaging_materials type)
+                    if ('stiker' in mat_category or 'sticker' in mat_category or 'label' in mat_category or
+                        'stc' in mat_name or 'stiker' in mat_name or 'removable' in mat_name):
+                        total_stiker_per_pack += qty_per_pack
+                    # Kain/Fabric materials
+                    elif ('kain' in mat_category or 'fabric' in mat_category or 'spunlace' in mat_category or 
+                          'jumbo' in mat_category or 'roll' in mat_category or
+                          'jr ' in mat_name or 'jumbo' in mat_name or 
+                          item_type == 'wip'):
+                        total_kain_per_pack += qty_per_pack
+                    # Chemical/Ingredient materials
+                    elif ('chemical' in mat_category or 'ingredient' in mat_category or 'parfum' in mat_category or
+                          'chemical' in item_type or 'ingredient' in item_type):
+                        total_ingredient_per_pack += qty_per_pack
+                    # Packaging materials
+                    elif ('packaging' in mat_category or 'kemasan' in mat_category or
+                          'packaging' in item_type):
+                        total_packaging_per_pack += qty_per_pack
+                
+                # If no categorization found, use products_new data as fallback
+                if total_kain_per_pack == 0:
+                    total_kain_per_pack = consumption_data.get('berat_kering_per_pack', 0)
+                if total_ingredient_per_pack == 0:
+                    total_ingredient_per_pack = consumption_data.get('volume_per_pack', 0)
+                if total_packaging_per_pack == 0:
+                    total_packaging_per_pack = 1  # Default 1 packaging per pack
+                if total_stiker_per_pack == 0:
+                    total_stiker_per_pack = 1  # Default 1 stiker per pack
+                
+                consumption_per_grade = []
+                grades = [
+                    {'grade': 'Grade A (Good)', 'qty_pack': qty_good, 'color': 'green'},
+                    {'grade': 'Grade B (Rework)', 'qty_pack': qty_rework, 'color': 'yellow'},
+                    {'grade': 'Grade C (Reject)', 'qty_pack': qty_reject, 'color': 'red'},
+                    {'grade': 'Setting (Waste)', 'qty_pack': qty_setting, 'color': 'gray'},
+                ]
+                
+                for grade_info in grades:
+                    grade_qty = grade_info['qty_pack']
+                    consumption_per_grade.append({
+                        'grade': grade_info['grade'],
+                        'qty_pack': grade_qty,
+                        'kain_kg': round(total_kain_per_pack * grade_qty, 4),
+                        'ingredient_kg': round(total_ingredient_per_pack * grade_qty, 4),
+                        'packaging_pcs': round(total_packaging_per_pack * grade_qty, 0),
+                        'stiker_pcs': round(total_stiker_per_pack * grade_qty, 0),
+                        'color': grade_info['color']
+                    })
+                
+                # Add totals row
+                total_qty = qty_good + qty_rework + qty_reject + qty_setting
+                consumption_per_grade.append({
+                    'grade': 'TOTAL',
+                    'qty_pack': total_qty,
+                    'kain_kg': round(total_kain_per_pack * total_qty, 4),
+                    'ingredient_kg': round(total_ingredient_per_pack * total_qty, 4),
+                    'packaging_pcs': round(total_packaging_per_pack * total_qty, 0),
+                    'stiker_pcs': round(total_stiker_per_pack * total_qty, 0),
+                    'color': 'blue'
+                })
+                
+                # Store consumption summary
+                production_summary['consumption_per_grade'] = consumption_per_grade
+                production_summary['consumption_totals'] = {
+                    'total_kain_kg': round(total_kain_per_pack * total_qty, 4),
+                    'total_ingredient_kg': round(total_ingredient_per_pack * total_qty, 4),
+                    'total_packaging_pcs': round(total_packaging_per_pack * total_qty, 0),
+                    'total_stiker_pcs': round(total_stiker_per_pack * total_qty, 0)
+                }
+                production_summary['grade_breakdown'] = {
+                    'grade_a': qty_good,
+                    'grade_b': qty_rework,
+                    'grade_c': qty_reject,
+                    'setting': qty_setting,
+                    'waste': qty_waste
+                }
+            
+            # Get ShiftProduction records for this WO
+            shifts = ShiftProduction.query.filter_by(work_order_id=wo.id).order_by(ShiftProduction.production_date.desc()).all()
+            
+            total_runtime = 0
+            total_downtime = 0
+            total_downtime_mesin = 0
+            total_downtime_operator = 0
+            total_downtime_material = 0
+            total_downtime_design = 0
+            total_downtime_others = 0
+            
+            for sp in shifts:
+                total_runtime += sp.actual_runtime or 0
+                total_downtime += sp.downtime_minutes or 0
+                total_downtime_mesin += sp.downtime_mesin or 0
+                total_downtime_operator += sp.downtime_operator or 0
+                total_downtime_material += sp.downtime_material or 0
+                total_downtime_design += sp.downtime_design or 0
+                total_downtime_others += sp.downtime_others or 0
+                
+                shift_productions.append({
+                    'id': sp.id,
+                    'production_date': sp.production_date.isoformat() if sp.production_date else None,
+                    'shift': sp.shift,
+                    'target_quantity': float(sp.target_quantity) if sp.target_quantity else 0,
+                    'actual_quantity': float(sp.actual_quantity) if sp.actual_quantity else 0,
+                    'good_quantity': float(sp.good_quantity) if sp.good_quantity else 0,
+                    'reject_quantity': float(sp.reject_quantity) if sp.reject_quantity else 0,
+                    'efficiency_rate': float(sp.efficiency_rate) if sp.efficiency_rate else 0,
+                    'quality_rate': float(sp.quality_rate) if sp.quality_rate else 0,
+                    'oee_score': float(sp.oee_score) if sp.oee_score else 0,
+                    'downtime_minutes': sp.downtime_minutes or 0,
+                    'operator_name': sp.operator.name if sp.operator else None,
+                    'notes': sp.notes,
+                    'issues': sp.issues
+                })
+            
+            # Production summary with downtime breakdown
+            production_summary['total_shifts'] = len(shifts)
+            production_summary['total_runtime_minutes'] = total_runtime
+            production_summary['total_downtime_minutes'] = total_downtime
+            production_summary['downtime_breakdown'] = {
+                'mesin': total_downtime_mesin,
+                'operator': total_downtime_operator,
+                'material': total_downtime_material,
+                'design': total_downtime_design,
+                'others': total_downtime_others
+            }
+            production_summary['grade_summary'] = {
+                'grade_a': float(wo.quantity_good or 0),
+                'grade_b': 0,  # Rework - if tracked
+                'grade_c': float(wo.quantity_scrap or 0)
+            }
         
         result = approval.to_dict()
         result['work_order'] = work_order_data
         result['wip_batch'] = wip_batch
         result['job_cost_entries'] = job_costs
+        result['material_usage'] = material_usage
+        result['production_summary'] = production_summary
+        result['shift_productions'] = shift_productions
         
         return jsonify(result), 200
         
     except Exception as e:
+        import traceback
+        print(f"Error in get_production_approval_detail: {str(e)}")
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 

@@ -3,13 +3,14 @@ Production Schedule Grid Routes
 Excel-style weekly production schedule with machine/product/shift grid
 Auto-generates Work Orders when scheduled date arrives
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, Product
 from models.product import ProductPackaging
 from models.production import WorkOrder, BillOfMaterials
 from datetime import datetime, timedelta
 import json
+
 
 schedule_grid_bp = Blueprint('schedule_grid', __name__)
 
@@ -346,8 +347,13 @@ def generate_wo_number():
 @schedule_grid_bp.route('/schedule-grid/<int:id>/generate-wo', methods=['POST'])
 @jwt_required()
 def generate_work_order_from_schedule(id):
-    """Generate Work Order from a schedule item"""
+    """Generate Work Order from a schedule item - DEPRECATED: Use Weekly Plan workflow instead"""
     try:
+        # This endpoint is deprecated - users should use Weekly Production Plan workflow
+        return jsonify({
+            'error': 'Fitur ini sudah tidak digunakan. Silakan gunakan Weekly Production Plan untuk membuat jadwal dan generate Work Order setelah approval.'
+        }), 400
+        
         current_user_id = get_jwt_identity()
         schedule = ScheduleGridItem.query.get_or_404(id)
         
@@ -427,8 +433,13 @@ def generate_work_order_from_schedule(id):
 @schedule_grid_bp.route('/schedule-grid/generate-wo-batch', methods=['POST'])
 @jwt_required()
 def generate_work_orders_batch():
-    """Generate Work Orders for all schedules on a specific date or today"""
+    """Generate Work Orders for all schedules on a specific date or today - DEPRECATED: Use Weekly Plan workflow instead"""
     try:
+        # This endpoint is deprecated - users should use Weekly Production Plan workflow
+        return jsonify({
+            'error': 'Fitur ini sudah tidak digunakan. Silakan gunakan Weekly Production Plan untuk membuat jadwal dan generate Work Order setelah approval.'
+        }), 400
+        
         current_user_id = get_jwt_identity()
         data = request.get_json() or {}
         target_date_str = data.get('date')
@@ -542,6 +553,246 @@ def check_schedules_for_today():
         }), 200
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= SCHEDULE GRID APPROVAL ROUTES =============
+
+@schedule_grid_bp.route('/schedule-grid/submit-approval', methods=['POST'])
+@jwt_required()
+def submit_schedule_grid_for_approval():
+    """Submit schedule grid items for approval"""
+    try:
+        data = request.get_json()
+        week_start_str = data.get('week_start')
+        
+        if not week_start_str:
+            return jsonify({'error': 'week_start is required'}), 400
+        
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+        
+        # Get all planned schedules for this week
+        schedules = ScheduleGridItem.query.filter_by(
+            week_start=week_start,
+            status='planned'
+        ).all()
+        
+        if not schedules:
+            return jsonify({'error': 'Tidak ada jadwal dengan status planned untuk minggu ini'}), 404
+        
+        # Update all schedules to submitted status
+        for schedule in schedules:
+            schedule.status = 'submitted'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'{len(schedules)} jadwal berhasil disubmit untuk approval',
+            'count': len(schedules)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/schedule-grid/pending-approval', methods=['GET'])
+@jwt_required()
+def get_schedule_grid_pending_approval():
+    """Get schedule grid items pending approval (grouped by week)"""
+    try:
+        from sqlalchemy import func
+        
+        # Get all submitted schedules grouped by week_start
+        submitted_schedules = db.session.query(
+            ScheduleGridItem.week_start,
+            func.count(ScheduleGridItem.id).label('total_items'),
+            func.sum(ScheduleGridItem.order_ctn).label('total_ctn')
+        ).filter(
+            ScheduleGridItem.status == 'submitted'
+        ).group_by(
+            ScheduleGridItem.week_start
+        ).all()
+        
+        pending_plans = []
+        for week_start, total_items, total_ctn in submitted_schedules:
+            # Get week number
+            week_number = week_start.isocalendar()[1] if week_start else 0
+            year = week_start.year if week_start else 0
+            
+            pending_plans.append({
+                'week_start': week_start.isoformat() if week_start else None,
+                'week_number': week_number,
+                'year': year,
+                'total_items': total_items,
+                'total_ctn': float(total_ctn) if total_ctn else 0,
+                'status': 'submitted'
+            })
+        
+        return jsonify({
+            'pending_plans': pending_plans,
+            'summary': {
+                'pending': len(pending_plans)
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/schedule-grid/approve', methods=['POST'])
+@jwt_required()
+def approve_schedule_grid():
+    """Approve or reject schedule grid items"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        week_start_str = data.get('week_start')
+        action = data.get('action')  # 'approve' or 'reject'
+        
+        if not week_start_str or not action:
+            return jsonify({'error': 'week_start and action are required'}), 400
+        
+        week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+        
+        # Get all submitted schedules for this week
+        schedules = ScheduleGridItem.query.filter_by(
+            week_start=week_start,
+            status='submitted'
+        ).all()
+        
+        if not schedules:
+            return jsonify({'error': 'Tidak ada jadwal yang perlu diapprove untuk minggu ini'}), 404
+        
+        # Update status based on action
+        new_status = 'approved' if action == 'approve' else 'planned'
+        for schedule in schedules:
+            schedule.status = new_status
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'{len(schedules)} jadwal berhasil {action}d',
+            'count': len(schedules)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/schedule-grid/<int:id>/generate-wo-approved', methods=['POST'])
+@jwt_required()
+def generate_work_order_from_approved_schedule(id):
+    """Generate Work Orders from an approved schedule item - 1 WO per scheduled day"""
+    try:
+        current_user_id = get_jwt_identity()
+        schedule = ScheduleGridItem.query.get_or_404(id)
+        
+        # Check if schedule is approved
+        if schedule.status != 'approved':
+            return jsonify({
+                'error': 'Hanya jadwal yang sudah diapprove yang bisa generate Work Order'
+            }), 400
+        
+        # Check if WO already exists
+        if schedule.wo_id:
+            return jsonify({
+                'error': 'Work Order sudah dibuat untuk jadwal ini',
+                'wo_id': schedule.wo_id,
+                'wo_number': schedule.work_order.wo_number if schedule.work_order else None
+            }), 400
+        
+        # Get product's BOM if exists
+        bom = BillOfMaterials.query.filter_by(
+            product_id=schedule.product_id,
+            is_active=True
+        ).first()
+        
+        # Calculate total quantity (order_ctn * qty_per_ctn = total pack)
+        total_quantity = float(schedule.order_ctn or 0) * (schedule.qty_per_ctn or 1)
+        
+        # Get scheduled days
+        schedule_days = json.loads(schedule.schedule_days) if schedule.schedule_days else {}
+        
+        if not schedule_days:
+            return jsonify({'error': 'Tidak ada jadwal hari yang ditentukan'}), 400
+        
+        # Count total shifts across all days for quantity distribution
+        total_shifts = sum(len(shifts) for shifts in schedule_days.values())
+        if total_shifts == 0:
+            return jsonify({'error': 'Tidak ada shift yang dijadwalkan'}), 400
+        
+        # Quantity per shift
+        qty_per_shift = total_quantity / total_shifts
+        
+        # Create 1 WO per scheduled day
+        created_wos = []
+        sorted_dates = sorted(schedule_days.keys())
+        first_wo_id = None
+        first_wo_number = None
+        
+        for date_str in sorted_dates:
+            shifts = schedule_days[date_str]
+            if not shifts:
+                continue
+            
+            scheduled_date = datetime.strptime(date_str, '%Y-%m-%d')
+            
+            # Quantity for this day = qty_per_shift * number of shifts this day
+            day_quantity = qty_per_shift * len(shifts)
+            
+            # Create Work Order for this day
+            wo_number = generate_wo_number()
+            work_order = WorkOrder(
+                wo_number=wo_number,
+                product_id=schedule.product_id,
+                bom_id=bom.id if bom else None,
+                quantity=day_quantity,
+                uom='pack',
+                machine_id=schedule.machine_id,
+                scheduled_start_date=scheduled_date,
+                required_date=scheduled_date.date(),
+                status='in_progress',
+                priority='normal',
+                source_type='from_schedule',
+                schedule_grid_id=schedule.id,
+                schedule_days=json.dumps({date_str: shifts}),  # Only this day's shifts
+                workflow_status='pending',
+                notes=f"Auto-generated from Production Schedule #{schedule.id}. Tanggal: {date_str}. Shift: {', '.join(map(str, sorted(shifts)))}. Spek Kain: {schedule.spek_kain or '-'}",
+                created_by=current_user_id
+            )
+            
+            db.session.add(work_order)
+            db.session.flush()
+            
+            if first_wo_id is None:
+                first_wo_id = work_order.id
+                first_wo_number = wo_number
+            
+            created_wos.append({
+                'id': work_order.id,
+                'wo_number': work_order.wo_number,
+                'date': date_str,
+                'shifts': shifts,
+                'quantity': day_quantity
+            })
+        
+        # Update schedule with first WO reference (for display purposes)
+        schedule.wo_id = first_wo_id
+        schedule.no_spk = first_wo_number if len(created_wos) == 1 else f"{first_wo_number} (+{len(created_wos)-1})"
+        schedule.status = 'wo_created'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'{len(created_wos)} Work Order berhasil dibuat untuk {len(sorted_dates)} hari kerja',
+            'work_orders': created_wos,
+            'schedule': schedule.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
 
@@ -742,11 +993,11 @@ def get_available_monthly_schedules():
         year = week_start.year
         month = week_start.month
         
-        # Also check previous month if week spans two months
+        # Only get approved monthly schedules
         schedules = MonthlySchedule.query.filter(
             MonthlySchedule.year == year,
             MonthlySchedule.month == month,
-            MonthlySchedule.status.in_(['draft', 'approved', 'in_progress'])
+            MonthlySchedule.status.in_(['approved', 'in_progress'])
         ).all()
         
         # Filter only those with remaining quantity
@@ -764,6 +1015,458 @@ def get_available_monthly_schedules():
             'month': month,
             'available_schedules': available
         }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/submit-approval', methods=['POST'])
+@jwt_required()
+def submit_monthly_schedule_for_approval():
+    """Submit monthly production plan for approval"""
+    try:
+        data = request.get_json()
+        year = data.get('year')
+        month = data.get('month')
+        
+        if not year or not month:
+            return jsonify({'error': 'Year and month are required'}), 400
+        
+        # Get all schedules for this month
+        schedules = MonthlySchedule.query.filter_by(
+            year=year,
+            month=month,
+            status='draft'
+        ).all()
+        
+        if not schedules:
+            return jsonify({'error': 'No draft schedules found for this month'}), 404
+        
+        # Update all schedules to submitted status
+        for schedule in schedules:
+            schedule.status = 'submitted'
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Successfully submitted {len(schedules)} items for approval',
+            'count': len(schedules)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/pending-approval', methods=['GET'])
+@jwt_required()
+def get_monthly_schedules_pending_approval():
+    """Get monthly production plans pending approval (grouped by month/year)"""
+    try:
+        # Get all submitted schedules grouped by year/month
+        from sqlalchemy import func
+        
+        submitted_schedules = db.session.query(
+            MonthlySchedule.year,
+            MonthlySchedule.month,
+            func.count(MonthlySchedule.id).label('total_items'),
+            func.sum(MonthlySchedule.target_ctn).label('total_quantity')
+        ).filter(
+            MonthlySchedule.status == 'submitted'
+        ).group_by(
+            MonthlySchedule.year,
+            MonthlySchedule.month
+        ).all()
+        
+        pending_plans = []
+        for year, month, total_items, total_quantity in submitted_schedules:
+            # Get detailed items for this month
+            items = MonthlySchedule.query.filter_by(
+                year=year,
+                month=month,
+                status='submitted'
+            ).all()
+            
+            items_detail = []
+            total_pack = 0
+            for item in items:
+                qty_per_ctn = 0
+                if item.product and item.product.packaging:
+                    qty_per_ctn = item.product.packaging.packs_per_karton or 0
+                target_pack = float(item.target_ctn or 0) * qty_per_ctn
+                total_pack += target_pack
+                
+                items_detail.append({
+                    'id': item.id,
+                    'product_code': item.product.code if item.product else '-',
+                    'product_name': item.product.name if item.product else '-',
+                    'machine_name': item.machine.name if item.machine else '-',
+                    'target_ctn': float(item.target_ctn or 0),
+                    'qty_per_ctn': qty_per_ctn,
+                    'target_pack': target_pack,
+                    'priority': item.priority or 'normal'
+                })
+            
+            pending_plans.append({
+                'year': year,
+                'month': month,
+                'month_name': ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                              'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][month - 1],
+                'total_items': total_items,
+                'total_quantity': float(total_quantity) if total_quantity else 0,
+                'total_pack': total_pack,
+                'status': 'submitted',
+                'items': items_detail
+            })
+        
+        return jsonify({
+            'pending_plans': pending_plans,
+            'summary': {
+                'pending': len(pending_plans)
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/approve', methods=['POST'])
+@jwt_required()
+def approve_monthly_schedule():
+    """Approve monthly production plan"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        year = data.get('year')
+        month = data.get('month')
+        action = data.get('action')  # 'approve' or 'reject'
+        
+        if not year or not month or not action:
+            return jsonify({'error': 'Year, month, and action are required'}), 400
+        
+        # Get all submitted schedules for this month
+        schedules = MonthlySchedule.query.filter_by(
+            year=year,
+            month=month,
+            status='submitted'
+        ).all()
+        
+        if not schedules:
+            return jsonify({'error': 'No submitted schedules found for this month'}), 404
+        
+        # Update status based on action
+        new_status = 'approved' if action == 'approve' else 'draft'
+        for schedule in schedules:
+            schedule.status = new_status
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Successfully {action}d {len(schedules)} items',
+            'count': len(schedules)
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@schedule_grid_bp.route('/monthly-schedule/print', methods=['GET'])
+@jwt_required(locations=['headers', 'query_string'])
+def generate_monthly_schedule_print():
+    """Generate printable HTML report for Monthly Production Plan"""
+    try:
+        # Import company config
+        from company_config.company import get_company_info
+        company = get_company_info()
+        company_name = company['name']
+        company_addr1 = company['address_line1']
+        company_addr2 = company['address_line2']
+        company_addr3 = company['address_line3']
+        company_logo = company['logo']
+        
+        year = request.args.get('year', datetime.now().year, type=int)
+        month = request.args.get('month', datetime.now().month, type=int)
+        
+        # Get all schedules for this month
+        schedules = MonthlySchedule.query.filter_by(
+            year=year,
+            month=month
+        ).order_by(MonthlySchedule.priority.desc(), MonthlySchedule.product_id).all()
+        
+        if not schedules:
+            return jsonify({'error': 'Tidak ada jadwal produksi untuk bulan ini'}), 404
+        
+        # Month names in Indonesian
+        month_names = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+        month_name = month_names[month - 1]
+        
+        # Calculate totals
+        total_ctn = sum(float(s.target_ctn or 0) for s in schedules)
+        
+        # Helper function to get qty_per_ctn from product packaging
+        def get_qty_per_ctn(schedule):
+            if schedule.product and schedule.product.packaging:
+                return schedule.product.packaging.packs_per_karton or 0
+            return 0
+        
+        total_pack = sum(float(s.target_ctn or 0) * get_qty_per_ctn(s) for s in schedules)
+        
+        # Build table rows
+        rows_html = ''
+        for idx, s in enumerate(schedules, 1):
+            product_code = s.product.code if s.product else '-'
+            product_name = s.product.name if s.product else '-'
+            machine_name = s.machine.name if s.machine else '-'
+            target_ctn = float(s.target_ctn or 0)
+            # Get qty_per_ctn from Product Packaging
+            qty_per_ctn = 0
+            if s.product and s.product.packaging:
+                qty_per_ctn = s.product.packaging.packs_per_karton or 0
+            target_pack = target_ctn * qty_per_ctn
+            priority = s.priority or 'normal'
+            status = s.status or 'draft'
+            
+            # Priority badge color
+            priority_color = '#6b7280'  # gray
+            if priority == 'high':
+                priority_color = '#f97316'  # orange
+            elif priority == 'urgent':
+                priority_color = '#ef4444'  # red
+            
+            # Status badge color
+            status_color = '#6b7280'  # gray
+            status_label = 'Draft'
+            if status == 'submitted':
+                status_color = '#eab308'  # yellow
+                status_label = 'Menunggu Approval'
+            elif status == 'approved':
+                status_color = '#22c55e'  # green
+                status_label = 'Approved'
+            elif status == 'in_progress':
+                status_color = '#3b82f6'  # blue
+                status_label = 'In Progress'
+            elif status == 'completed':
+                status_color = '#10b981'  # emerald
+                status_label = 'Selesai'
+            
+            rows_html += f'''
+            <tr>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: center;">{idx}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px;">{product_code}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px;">{product_name}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: center;">{machine_name}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">{target_ctn:,.0f}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: center;">{qty_per_ctn}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">{target_pack:,.0f}</td>
+                <td style="border: 1px solid #d1d5db; padding: 8px; text-align: center;">
+                    <span style="color: {priority_color}; font-weight: bold;">{priority.upper()}</span>
+                </td>
+            </tr>
+            '''
+        
+        # Build HTML
+        html = f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                @page {{
+                    size: A4 landscape;
+                    margin: 15mm;
+                }}
+                body {{
+                    font-family: Arial, sans-serif;
+                    font-size: 11px;
+                    margin: 0;
+                    padding: 0;
+                }}
+                .header {{
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 20px;
+                    border-bottom: 2px solid #1e40af;
+                    padding-bottom: 15px;
+                }}
+                .logo {{
+                    width: 80px;
+                    height: auto;
+                }}
+                .company-info {{
+                    margin-left: 15px;
+                }}
+                .company-name {{
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: #1e40af;
+                }}
+                .company-address {{
+                    font-size: 9px;
+                    color: #4b5563;
+                }}
+                .title {{
+                    text-align: center;
+                    margin: 20px 0;
+                }}
+                .title h1 {{
+                    font-size: 16px;
+                    color: #1e3a8a;
+                    margin: 0;
+                }}
+                .title p {{
+                    font-size: 12px;
+                    color: #6b7280;
+                    margin: 5px 0 0 0;
+                }}
+                .info-box {{
+                    display: flex;
+                    justify-content: space-between;
+                    margin-bottom: 15px;
+                    background-color: #f3f4f6;
+                    padding: 10px;
+                    border-radius: 5px;
+                }}
+                .info-item {{
+                    font-size: 10px;
+                }}
+                .info-label {{
+                    color: #6b7280;
+                }}
+                .info-value {{
+                    font-weight: bold;
+                    color: #1f2937;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                }}
+                th {{
+                    background-color: #1e40af;
+                    color: white;
+                    padding: 10px 8px;
+                    text-align: center;
+                    font-size: 10px;
+                    border: 1px solid #1e40af;
+                }}
+                td {{
+                    font-size: 10px;
+                }}
+                .total-row {{
+                    background-color: #dbeafe;
+                    font-weight: bold;
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    display: flex;
+                    justify-content: space-between;
+                }}
+                .signature-box {{
+                    text-align: center;
+                    width: 150px;
+                }}
+                .signature-line {{
+                    border-top: 1px solid #000;
+                    margin-top: 50px;
+                    padding-top: 5px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                {f'<div><img src="{company_logo}" class="logo" alt="Logo"></div>' if company_logo else ''}
+                <div class="company-info">
+                    <div class="company-name">{company_name}</div>
+                    <div class="company-address">
+                        {company_addr1}<br>
+                        {company_addr2}<br>
+                        {company_addr3}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="title">
+                <h1>RENCANA PRODUKSI BULANAN</h1>
+                <p>{month_name} {year}</p>
+            </div>
+            
+            <div class="info-box">
+                <div class="info-item">
+                    <span class="info-label">Periode:</span>
+                    <span class="info-value">{month_name} {year}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Total Produk:</span>
+                    <span class="info-value">{len(schedules)} item</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Total Karton:</span>
+                    <span class="info-value">{total_ctn:,.0f} CTN</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Total Pack:</span>
+                    <span class="info-value">{total_pack:,.0f} PCK</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Tanggal Cetak:</span>
+                    <span class="info-value">{datetime.now().strftime('%d %b %Y')}</span>
+                </div>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 30px;">No</th>
+                        <th style="width: 80px;">Kode Produk</th>
+                        <th>Nama Produk</th>
+                        <th style="width: 70px;">Mesin</th>
+                        <th style="width: 70px;">Target (CTN)</th>
+                        <th style="width: 50px;">Pck/Ctn</th>
+                        <th style="width: 80px;">Target (PCK)</th>
+                        <th style="width: 60px;">Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                    <tr class="total-row">
+                        <td colspan="4" style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">TOTAL</td>
+                        <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">{total_ctn:,.0f}</td>
+                        <td style="border: 1px solid #d1d5db; padding: 8px;"></td>
+                        <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right;">{total_pack:,.0f}</td>
+                        <td style="border: 1px solid #d1d5db; padding: 8px;"></td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="footer">
+                <div class="signature-box">
+                    <div>Dibuat oleh,</div>
+                    <div class="signature-line">PPIC</div>
+                </div>
+                <div class="signature-box">
+                    <div>Disetujui oleh,</div>
+                    <div class="signature-line">Manager Produksi</div>
+                </div>
+                <div class="signature-box">
+                    <div>Diketahui oleh,</div>
+                    <div class="signature-line">Direktur</div>
+                </div>
+            </div>
+            
+            <script>
+                // Auto print when page loads
+                window.onload = function() {{
+                    window.print();
+                }};
+            </script>
+        </body>
+        </html>
+        '''
+        
+        # Return HTML for browser printing
+        return Response(html, mimetype='text/html')
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

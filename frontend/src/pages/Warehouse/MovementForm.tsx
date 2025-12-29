@@ -106,14 +106,20 @@ const MovementForm: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch('/api/products', {
+      const response = await fetch('/api/products-new/?per_page=1000', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
       if (response.ok) {
         const data = await response.json();
-        setProducts(data.products || []);
+        const mappedProducts = (data.products || []).map((p: any) => ({
+          id: p.id,
+          code: p.kode_produk || p.code,
+          name: p.nama_produk || p.name,
+          primary_uom: p.satuan || p.primary_uom || 'pcs',
+        }));
+        setProducts(mappedProducts);
       }
     } catch (error) {
       console.error('Failed to fetch products:', error);

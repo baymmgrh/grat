@@ -399,7 +399,7 @@ def get_performance_scorecard():
                 else:
                     return 'critical'
             else:
-                achievement = (actual / target * 100) if target > 0 else 0
+                achievement = (float(actual) / float(target) * 100) if target > 0 else 0
                 if achievement >= 100:
                     return 'good'
                 elif achievement >= warning:
@@ -970,7 +970,7 @@ def get_production_executive_dashboard():
                 from utils import detect_downtime_category
                 
                 issue_parts = sp.issues.split(';')
-                for part in issue_parts:
+                for idx, part in enumerate(issue_parts):
                     part = part.strip()
                     if not part:
                         continue
@@ -993,7 +993,9 @@ def get_production_executive_dashboard():
                         if explicit_category:
                             category = explicit_category.lower()
                         else:
-                            category = detect_downtime_category(reason)
+                            # Pass is_first_entry parameter for proper categorization
+                            is_first_entry = (idx == 0)
+                            category = detect_downtime_category(reason, is_first_entry)
                         
                         # Use reason + category as unique key
                         key = f"{reason}|{category}"

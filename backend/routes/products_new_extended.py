@@ -4,7 +4,7 @@ Extended Product Routes - Additional endpoints for new schema
 
 from flask import Blueprint, request, jsonify, send_file
 from models import db
-from models.product_new_schema import ProductNew, ProductVersion
+from models.product_excel_schema import ProductNew, ProductVersion
 from datetime import datetime, timedelta
 import pandas as pd
 import io
