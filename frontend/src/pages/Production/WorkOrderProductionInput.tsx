@@ -23,18 +23,33 @@ interface WorkOrder {
   product_code: string;
   quantity: number;
   quantity_produced: number;
+  quantity_good: number;
   uom: string;
   machine_id: number;
   machine_name: string;
+  machine_default_speed?: number;  // Default speed from machine settings
   status: string;
   pack_per_carton: number;
   consumption_data?: ConsumptionData;
+  source_type?: string;  // manual, from_bom, from_schedule
+  schedule_grid_id?: number;
+  schedule_days?: { [date: string]: number[] };  // {"2025-12-08": [1, 2], "2025-12-09": [1]}
 }
 
 interface Employee {
   id: number;
   employee_id: string;
   name: string;
+}
+
+interface RosteredOperator {
+  employee_id: number;
+  employee_number: string;
+  full_name: string;
+  machine_id: number | null;
+  machine_name: string | null;
+  shift: string;
+  is_backup: boolean;
 }
 
 interface DowntimeEntry {
@@ -88,6 +103,16 @@ const DOWNTIME_CATEGORIES = {
     textColor: 'text-blue-700',
     icon: PaintBrushIcon
   },
+  idle: { 
+    label: 'Idle Time', 
+    pic: 'Warehouse/PPIC', 
+    maxPercent: 0, // No limit, tracked separately
+    color: 'orange',
+    bgColor: 'bg-orange-50',
+    borderColor: 'border-orange-300',
+    textColor: 'text-orange-700',
+    icon: ClockIcon
+  },
   others: { 
     label: 'Others', 
     pic: 'Supervisor Produksi', 
@@ -102,8 +127,17 @@ const DOWNTIME_CATEGORIES = {
 
 // Keywords untuk auto-detect kategori dari alasan downtime
 // Berdasarkan standar OEE dan referensi lokal pabrik
-// PENTING: Urutan pengecekan = mesin -> material -> design -> operator -> others
+// PENTING: Urutan pengecekan = idle -> mesin -> material -> design -> operator -> others
 const CATEGORY_KEYWORDS = {
+  // IDLE: Menunggu material/resource - waktu tidak produktif bukan karena kerusakan
+  idle: [
+    'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
+    'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
+    'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
+    'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
+    'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
+    'waiting for', 'standby material'
+  ],
   // MESIN (Machine/Equipment): Semua masalah teknis mesin dan komponen
   // Referensi: seal bocor, pisau tumpul, belt putus, sensor error, dll
   mesin: [
@@ -126,6 +160,8 @@ const CATEGORY_KEYWORDS = {
     'pneumatic', 'pneumatic error', 'hidrolik', 'hidrolik bocor',
     // Metal Detector
     'metal detector', 'metal detektor', 'detector putus',
+    // Inkjet Printer
+    'inkjet', 'inkjet error', 'inkjet macet', 'printer inkjet',
     // Temperature & Suhu
     'temperature', 'temperatur', 'suhu', 'overheat', 'panas berlebih',
     'low temperature', 'suhu rendah',
@@ -230,16 +266,24 @@ const CATEGORY_KEYWORDS = {
 // Function to auto-detect category from reason text
 // Urutan pengecekan: operator -> material -> mesin -> design -> others
 // OPERATOR dan MATERIAL dicek duluan untuk "keluar jalur" dengan penyebab spesifik
-const detectCategory = (reason: string): string => {
+const detectCategory = (reason: string, isFirstEntry: boolean = false): string => {
   const lowerReason = reason.toLowerCase();
   
+  // SPECIAL CASE: "setting mc/mesin" - depends on position
+  // If first entry → design (changeover/setup awal)
+  // If not first → mesin (adjustment mesin)
+  if (lowerReason.includes('setting mc') || lowerReason.includes('setting mesin')) {
+    return isFirstEntry ? 'design' : 'mesin';
+  }
+  
   // Urutan prioritas pengecekan:
+  // 0. IDLE - untuk "tunggu kain/stiker/packaging/mixing" (prioritas tertinggi)
   // 1. OPERATOR - untuk "keluar jalur (sambungan)" 
   // 2. MATERIAL - untuk "keluar jalur (kain tipis/gembos/tidak sesuai)"
   // 3. MESIN - untuk "keluar jalur (bak mesin)" dan masalah mesin lainnya
   // 4. DESIGN - untuk changeover, sanitasi
   // 5. OTHERS - default
-  const categoryOrder = ['operator', 'material', 'mesin', 'design', 'others'];
+  const categoryOrder = ['idle', 'operator', 'material', 'mesin', 'design', 'others'];
   
   for (const category of categoryOrder) {
     const keywords = CATEGORY_KEYWORDS[category as keyof typeof CATEGORY_KEYWORDS];
@@ -260,8 +304,10 @@ export default function WorkOrderProductionInput() {
   
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [rosteredOperators, setRosteredOperators] = useState<RosteredOperator[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [existingRecords, setExistingRecords] = useState<any[]>([]);
   
   // Default planned runtime per shift (8 hours = 480 minutes)
   const DEFAULT_RUNTIME = 480;
@@ -283,12 +329,96 @@ export default function WorkOrderProductionInput() {
     operator_id: '',
     notes: '',
     planned_runtime: '480', // Bisa diubah manual
+    machine_speed: '',      // Speed mesin (pcs/jam) untuk perhitungan efisiensi
   });
 
   // Downtime entries list
   const [downtimeEntries, setDowntimeEntries] = useState<DowntimeEntry[]>([]);
   const [nextEntryId, setNextEntryId] = useState(1);
   const [draftRestored, setDraftRestored] = useState(false);
+  
+  // Mini Calculator state
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [calcDisplay, setCalcDisplay] = useState('0');
+  const [calcPrevValue, setCalcPrevValue] = useState<number | null>(null);
+  const [calcOperator, setCalcOperator] = useState<string | null>(null);
+  const [calcWaitingForOperand, setCalcWaitingForOperand] = useState(false);
+  
+  // Calculator functions
+  const calcInputDigit = (digit: string) => {
+    if (calcWaitingForOperand) {
+      setCalcDisplay(digit);
+      setCalcWaitingForOperand(false);
+    } else {
+      setCalcDisplay(calcDisplay === '0' ? digit : calcDisplay + digit);
+    }
+  };
+  
+  const calcInputDot = () => {
+    if (calcWaitingForOperand) {
+      setCalcDisplay('0.');
+      setCalcWaitingForOperand(false);
+    } else if (!calcDisplay.includes('.')) {
+      setCalcDisplay(calcDisplay + '.');
+    }
+  };
+  
+  const calcClear = () => {
+    setCalcDisplay('0');
+    setCalcPrevValue(null);
+    setCalcOperator(null);
+    setCalcWaitingForOperand(false);
+  };
+  
+  const calcPerformOperation = (nextOperator: string) => {
+    const inputValue = parseFloat(calcDisplay);
+    
+    if (calcPrevValue === null) {
+      setCalcPrevValue(inputValue);
+    } else if (calcOperator) {
+      const currentValue = calcPrevValue || 0;
+      let result = currentValue;
+      
+      switch (calcOperator) {
+        case '+': result = currentValue + inputValue; break;
+        case '-': result = currentValue - inputValue; break;
+        case '×': result = currentValue * inputValue; break;
+        case '÷': result = inputValue !== 0 ? currentValue / inputValue : 0; break;
+      }
+      
+      setCalcDisplay(String(result));
+      setCalcPrevValue(result);
+    }
+    
+    setCalcWaitingForOperand(true);
+    setCalcOperator(nextOperator);
+  };
+  
+  const calcEquals = () => {
+    if (!calcOperator || calcPrevValue === null) return;
+    
+    const inputValue = parseFloat(calcDisplay);
+    let result = calcPrevValue;
+    
+    switch (calcOperator) {
+      case '+': result = calcPrevValue + inputValue; break;
+      case '-': result = calcPrevValue - inputValue; break;
+      case '×': result = calcPrevValue * inputValue; break;
+      case '÷': result = inputValue !== 0 ? calcPrevValue / inputValue : 0; break;
+    }
+    
+    setCalcDisplay(String(result));
+    setCalcPrevValue(null);
+    setCalcOperator(null);
+    setCalcWaitingForOperand(true);
+  };
+  
+  const calcUseResult = () => {
+    const result = Math.floor(parseFloat(calcDisplay));
+    handleChange('quantity_good', result.toString());
+    setShowCalculator(false);
+    calcClear();
+  };
 
   // Draft key for localStorage
   const getDraftKey = useCallback(() => `wo_production_draft_${id}`, [id]);
@@ -323,6 +453,7 @@ export default function WorkOrderProductionInput() {
     operator_id: '',
     notes: '',
     planned_runtime: '480',
+    machine_speed: '',
   };
 
   // Restore draft on mount
@@ -379,16 +510,166 @@ export default function WorkOrderProductionInput() {
     fetchData();
   }, [id]);
 
+  // Update rostered operators when date or shift changes
+  useEffect(() => {
+    if (workOrder?.machine_id && formData.production_date && formData.shift) {
+      fetchRosteredOperators(formData.production_date, formData.shift, workOrder.machine_id);
+    }
+  }, [formData.production_date, formData.shift, workOrder?.machine_id]);
+
+  // Re-calculate waste when workOrder data is loaded
+  useEffect(() => {
+    if (workOrder && (formData.quantity_good || formData.quantity_reject || formData.quantity_rework || formData.quantity_setting)) {
+      // Trigger waste calculation with current values
+      const currentFields = ['quantity_good', 'quantity_reject', 'quantity_rework', 'quantity_setting'];
+      currentFields.forEach(field => {
+        if (formData[field]) {
+          handleChange(field, formData[field]);
+        }
+      });
+    }
+  }, [workOrder]);
+
+  // Auto-select first available shift when production_date changes (for schedule-based WO)
+  useEffect(() => {
+    if (workOrder?.source_type === 'from_schedule' && workOrder?.schedule_days && formData.production_date) {
+      const availableShifts = workOrder.schedule_days[formData.production_date] || [];
+      if (availableShifts.length > 0) {
+        const currentShift = parseInt(formData.shift);
+        // If current shift is not available for this date, select first available
+        if (!availableShifts.includes(currentShift)) {
+          setFormData(prev => ({
+            ...prev,
+            shift: availableShifts[0].toString()
+          }));
+        }
+      }
+    }
+  }, [workOrder, formData.production_date]);
+
+  // Auto-fill form if existing record found for current shift and date
+  useEffect(() => {
+    if (existingRecords.length > 0 && formData.production_date && formData.shift) {
+      const existingRecord = existingRecords.find(record => {
+        const recordDate = new Date(record.production_date).toISOString().split('T')[0];
+        return recordDate === formData.production_date && record.shift === formData.shift;
+      });
+      
+      if (existingRecord) {
+        console.log('Found existing record for current shift/date:', existingRecord);
+        
+        // Auto-fill form with existing data
+        setFormData(prev => ({
+          ...prev,
+          quantity_good: existingRecord.quantity_good?.toString() || '',
+          quantity_reject: existingRecord.quantity_reject?.toString() || '0',
+          quantity_produced: existingRecord.quantity_produced?.toString() || '0',
+        }));
+        
+        // Trigger waste calculation with existing values
+        setTimeout(() => {
+          console.log('Triggering waste calculation with existing values:', {
+            quantity_good: existingRecord.quantity_good,
+            quantity_reject: existingRecord.quantity_reject
+          });
+          
+          if (existingRecord.quantity_good) {
+            handleChange('quantity_good', existingRecord.quantity_good.toString());
+          }
+          if (existingRecord.quantity_reject) {
+            handleChange('quantity_reject', existingRecord.quantity_reject.toString());
+          }
+          
+          // Also trigger with a small change to ensure calculation runs
+          setTimeout(() => {
+            handleChange('quantity_good', existingRecord.quantity_good?.toString() || '0');
+          }, 50);
+        }, 100);
+      }
+    }
+  }, [existingRecords, formData.production_date, formData.shift]);
+
+  const fetchRosteredOperators = async (date: string, shift: string, machineId?: number) => {
+    try {
+      const params: any = { date, shift: `shift_${shift}` };
+      if (machineId) params.machine_id = machineId;
+      
+      const response = await axiosInstance.get('/api/hr/work-roster/operators/for-production', { params });
+      if (response.data.success) {
+        setRosteredOperators(response.data.operators || []);
+      }
+    } catch (error) {
+      console.log('No rostered operators found');
+      setRosteredOperators([]);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [woRes, empRes] = await Promise.all([
+      const [woRes, empRes, recordsRes] = await Promise.all([
         axiosInstance.get(`/api/production/work-orders/${id}`),
-        axiosInstance.get('/api/hr/employees')
+        axiosInstance.get('/api/hr/employees'),
+        axiosInstance.get(`/api/production/work-orders/${id}/production-records`)
       ]);
       
-      setWorkOrder(woRes.data.work_order);
+      const workOrderData = woRes.data.work_order;
+      const recordsData = recordsRes.data.records || [];
+      
+      console.log('WorkOrder data loaded:', {
+        wo_number: workOrderData?.wo_number,
+        consumption_data: workOrderData?.consumption_data,
+        pack_per_carton: workOrderData?.pack_per_carton,
+        source_type: workOrderData?.source_type,
+        schedule_days: workOrderData?.schedule_days
+      });
+      
+      console.log('Existing production records:', recordsData);
+      
+      setWorkOrder(workOrderData);
       setEmployees(empRes.data.employees || []);
+      
+      // Fetch rostered operators for WO scheduled_start_date (or today if not set), shift 1, and this machine
+      const defaultDate = workOrderData?.scheduled_start_date 
+        ? new Date(workOrderData.scheduled_start_date).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      fetchRosteredOperators(defaultDate, '1', workOrderData?.machine_id);
+      
+      // Set existing records for reference
+      setExistingRecords(recordsData);
+      
+      // Auto-fill machine_speed from machine's default_speed if available
+      if (workOrderData?.machine_default_speed && workOrderData.machine_default_speed > 0) {
+        setFormData(prev => ({
+          ...prev,
+          machine_speed: workOrderData.machine_default_speed.toString()
+        }));
+      }
+      
+      // Auto-set production_date and shift if WO is from schedule
+      if (workOrderData?.source_type === 'from_schedule' && workOrderData?.schedule_days) {
+        const scheduledDates = Object.keys(workOrderData.schedule_days).sort();
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Find today or the nearest future scheduled date
+        let targetDate = scheduledDates.find(d => d >= today) || scheduledDates[0];
+        
+        if (targetDate) {
+          const availableShifts = workOrderData.schedule_days[targetDate] || [];
+          setFormData(prev => ({
+            ...prev,
+            production_date: targetDate,
+            shift: availableShifts.length > 0 ? availableShifts[0].toString() : '1'
+          }));
+        }
+      } else if (workOrderData?.scheduled_start_date) {
+        // For non-schedule WO, use the WO scheduled_start_date as default
+        const woStartDate = new Date(workOrderData.scheduled_start_date).toISOString().split('T')[0];
+        setFormData(prev => ({
+          ...prev,
+          production_date: woStartDate
+        }));
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Failed to load data');
@@ -424,11 +705,48 @@ export default function WorkOrderProductionInput() {
         const wastePack = gradeC + setting;
         updated.quantity_waste = wastePack.toString();
         
-        // Auto-calculate waste materials if workOrder data available
-        if (workOrder) {
-          const packPerCarton = workOrder.pack_per_carton || 1;
-          const beratKering = workOrder.consumption_data?.berat_kering_per_pack || 0; // kg per pack
-          const ingredient = workOrder.consumption_data?.volume_per_pack || 0; // kg per pack
+        // Auto-calculate waste materials - ALWAYS run with fallback values
+        const packPerCarton = workOrder?.pack_per_carton || 1;
+        
+        // Multiple fallback levels for consumption data
+        let beratKering = 0.8; // Default fallback
+        let ingredient = 0.5; // Default fallback
+        
+        if (workOrder?.consumption_data) {
+          beratKering = workOrder.consumption_data.berat_kering_per_pack || 0.8;
+          ingredient = workOrder.consumption_data.volume_per_pack || 0.5;
+        }
+        
+        console.log('Waste calculation details:', {
+          workOrderNumber: workOrder?.wo_number,
+          hasConsumptionData: !!workOrder?.consumption_data,
+          consumption_data: workOrder?.consumption_data,
+          packPerCarton,
+          beratKering,
+          ingredient,
+          wastePack,
+          calculation: `${beratKering} × ${wastePack} = ${beratKering * wastePack}`,
+          expectedWasteKain: (beratKering * wastePack).toFixed(4),
+          expectedWasteIngredient: (ingredient * wastePack).toFixed(4)
+        });
+        
+        console.log('Waste calculation - ALWAYS running:', {
+          hasWorkOrder: !!workOrder,
+          workOrderNumber: workOrder?.wo_number,
+          consumption_data: workOrder?.consumption_data,
+          packPerCarton,
+          beratKering,
+          ingredient,
+          wastePack,
+          field,
+          value,
+          formData: {
+            quantity_good: formData.quantity_good,
+            quantity_reject: formData.quantity_reject,
+            quantity_rework: formData.quantity_rework,
+            quantity_setting: formData.quantity_setting
+          }
+        });
           
           // waste_kain_kg = berat_kering_per_pack × waste_pack
           const wasteKainKg = beratKering * wastePack;
@@ -443,7 +761,6 @@ export default function WorkOrderProductionInput() {
           
           // waste_stiker = waste_pack (1:1)
           updated.waste_stiker_pcs = wastePack.toString();
-        }
       }
       
       return updated;
@@ -468,14 +785,15 @@ export default function WorkOrderProductionInput() {
   };
 
   const updateDowntimeEntry = (entryId: number, field: keyof DowntimeEntry, value: string) => {
-    setDowntimeEntries(prev => prev.map(entry => {
+    setDowntimeEntries(prev => prev.map((entry, index) => {
       if (entry.id !== entryId) return entry;
       
       const updated = { ...entry, [field]: value };
       
       // Auto-detect category and PIC when reason text changes
       if (field === 'reason') {
-        const detectedCategory = detectCategory(value);
+        const isFirstEntry = index === 0;
+        const detectedCategory = detectCategory(value, isFirstEntry);
         updated.category = detectedCategory;
         updated.pic = DOWNTIME_CATEGORIES[detectedCategory as keyof typeof DOWNTIME_CATEGORIES]?.pic || '';
       }
@@ -590,6 +908,7 @@ export default function WorkOrderProductionInput() {
         planned_runtime: getPlannedRuntime(),
         actual_runtime: getActualRuntime(),
         downtime_minutes: getTotalDowntime(),
+        machine_speed: parseInt(formData.machine_speed) || 0,
         // Downtime by category
         downtime_mesin: byCategory.mesin,
         downtime_operator: byCategory.operator,
@@ -696,11 +1015,11 @@ export default function WorkOrderProductionInput() {
             )}
           </div>
           <div>
-            <p className="text-sm text-blue-600">Sudah Diproduksi</p>
-            <p className="text-lg font-bold text-blue-800">{(workOrder.quantity_produced || 0).toLocaleString()} {workOrder.uom}</p>
+            <p className="text-sm text-blue-600">Sudah Diproduksi (Grade A)</p>
+            <p className="text-lg font-bold text-blue-800">{(workOrder.quantity_good || 0).toLocaleString()} {workOrder.uom}</p>
             {workOrder.pack_per_carton > 0 && (
               <p className="text-xs text-blue-500">
-                = {((workOrder.quantity_produced || 0) / workOrder.pack_per_carton).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Karton
+                = {((workOrder.quantity_good || 0) / workOrder.pack_per_carton).toLocaleString('id-ID', { maximumFractionDigits: 1 })} Karton
               </p>
             )}
           </div>
@@ -726,6 +1045,50 @@ export default function WorkOrderProductionInput() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-6">
+        {/* Schedule Info - Show if WO is from schedule */}
+        {workOrder?.source_type === 'from_schedule' && workOrder?.schedule_days && Object.keys(workOrder.schedule_days).length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-blue-800 mb-2">
+              📅 Jadwal Produksi
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(workOrder.schedule_days)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([date, shifts]) => {
+                  const isSelected = date === formData.production_date;
+                  const dateObj = new Date(date);
+                  const dayName = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'][dateObj.getDay()];
+                  const displayDate = `${dateObj.getDate()}/${dateObj.getMonth() + 1}`;
+                  
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      onClick={() => {
+                        const availableShifts = shifts as number[];
+                        setFormData(prev => ({
+                          ...prev,
+                          production_date: date,
+                          shift: availableShifts.length > 0 ? availableShifts[0].toString() : prev.shift
+                        }));
+                      }}
+                      className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                        isSelected 
+                          ? 'bg-blue-600 text-white' 
+                          : 'bg-white text-blue-700 hover:bg-blue-100 border border-blue-300'
+                      }`}
+                    >
+                      <div>{dayName} {displayDate}</div>
+                      <div className="text-[10px] opacity-80">
+                        Shift: {(shifts as number[]).join(', ')}
+                      </div>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
         {/* Date & Shift */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
@@ -743,6 +1106,11 @@ export default function WorkOrderProductionInput() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Shift *
+              {workOrder?.source_type === 'from_schedule' && workOrder?.schedule_days && (
+                <span className="ml-2 text-xs text-blue-600 font-normal">
+                  (dari jadwal produksi)
+                </span>
+              )}
             </label>
             <select
               value={formData.shift}
@@ -750,10 +1118,40 @@ export default function WorkOrderProductionInput() {
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             >
-              <option value="1">Shift 1 (07:00 - 15:00)</option>
-              <option value="2">Shift 2 (15:00 - 23:00)</option>
-              <option value="3">Shift 3 (23:00 - 07:00)</option>
+              {(() => {
+                // Get available shifts for selected date
+                const availableShifts = workOrder?.source_type === 'from_schedule' && workOrder?.schedule_days
+                  ? workOrder.schedule_days[formData.production_date] || []
+                  : [1, 2, 3]; // Default all shifts for manual WO
+                
+                const shiftLabels: { [key: number]: string } = {
+                  1: 'Shift 1 (06:30 - 15:00)',
+                  2: 'Shift 2 (15:00 - 23:00)',
+                  3: 'Shift 3 (23:00 - 06:30)'
+                };
+                
+                if (availableShifts.length === 0) {
+                  // No shifts scheduled for this date - show all shifts as fallback
+                  return [1, 2, 3].map(shift => (
+                    <option key={shift} value={shift.toString()}>
+                      {shiftLabels[shift]}
+                    </option>
+                  ));
+                }
+                
+                return availableShifts.map(shift => (
+                  <option key={shift} value={shift.toString()}>
+                    {shiftLabels[shift]}
+                  </option>
+                ));
+              })()}
             </select>
+            {workOrder?.source_type === 'from_schedule' && workOrder?.schedule_days && 
+             !workOrder.schedule_days[formData.production_date] && (
+              <p className="mt-1 text-xs text-amber-600">
+                ⚠ Tanggal ini tidak ada di jadwal. Pilih tanggal yang dijadwalkan.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -775,9 +1173,17 @@ export default function WorkOrderProductionInput() {
         <div className="border-t pt-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Hasil Produksi</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Grade A <span className="text-green-600">(Good)</span> *
+                <button
+                  type="button"
+                  onClick={() => setShowCalculator(!showCalculator)}
+                  className="ml-2 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                  title="Buka Kalkulator"
+                >
+                  🧮
+                </button>
               </label>
               <input
                 type="number"
@@ -789,6 +1195,45 @@ export default function WorkOrderProductionInput() {
                 min="0"
                 required
               />
+              
+              {/* Mini Calculator */}
+              {showCalculator && (
+                <div className="absolute z-50 top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-xl p-3 w-56">
+                  <div className="text-right bg-gray-100 p-2 rounded mb-2 font-mono text-lg overflow-hidden">
+                    {calcDisplay}
+                  </div>
+                  <div className="grid grid-cols-4 gap-1">
+                    <button type="button" onClick={calcClear} className="col-span-2 p-2 bg-red-100 text-red-700 rounded hover:bg-red-200 font-medium">C</button>
+                    <button type="button" onClick={() => calcPerformOperation('÷')} className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-medium">÷</button>
+                    <button type="button" onClick={() => calcPerformOperation('×')} className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-medium">×</button>
+                    
+                    <button type="button" onClick={() => calcInputDigit('7')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">7</button>
+                    <button type="button" onClick={() => calcInputDigit('8')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">8</button>
+                    <button type="button" onClick={() => calcInputDigit('9')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">9</button>
+                    <button type="button" onClick={() => calcPerformOperation('-')} className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-medium">−</button>
+                    
+                    <button type="button" onClick={() => calcInputDigit('4')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">4</button>
+                    <button type="button" onClick={() => calcInputDigit('5')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">5</button>
+                    <button type="button" onClick={() => calcInputDigit('6')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">6</button>
+                    <button type="button" onClick={() => calcPerformOperation('+')} className="p-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-medium">+</button>
+                    
+                    <button type="button" onClick={() => calcInputDigit('1')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">1</button>
+                    <button type="button" onClick={() => calcInputDigit('2')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">2</button>
+                    <button type="button" onClick={() => calcInputDigit('3')} className="p-2 bg-gray-100 rounded hover:bg-gray-200">3</button>
+                    <button type="button" onClick={calcEquals} className="row-span-2 p-2 bg-green-500 text-white rounded hover:bg-green-600 font-medium">=</button>
+                    
+                    <button type="button" onClick={() => calcInputDigit('0')} className="col-span-2 p-2 bg-gray-100 rounded hover:bg-gray-200">0</button>
+                    <button type="button" onClick={calcInputDot} className="p-2 bg-gray-100 rounded hover:bg-gray-200">.</button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={calcUseResult}
+                    className="w-full mt-2 p-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium text-sm"
+                  >
+                    ✓ Gunakan untuk Grade A
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1099,6 +1544,19 @@ export default function WorkOrderProductionInput() {
                 />
                 <span className="text-sm text-gray-500">menit</span>
               </div>
+              {/* Machine Speed Input */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Speed Mesin:</label>
+                <input
+                  type="number"
+                  value={formData.machine_speed}
+                  onChange={(e) => handleChange('machine_speed', e.target.value)}
+                  className="w-24 px-2 py-1 border border-blue-300 rounded text-sm text-center bg-blue-50"
+                  min="0"
+                  placeholder="0"
+                />
+                <span className="text-sm text-gray-500">pcs/menit</span>
+              </div>
               <button
                 type="button"
                 onClick={addDowntimeEntry}
@@ -1298,6 +1756,18 @@ export default function WorkOrderProductionInput() {
                 <p className="text-xs text-gray-500">
                   ({getDowntimePercentage(getTotalDowntime()).toFixed(1)}% dari {getPlannedRuntime()}m)
                 </p>
+                {/* Downtime vs Runtime indicator */}
+                {getTotalDowntime() > 0 && (
+                  <p className={`text-xs font-medium mt-1 ${
+                    getTotalDowntime() > getPlannedRuntime() 
+                      ? 'text-red-600' 
+                      : 'text-green-600'
+                  }`}>
+                    {getTotalDowntime() > getPlannedRuntime() 
+                      ? `+${getTotalDowntime() - getPlannedRuntime()}m (melebihi runtime)` 
+                      : `-${getPlannedRuntime() - getTotalDowntime()}m (sisa runtime)`}
+                  </p>
+                )}
               </div>
               
               {/* Actual Runtime */}
@@ -1335,6 +1805,11 @@ export default function WorkOrderProductionInput() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Operator
+                {rosteredOperators.length > 0 && (
+                  <span className="ml-2 text-xs text-green-600 font-normal">
+                    ✓ {rosteredOperators.length} operator dari roster
+                  </span>
+                )}
               </label>
               <select
                 value={formData.operator_id}
@@ -1342,11 +1817,22 @@ export default function WorkOrderProductionInput() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">-- Pilih Operator --</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.employee_id} - {emp.name}
-                  </option>
-                ))}
+                {rosteredOperators.length > 0 && (
+                  <optgroup label="📋 Operator dari Roster">
+                    {rosteredOperators.map(op => (
+                      <option key={`roster-${op.employee_id}`} value={op.employee_id}>
+                        {op.employee_number} - {op.full_name} {op.is_backup ? '(Backup)' : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                <optgroup label="👥 Semua Karyawan">
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.employee_id} - {emp.name}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
             <div>
