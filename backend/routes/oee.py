@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, MaintenanceRecord, MaintenanceSchedule, User
 from utils.i18n import success_response, error_response, get_message
 from models.oee import OEERecord, OEEDowntimeRecord, OEETarget, OEEAlert, MaintenanceImpact, OEEAnalytics, QualityDefect
-from models.product_new_schema import ProductNew
+from models.product_excel_schema import ProductNew
 from utils import generate_number
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, or_, desc
@@ -83,11 +83,21 @@ def get_records():
             if not target_qty and sp.work_order:
                 target_qty = int(sp.work_order.quantity) if sp.work_order.quantity else 0
             
-            # Parse detailed downtime from issues field
+            # Parse ALL downtime entries from issues field
             # Format: "60 menit - Produk bocor (endseal kotor) [others]; 20 menit - Kain keluar jalur [others]; ..."
             downtime_breakdown = []
-            # Keywords to exclude (human/biological needs - not machine issues)
-            excluded_keywords = ['istirahat', 'sholat', 'solat', 'toilet', 'wc', 'makan', 'minum', 'biologis', 'fisiologis']
+            total_downtime_minutes = 0  # Sum of NON-IDLE downtime entries only
+            idle_time_minutes = 0  # Separate from downtime
+            
+            # IDLE TIME keywords - waiting for materials/resources
+            idle_keywords = [
+                'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
+                'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
+                'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
+                'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
+                'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
+                'waiting for', 'standby'
+            ]
             
             if sp.issues:
                 # Split by semicolon
@@ -97,19 +107,41 @@ def get_records():
                     if not part:
                         continue
                     # Parse: "60 menit - Produk bocor (endseal kotor) [others]"
-                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[.+\])?$', part, re.IGNORECASE)
+                    # More flexible regex - captures number and reason
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+)', part, re.IGNORECASE)
                     if match:
                         duration = int(match.group(1))
                         reason = match.group(2).strip()
-                        # Remove trailing category if still present
-                        reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
-                        
-                        # Skip if reason contains excluded keywords (human/biological needs)
+                        # Remove trailing category bracket if present [category]
+                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason).strip()
                         reason_lower = reason.lower()
-                        if any(keyword in reason_lower for keyword in excluded_keywords):
-                            continue
                         
-                        downtime_breakdown.append({'reason': reason, 'duration_minutes': duration})
+                        # Check if this is idle time (tunggu keywords)
+                        is_idle = any(kw in reason_lower for kw in idle_keywords)
+                        if is_idle:
+                            # Idle time is SEPARATE from downtime
+                            idle_time_minutes += duration
+                        else:
+                            # Only non-idle goes to downtime
+                            total_downtime_minutes += duration
+                        
+                        # Add to breakdown for Top 3 display
+                        downtime_breakdown.append({'reason': reason, 'duration_minutes': duration, 'is_idle': is_idle})
+            
+            # Fallback: use sum of category fields if issues parsing yielded 0
+            if total_downtime_minutes == 0:
+                # Try downtime_minutes field first
+                if sp.downtime_minutes:
+                    total_downtime_minutes = int(sp.downtime_minutes)
+                else:
+                    # Sum from individual category fields
+                    total_downtime_minutes = (
+                        (int(sp.downtime_mesin) if sp.downtime_mesin else 0) +
+                        (int(sp.downtime_operator) if sp.downtime_operator else 0) +
+                        (int(sp.downtime_material) if sp.downtime_material else 0) +
+                        (int(sp.downtime_design) if sp.downtime_design else 0) +
+                        (int(sp.downtime_others) if sp.downtime_others else 0)
+                    )
             
             # Sort by duration descending and take top 3
             downtime_breakdown.sort(key=lambda x: x['duration_minutes'], reverse=True)
@@ -122,13 +154,30 @@ def get_records():
                 if shift_match:
                     shift_num = int(shift_match.group(1))
             
-            # Shift data with Grade A, B, C
+            # Get planned runtime per shift (Shift 1=510, Shift 2=480, Shift 3=450 minutes)
+            if shift_num == 1:
+                default_planned = 510  # 06:30-15:00 = 8.5 hours
+            elif shift_num == 2:
+                default_planned = 480  # 15:00-23:00 = 8 hours
+            else:
+                default_planned = 450  # 23:00-06:30 = 7.5 hours
+            
+            planned_runtime = int(sp.planned_runtime) if sp.planned_runtime else default_planned
+            
+            # Runtime = Planned - Downtime - Idle (calculated, not from input)
+            runtime_minutes = max(0, planned_runtime - total_downtime_minutes - idle_time_minutes)
+            
+            # Shift data with Grade A, B, C and Runtime/Downtime/Idle metrics
             shift_data = {
                 'shift': shift_num,
                 'grade_a': int(sp.good_quantity) if sp.good_quantity else 0,
                 'grade_b': int(sp.rework_quantity) if sp.rework_quantity else 0,
                 'grade_c': int(sp.reject_quantity) if sp.reject_quantity else 0,
-                'total': int(sp.actual_quantity) if sp.actual_quantity else 0
+                'total': int(sp.actual_quantity) if sp.actual_quantity else 0,
+                'runtime_minutes': runtime_minutes,
+                'downtime_minutes': total_downtime_minutes,
+                'idle_time_minutes': idle_time_minutes,
+                'planned_runtime': planned_runtime
             }
             
             all_records.append({
@@ -147,7 +196,12 @@ def get_records():
                 'actual_quantity': actual_qty,
                 'top_3_downtime': top_3_downtime,
                 'shift_data': shift_data,
-                'pack_per_karton': pack_per_karton
+                'pack_per_karton': pack_per_karton,
+                # New fields for runtime/downtime tracking
+                'runtime_minutes': runtime_minutes,
+                'total_downtime_minutes': total_downtime_minutes,
+                'idle_time_minutes': idle_time_minutes,
+                'planned_runtime_minutes': planned_runtime
             })
         
         # Sort by date and limit
@@ -1196,4 +1250,576 @@ def get_machine_analytics(machine_id):
         }), 200
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/daily-controller', methods=['GET'])
+@jwt_required()
+def get_daily_controller():
+    """Get all machines' production data for a specific date - Daily Controller view"""
+    try:
+        from models.production import ShiftProduction
+        
+        selected_date = request.args.get('date')
+        if selected_date:
+            target_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
+        else:
+            target_date = date.today()
+        
+        # Get all shift productions for this date
+        shift_records = ShiftProduction.query.filter(
+            ShiftProduction.production_date == target_date
+        ).order_by(ShiftProduction.machine_id, ShiftProduction.shift).all()
+        
+        # Group by machine
+        machines_data = {}
+        
+        # IDLE TIME keywords
+        idle_keywords = [
+            'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
+            'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
+            'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
+            'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
+            'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
+            'waiting for', 'standby'
+        ]
+        
+        for sp in shift_records:
+            machine_id = sp.machine_id
+            
+            if machine_id not in machines_data:
+                machines_data[machine_id] = {
+                    'machine_id': machine_id,
+                    'machine_name': sp.machine.name if sp.machine else f'Machine {machine_id}',
+                    'machine_code': sp.machine.code if sp.machine else None,
+                    'target_efficiency': int(sp.machine.target_efficiency) if sp.machine and sp.machine.target_efficiency else 60,
+                    'date': target_date.isoformat(),
+                    'shifts': [],
+                    'total_planned': 0,
+                    'total_runtime': 0,
+                    'total_downtime': 0,
+                    'total_idle': 0,
+                    'total_output': 0,
+                    'total_grade_a': 0,
+                    'total_grade_b': 0,
+                    'total_grade_c': 0,
+                    'total_machine_speed': 0,
+                    'total_target': 0,
+                    'products': [],
+                    'top_3_downtime': [],
+                    'efficiency': 0,
+                    'machine_efficiency': 0,
+                    'quality': 0
+                }
+            
+            # Parse downtime from issues - IDLE is SEPARATE from downtime
+            downtime_breakdown = []
+            shift_downtime = 0  # Non-idle downtime only
+            shift_idle = 0  # Idle time separate
+            
+            if sp.issues:
+                issue_parts = sp.issues.split(';')
+                for part in issue_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+)', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason = match.group(2).strip()
+                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason).strip()
+                        reason_lower = reason.lower()
+                        
+                        is_idle = any(kw in reason_lower for kw in idle_keywords)
+                        if is_idle:
+                            shift_idle += duration
+                        else:
+                            shift_downtime += duration
+                        
+                        downtime_breakdown.append({'reason': reason, 'duration_minutes': duration})
+            
+            # Fallback for downtime (only if parsing yielded 0)
+            if shift_downtime == 0 and shift_idle == 0:
+                if sp.downtime_minutes:
+                    shift_downtime = int(sp.downtime_minutes)
+                else:
+                    shift_downtime = (
+                        (int(sp.downtime_mesin) if sp.downtime_mesin else 0) +
+                        (int(sp.downtime_operator) if sp.downtime_operator else 0) +
+                        (int(sp.downtime_material) if sp.downtime_material else 0) +
+                        (int(sp.downtime_design) if sp.downtime_design else 0) +
+                        (int(sp.downtime_others) if sp.downtime_others else 0)
+                    )
+            
+            # Extract shift number
+            shift_num = 1
+            if sp.shift:
+                shift_match = re.search(r'(\d+)', str(sp.shift))
+                if shift_match:
+                    shift_num = int(shift_match.group(1))
+            
+            # Get planned runtime per shift
+            if shift_num == 1:
+                default_planned = 510  # 06:30-15:00 = 8.5 hours
+            elif shift_num == 2:
+                default_planned = 480  # 15:00-23:00 = 8 hours
+            else:
+                default_planned = 450  # 23:00-06:30 = 7.5 hours
+            
+            planned_runtime = int(sp.planned_runtime) if sp.planned_runtime else default_planned
+            
+            # Runtime = Planned - Downtime - Idle (calculated)
+            shift_runtime = max(0, planned_runtime - shift_downtime - shift_idle)
+            
+            # Get product name and packs_per_karton
+            product_name = None
+            pack_per_carton = 0
+            if sp.product:
+                product_name = sp.product.name
+                if sp.product.packaging:
+                    pack_per_carton = sp.product.packaging.packs_per_karton or 0
+            elif sp.work_order and sp.work_order.product:
+                product_name = sp.work_order.product.name
+                if sp.work_order.product.packaging:
+                    pack_per_carton = sp.work_order.product.packaging.packs_per_karton or 0
+            
+            grade_a = int(sp.good_quantity) if sp.good_quantity else 0
+            import math
+            shift_data = {
+                'shift': shift_num,
+                'runtime_minutes': shift_runtime,
+                'downtime_minutes': shift_downtime,
+                'idle_time_minutes': shift_idle,
+                'grade_a': grade_a,
+                'grade_a_carton': math.floor(grade_a / pack_per_carton) if pack_per_carton > 0 else 0,
+                'grade_b': int(sp.rework_quantity) if sp.rework_quantity else 0,
+                'grade_c': int(sp.reject_quantity) if sp.reject_quantity else 0,
+                'total': int(sp.actual_quantity) if sp.actual_quantity else 0,
+                'product_name': product_name,
+                'pack_per_carton': pack_per_carton,
+                'wo_number': sp.work_order.wo_number if sp.work_order else None
+            }
+            
+            # Get machine_speed from ShiftProduction
+            shift_machine_speed = int(sp.machine_speed) if sp.machine_speed else 0
+            
+            # Get target quantity from ShiftProduction or WorkOrder
+            shift_target = int(sp.target_quantity) if sp.target_quantity else 0
+            if shift_target == 0 and sp.work_order:
+                shift_target = int(sp.work_order.quantity) if sp.work_order.quantity else 0
+            
+            machines_data[machine_id]['shifts'].append(shift_data)
+            machines_data[machine_id]['total_planned'] += planned_runtime
+            machines_data[machine_id]['total_runtime'] += shift_runtime
+            machines_data[machine_id]['total_downtime'] += shift_downtime
+            machines_data[machine_id]['total_idle'] += shift_idle
+            machines_data[machine_id]['total_output'] += shift_data['total']
+            machines_data[machine_id]['total_grade_a'] += shift_data['grade_a']
+            machines_data[machine_id]['total_grade_b'] += shift_data['grade_b']
+            machines_data[machine_id]['total_grade_c'] += shift_data['grade_c']
+            machines_data[machine_id]['total_machine_speed'] += shift_machine_speed
+            machines_data[machine_id]['total_target'] += shift_target
+            
+            if product_name and product_name not in machines_data[machine_id]['products']:
+                machines_data[machine_id]['products'].append(product_name)
+            
+            # Accumulate downtime breakdown
+            for dt in downtime_breakdown:
+                existing = next((d for d in machines_data[machine_id]['top_3_downtime'] if d['reason'] == dt['reason']), None)
+                if existing:
+                    existing['duration_minutes'] += dt['duration_minutes']
+                else:
+                    machines_data[machine_id]['top_3_downtime'].append(dt.copy())
+        
+        # Keywords to exclude from Top 3 Downtime (biological/personal breaks)
+        excluded_keywords = [
+            'istirahat', 'sholat', 'solat', 'makan', 'minum', 'toilet', 
+            'wc', 'buang air', 'pipis', 'bab', 'break', 'rest', 'pray',
+            'ibadah', 'jumatan', 'jumat', 'dhuhur', 'ashar', 'maghrib'
+        ]
+        
+        # Sort top 3 downtime and calculate efficiency for each machine
+        for machine_id in machines_data:
+            # Filter out biological/personal breaks from top downtime
+            filtered_downtime = [
+                dt for dt in machines_data[machine_id]['top_3_downtime']
+                if not any(kw in dt['reason'].lower() for kw in excluded_keywords)
+            ]
+            filtered_downtime.sort(key=lambda x: x['duration_minutes'], reverse=True)
+            machines_data[machine_id]['top_3_downtime'] = filtered_downtime[:3]
+            # Sort shifts by shift number
+            machines_data[machine_id]['shifts'].sort(key=lambda x: x['shift'])
+            
+            # Calculate MRT (Machine Run Time) = Grade A / machine speed
+            total_grade_a = machines_data[machine_id]['total_grade_a']
+            total_downtime = machines_data[machine_id]['total_downtime']
+            total_idle = machines_data[machine_id]['total_idle']
+            
+            # Get machine speed from ShiftProduction (sum of all shifts, take average if multiple)
+            # Speed is already in pcs/menit, no conversion needed
+            machine_speed_total = machines_data[machine_id].get('total_machine_speed', 0)
+            shift_count = len(machines_data[machine_id]['shifts'])
+            machine_speed_per_minute = machine_speed_total / shift_count if shift_count > 0 else 0
+            
+            mrt = 0
+            if machine_speed_per_minute > 0:
+                mrt = total_grade_a / machine_speed_per_minute  # MRT in minutes
+            
+            # Total Time = MRT + Downtime + Idle
+            total_time = mrt + total_downtime + total_idle
+            
+            # Efficiency = MRT / Total Time * 100
+            if total_time > 0:
+                machines_data[machine_id]['efficiency'] = round((mrt / total_time) * 100, 1)
+            
+            # Store MRT for display (integers only)
+            mrt_int = int(round(mrt))
+            machines_data[machine_id]['mrt'] = mrt_int
+            # Total Waktu = Runtime + Downtime (not MRT-based)
+            total_runtime = machines_data[machine_id]['total_runtime']
+            machines_data[machine_id]['total_time'] = total_runtime + total_downtime + total_idle
+            machines_data[machine_id]['machine_speed'] = int(round(machine_speed_per_minute))  # pcs/menit
+            
+            # Calculate Quality = (Grade A / Total Output) * 100
+            total_output = machines_data[machine_id]['total_output']
+            if total_output > 0:
+                machines_data[machine_id]['quality'] = round((total_grade_a / total_output) * 100, 1)
+            
+            # Calculate Machine Efficiency = (Grade A / Target) * 100
+            total_target = machines_data[machine_id]['total_target']
+            if total_target > 0:
+                machines_data[machine_id]['machine_efficiency'] = round((total_grade_a / total_target) * 100, 1)
+        
+        # Convert to list and sort by machine name
+        result = list(machines_data.values())
+        result.sort(key=lambda x: x['machine_name'])
+        
+        return jsonify({
+            'date': target_date.isoformat(),
+            'machines': result,
+            'total_machines': len(result)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/efficiency-alerts', methods=['GET'])
+@jwt_required()
+def get_efficiency_alerts():
+    """Get machines with efficiency below target for today"""
+    try:
+        from models.production import ShiftProduction, Machine
+        
+        # Get today's date
+        today = datetime.now().date()
+        
+        # Get all shift productions for today
+        shift_records = ShiftProduction.query.filter(
+            ShiftProduction.production_date == today
+        ).all()
+        
+        # Group by machine and calculate efficiency
+        machines_data = {}
+        
+        for sp in shift_records:
+            machine_id = sp.machine_id
+            if not machine_id:
+                continue
+                
+            if machine_id not in machines_data:
+                machines_data[machine_id] = {
+                    'machine_id': machine_id,
+                    'machine_name': sp.machine.name if sp.machine else f'Machine {machine_id}',
+                    'target_efficiency': int(sp.machine.target_efficiency) if sp.machine and sp.machine.target_efficiency else 60,
+                    'total_grade_a': 0,
+                    'total_downtime': 0,
+                    'total_idle': 0,
+                    'total_machine_speed': 0,
+                    'shift_count': 0
+                }
+            
+            grade_a = int(sp.good_quantity) if sp.good_quantity else 0
+            downtime = int(sp.downtime_mesin or 0) + int(sp.downtime_operator or 0) + int(sp.downtime_material or 0) + int(sp.downtime_design or 0) + int(sp.downtime_others or 0)
+            idle = int(sp.idle_time) if sp.idle_time else 0
+            speed = int(sp.machine_speed) if sp.machine_speed else 0
+            
+            machines_data[machine_id]['total_grade_a'] += grade_a
+            machines_data[machine_id]['total_downtime'] += downtime
+            machines_data[machine_id]['total_idle'] += idle
+            machines_data[machine_id]['total_machine_speed'] += speed
+            machines_data[machine_id]['shift_count'] += 1
+        
+        # Calculate efficiency and filter alerts
+        alerts = []
+        for machine_id, data in machines_data.items():
+            speed_per_min = data['total_machine_speed'] / data['shift_count'] if data['shift_count'] > 0 else 0
+            mrt = data['total_grade_a'] / speed_per_min if speed_per_min > 0 else 0
+            total_time = mrt + data['total_downtime'] + data['total_idle']
+            efficiency = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
+            
+            target = data['target_efficiency']
+            if efficiency < target:
+                alert_level = 'critical' if efficiency < target * 0.7 else 'warning'
+                alerts.append({
+                    'machine_id': machine_id,
+                    'machine_name': data['machine_name'],
+                    'efficiency': efficiency,
+                    'target': target,
+                    'gap': round(target - efficiency, 1),
+                    'level': alert_level
+                })
+        
+        # Sort by gap (largest gap first)
+        alerts.sort(key=lambda x: x['gap'], reverse=True)
+        
+        return jsonify({
+            'date': today.isoformat(),
+            'alerts': alerts,
+            'total_alerts': len(alerts),
+            'critical_count': len([a for a in alerts if a['level'] == 'critical']),
+            'warning_count': len([a for a in alerts if a['level'] == 'warning'])
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/weekly-controller', methods=['GET'])
+@jwt_required()
+def get_weekly_controller():
+    """Get weekly efficiency summary for all machines"""
+    try:
+        from models.production import ShiftProduction, Machine
+        
+        # Get week start date (Monday) - default to current week
+        date_str = request.args.get('week_start')
+        if date_str:
+            week_start = datetime.strptime(date_str, '%Y-%m-%d').date()
+        else:
+            today = datetime.now().date()
+            week_start = today - timedelta(days=today.weekday())  # Monday
+        
+        week_end = week_start + timedelta(days=6)  # Sunday
+        
+        # Get all shift productions for the week
+        shift_records = ShiftProduction.query.filter(
+            ShiftProduction.production_date >= week_start,
+            ShiftProduction.production_date <= week_end
+        ).all()
+        
+        # Group by machine
+        machines_data = {}
+        
+        for sp in shift_records:
+            machine_id = sp.machine_id
+            if not machine_id:
+                continue
+                
+            if machine_id not in machines_data:
+                machines_data[machine_id] = {
+                    'machine_id': machine_id,
+                    'machine_name': sp.machine.name if sp.machine else f'Machine {machine_id}',
+                    'machine_code': sp.machine.code if sp.machine else None,
+                    'target_efficiency': int(sp.machine.target_efficiency) if sp.machine and sp.machine.target_efficiency else 60,
+                    'daily_data': {},
+                    'total_grade_a': 0,
+                    'total_output': 0,
+                    'total_downtime': 0,
+                    'total_idle': 0,
+                    'total_machine_speed': 0,
+                    'shift_count': 0
+                }
+            
+            # Group by date
+            date_key = sp.production_date.isoformat()
+            if date_key not in machines_data[machine_id]['daily_data']:
+                machines_data[machine_id]['daily_data'][date_key] = {
+                    'grade_a': 0,
+                    'output': 0,
+                    'downtime': 0,
+                    'idle': 0,
+                    'machine_speed': 0,
+                    'shift_count': 0
+                }
+            
+            grade_a = int(sp.good_quantity) if sp.good_quantity else 0
+            output = int(sp.actual_quantity) if sp.actual_quantity else 0
+            downtime = int(sp.downtime_mesin or 0) + int(sp.downtime_operator or 0) + int(sp.downtime_material or 0) + int(sp.downtime_design or 0) + int(sp.downtime_others or 0)
+            idle = int(sp.idle_time) if sp.idle_time else 0
+            speed = int(sp.machine_speed) if sp.machine_speed else 0
+            
+            machines_data[machine_id]['daily_data'][date_key]['grade_a'] += grade_a
+            machines_data[machine_id]['daily_data'][date_key]['output'] += output
+            machines_data[machine_id]['daily_data'][date_key]['downtime'] += downtime
+            machines_data[machine_id]['daily_data'][date_key]['idle'] += idle
+            machines_data[machine_id]['daily_data'][date_key]['machine_speed'] += speed
+            machines_data[machine_id]['daily_data'][date_key]['shift_count'] += 1
+            
+            machines_data[machine_id]['total_grade_a'] += grade_a
+            machines_data[machine_id]['total_output'] += output
+            machines_data[machine_id]['total_downtime'] += downtime
+            machines_data[machine_id]['total_idle'] += idle
+            machines_data[machine_id]['total_machine_speed'] += speed
+            machines_data[machine_id]['shift_count'] += 1
+        
+        # Calculate weekly efficiency for each machine
+        for machine_id in machines_data:
+            data = machines_data[machine_id]
+            
+            # Calculate daily efficiencies
+            for date_key in data['daily_data']:
+                day_data = data['daily_data'][date_key]
+                speed_per_min = day_data['machine_speed'] / day_data['shift_count'] if day_data['shift_count'] > 0 else 0
+                mrt = day_data['grade_a'] / speed_per_min if speed_per_min > 0 else 0
+                total_time = mrt + day_data['downtime'] + day_data['idle']
+                day_data['efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
+                day_data['mrt'] = round(mrt, 1)
+            
+            # Calculate weekly average efficiency
+            speed_per_min = data['total_machine_speed'] / data['shift_count'] if data['shift_count'] > 0 else 0
+            mrt = data['total_grade_a'] / speed_per_min if speed_per_min > 0 else 0
+            total_time = mrt + data['total_downtime'] + data['total_idle']
+            data['avg_efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
+            data['mrt'] = round(mrt, 1)
+            data['total_time'] = round(total_time, 1)
+            data['quality'] = round((data['total_grade_a'] / data['total_output']) * 100, 1) if data['total_output'] > 0 else 0
+        
+        result = list(machines_data.values())
+        result.sort(key=lambda x: x['machine_name'])
+        
+        return jsonify({
+            'week_start': week_start.isoformat(),
+            'week_end': week_end.isoformat(),
+            'machines': result,
+            'total_machines': len(result)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/monthly-controller', methods=['GET'])
+@jwt_required()
+def get_monthly_controller():
+    """Get monthly efficiency summary for all machines"""
+    try:
+        from models.production import ShiftProduction, Machine
+        from calendar import monthrange
+        
+        # Get month - default to current month
+        year = request.args.get('year', datetime.now().year, type=int)
+        month = request.args.get('month', datetime.now().month, type=int)
+        
+        month_start = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        month_end = date(year, month, last_day)
+        
+        # Get all shift productions for the month
+        shift_records = ShiftProduction.query.filter(
+            ShiftProduction.production_date >= month_start,
+            ShiftProduction.production_date <= month_end
+        ).all()
+        
+        # Group by machine
+        machines_data = {}
+        
+        for sp in shift_records:
+            machine_id = sp.machine_id
+            if not machine_id:
+                continue
+                
+            if machine_id not in machines_data:
+                machines_data[machine_id] = {
+                    'machine_id': machine_id,
+                    'machine_name': sp.machine.name if sp.machine else f'Machine {machine_id}',
+                    'machine_code': sp.machine.code if sp.machine else None,
+                    'target_efficiency': int(sp.machine.target_efficiency) if sp.machine and sp.machine.target_efficiency else 60,
+                    'weekly_data': {},
+                    'total_grade_a': 0,
+                    'total_output': 0,
+                    'total_downtime': 0,
+                    'total_idle': 0,
+                    'total_machine_speed': 0,
+                    'shift_count': 0
+                }
+            
+            # Group by week number
+            week_num = sp.production_date.isocalendar()[1]
+            week_key = f'W{week_num}'
+            if week_key not in machines_data[machine_id]['weekly_data']:
+                machines_data[machine_id]['weekly_data'][week_key] = {
+                    'grade_a': 0,
+                    'output': 0,
+                    'downtime': 0,
+                    'idle': 0,
+                    'machine_speed': 0,
+                    'shift_count': 0
+                }
+            
+            grade_a = int(sp.good_quantity) if sp.good_quantity else 0
+            output = int(sp.actual_quantity) if sp.actual_quantity else 0
+            downtime = int(sp.downtime_mesin or 0) + int(sp.downtime_operator or 0) + int(sp.downtime_material or 0) + int(sp.downtime_design or 0) + int(sp.downtime_others or 0)
+            idle = int(sp.idle_time) if sp.idle_time else 0
+            speed = int(sp.machine_speed) if sp.machine_speed else 0
+            
+            machines_data[machine_id]['weekly_data'][week_key]['grade_a'] += grade_a
+            machines_data[machine_id]['weekly_data'][week_key]['output'] += output
+            machines_data[machine_id]['weekly_data'][week_key]['downtime'] += downtime
+            machines_data[machine_id]['weekly_data'][week_key]['idle'] += idle
+            machines_data[machine_id]['weekly_data'][week_key]['machine_speed'] += speed
+            machines_data[machine_id]['weekly_data'][week_key]['shift_count'] += 1
+            
+            machines_data[machine_id]['total_grade_a'] += grade_a
+            machines_data[machine_id]['total_output'] += output
+            machines_data[machine_id]['total_downtime'] += downtime
+            machines_data[machine_id]['total_idle'] += idle
+            machines_data[machine_id]['total_machine_speed'] += speed
+            machines_data[machine_id]['shift_count'] += 1
+        
+        # Calculate monthly efficiency for each machine
+        for machine_id in machines_data:
+            data = machines_data[machine_id]
+            
+            # Calculate weekly efficiencies
+            for week_key in data['weekly_data']:
+                week_data = data['weekly_data'][week_key]
+                speed_per_min = week_data['machine_speed'] / week_data['shift_count'] if week_data['shift_count'] > 0 else 0
+                mrt = week_data['grade_a'] / speed_per_min if speed_per_min > 0 else 0
+                total_time = mrt + week_data['downtime'] + week_data['idle']
+                week_data['efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
+            
+            # Calculate monthly average efficiency
+            speed_per_min = data['total_machine_speed'] / data['shift_count'] if data['shift_count'] > 0 else 0
+            mrt = data['total_grade_a'] / speed_per_min if speed_per_min > 0 else 0
+            total_time = mrt + data['total_downtime'] + data['total_idle']
+            data['avg_efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
+            data['mrt'] = round(mrt, 1)
+            data['total_time'] = round(total_time, 1)
+            data['quality'] = round((data['total_grade_a'] / data['total_output']) * 100, 1) if data['total_output'] > 0 else 0
+        
+        result = list(machines_data.values())
+        result.sort(key=lambda x: x['machine_name'])
+        
+        # Month names in Indonesian
+        month_names = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+                       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+        
+        return jsonify({
+            'year': year,
+            'month': month,
+            'month_name': month_names[month],
+            'month_start': month_start.isoformat(),
+            'month_end': month_end.isoformat(),
+            'machines': result,
+            'total_machines': len(result)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
