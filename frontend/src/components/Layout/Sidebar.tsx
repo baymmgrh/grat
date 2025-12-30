@@ -136,6 +136,7 @@ function SidebarContent() {
             { name: 'Sisa Order', href: '/app/production/remaining-stock', icon: ArchiveBoxIcon },
             { name: 'Changeover', href: '/app/production/changeovers', icon: ArrowsRightLeftIcon },
             { name: 'Approval', href: '/app/production/approvals', icon: ClipboardDocumentCheckIcon },
+            { name: 'Quality Objective', href: '/app/quality/objective/production', icon: ChartBarIcon },
             { name: 'MRP', href: '/app/production/mrp', icon: CalculatorIcon, permission: 'mrp' },
             { name: 'Demand Planning', href: '/app/production/demand-planning', icon: ChartBarIcon, permission: 'mrp' },
             { name: 'Capacity', href: '/app/production/capacity-planning', icon: ScaleIcon, permission: 'mrp' },
@@ -150,11 +151,10 @@ function SidebarContent() {
           permission: 'quality',
           children: [
             { name: 'Dashboard', href: '/app/quality', icon: PresentationChartLineIcon },
-            { name: 'QC Work Order', href: '/app/quality/pending-qc', icon: ClipboardDocumentCheckIcon },
-            { name: 'Inspections', href: '/app/quality/tests', icon: BeakerIcon },
-            { name: 'Alerts', href: '/app/quality-enhanced/alerts', icon: DocumentCheckIcon },
-            { name: 'Analytics', href: '/app/quality-enhanced/analytics', icon: ChartPieIcon },
-            { name: 'Audits', href: '/app/quality-enhanced/audits', icon: ClipboardDocumentListIcon },
+            { name: 'QC Barang Masuk', href: '/app/quality/incoming', icon: ArrowDownTrayIcon },
+            { name: 'QC Dalam Proses', href: '/app/quality/in-process', icon: CogIcon },
+            { name: 'QC Barang Jadi', href: '/app/quality/finish-good', icon: ClipboardDocumentCheckIcon },
+            { name: 'Analytics', href: '/app/quality/analytics', icon: ChartPieIcon },
           ]
         },
       ]
