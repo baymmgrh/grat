@@ -1507,18 +1507,17 @@ def get_daily_controller():
             if machine_speed_per_minute > 0:
                 mrt = total_grade_a / machine_speed_per_minute  # MRT in minutes
             
-            # Total Time = MRT + Downtime + Idle
-            total_time = mrt + total_downtime + total_idle
+            # Total Waktu = Runtime + Downtime + Idle (actual shift time)
+            total_runtime = machines_data[machine_id]['total_runtime']
+            actual_total_time = total_runtime + total_downtime + total_idle
+            machines_data[machine_id]['total_time'] = actual_total_time
             
-            # Efficiency = MRT / Total Time * 100
-            if total_time > 0:
-                machines_data[machine_id]['efficiency'] = round((mrt / total_time) * 100, 1)
+            # MRT = Runtime (so MRT + Downtime + Idle = Total exactly)
+            machines_data[machine_id]['mrt'] = total_runtime
             
-            # Store MRT for display (integers only)
-            mrt_int = int(round(mrt))
-            machines_data[machine_id]['mrt'] = mrt_int
-            # Total Waktu = MRT + Downtime + Idle (consistent with efficiency calculation)
-            machines_data[machine_id]['total_time'] = mrt_int + total_downtime + total_idle
+            # Efficiency = Runtime / Total Time * 100
+            if actual_total_time > 0:
+                machines_data[machine_id]['efficiency'] = round((total_runtime / actual_total_time) * 100, 1)
             machines_data[machine_id]['machine_speed'] = int(round(machine_speed_per_minute))  # pcs/menit
             
             # Calculate Quality = (Grade A / Total Output) * 100
