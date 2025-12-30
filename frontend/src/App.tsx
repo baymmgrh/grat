@@ -121,6 +121,11 @@ import QualityAudits from './pages/Quality/QualityAudits'
 import PendingQC from './pages/Quality/PendingQC'
 import WorkOrderQCForm from './pages/Quality/WorkOrderQCForm'
 import QCToWarehouse from './pages/Quality/QCToWarehouse'
+import IncomingQC from './pages/Quality/IncomingQC'
+import InProcessQC from './pages/Quality/InProcessQC'
+import FinishGoodQC from './pages/Quality/FinishGoodQC'
+import QualityObjectiveProduction from './pages/Quality/QualityObjectiveProduction'
+import DowntimeAnalysis from './pages/Quality/DowntimeAnalysis'
 import ShippingDashboard from './pages/Shipping/ShippingDashboard'
 import ShippingOrderList from './pages/Shipping/ShippingOrderList'
 import ShippingOrderForm from './pages/Shipping/ShippingOrderForm'
@@ -617,6 +622,13 @@ function App() {
         {/* Quality */}
         <Route path="quality" element={<QualityDashboardEnhanced />} />
         <Route path="quality/dashboard" element={<QualityDashboardEnhanced />} />
+        <Route path="quality/incoming" element={<IncomingQC />} />
+        <Route path="quality/in-process" element={<InProcessQC />} />
+        <Route path="quality/finish-good" element={<FinishGoodQC />} />
+        <Route path="quality/finish-good/:woId/input" element={<WorkOrderQCForm />} />
+        <Route path="quality/objective/production" element={<QualityObjectiveProduction />} />
+        <Route path="quality/objective/downtime-analysis" element={<DowntimeAnalysis />} />
+        <Route path="quality/analytics" element={<QualityAnalytics />} />
         <Route path="quality/pending-qc" element={<PendingQC />} />
         <Route path="quality/pending-qc/:woId" element={<WorkOrderQCForm />} />
         <Route path="quality/tests" element={<QualityTestList />} />
