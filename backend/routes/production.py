@@ -1034,6 +1034,7 @@ def create_work_order_production_record(id):
             downtime_material=downtime_material,
             downtime_design=downtime_design,
             downtime_others=downtime_others,
+            idle_time=int(data.get('idle_time', 0)),
             # Loss percentages
             loss_mesin=loss_mesin,
             loss_operator=loss_operator,
@@ -1048,7 +1049,16 @@ def create_work_order_production_record(id):
             notes=data.get('notes'),
             issues=downtime_notes if downtime_notes else None,
             status='completed',
-            created_by=user_id
+            created_by=user_id,
+            # Early Stop / Shift Interruption
+            early_stop=data.get('early_stop', False),
+            early_stop_time=datetime.strptime(data.get('early_stop_time'), '%H:%M').time() if data.get('early_stop_time') else None,
+            early_stop_reason=data.get('early_stop_reason'),
+            early_stop_notes=data.get('early_stop_notes'),
+            # Operator Reassignment
+            operator_reassigned=data.get('operator_reassigned', False),
+            reassignment_task=data.get('reassignment_task'),
+            reassignment_notes=data.get('reassignment_notes')
         )
         
         db.session.add(shift_production)
