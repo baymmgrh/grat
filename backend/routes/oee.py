@@ -1421,7 +1421,7 @@ def get_daily_controller():
                 'wo_number': sp.work_order.wo_number if sp.work_order else None,
                 # Early stop info - convert to bool explicitly for safety
                 'early_stop': bool(sp.early_stop) if sp.early_stop else False,
-                'early_stop_time': sp.early_stop_time.strftime('%H:%M') if sp.early_stop_time else None,
+                'early_stop_time': (sp.early_stop_time.strftime('%H:%M') if hasattr(sp.early_stop_time, 'strftime') else str(sp.early_stop_time)[:5]) if sp.early_stop_time else None,
                 'early_stop_reason': sp.early_stop_reason or None,
                 'early_stop_notes': sp.early_stop_notes or None,
                 'operator_reassigned': bool(sp.operator_reassigned) if sp.operator_reassigned else False,
