@@ -676,12 +676,19 @@ export default function WorkOrderProductionInput() {
       // Set existing records for reference
       setExistingRecords(recordsData);
       
-      // Auto-fill machine_speed from machine's default_speed if available
+      // Auto-fill machine_speed from machine's default_speed ONLY if user hasn't entered a value
+      // This prevents overwriting user's manual input
       if (workOrderData?.machine_default_speed && workOrderData.machine_default_speed > 0) {
-        setFormData(prev => ({
-          ...prev,
-          machine_speed: workOrderData.machine_default_speed.toString()
-        }));
+        setFormData(prev => {
+          // Only auto-fill if machine_speed is empty
+          if (!prev.machine_speed || prev.machine_speed === '' || prev.machine_speed === '0') {
+            return {
+              ...prev,
+              machine_speed: workOrderData.machine_default_speed.toString()
+            };
+          }
+          return prev;
+        });
       }
       
       // Auto-set production_date and shift if WO is from schedule
