@@ -184,6 +184,18 @@ POST   /api/sales/quotations
 **Kategori Downtime:**
 - Planned: Maintenance, Setup, Changeover
 - Unplanned: Breakdown, Kekurangan material, Masalah quality
+- **Idle Time**: Tunggu material, tunggu stiker, tunggu packaging
+- **Early Stop**: Tracking shift berakhir lebih awal dengan alasan
+
+**API Endpoints:**
+```bash
+# Production
+GET    /api/production/work-orders
+POST   /api/production/work-orders
+GET    /api/production/machines
+GET    /api/production/daily-controller
+POST   /api/production/work-order-records
+```
 
 ---
 
@@ -197,6 +209,30 @@ POST   /api/sales/quotations
 - Alert & Notifikasi Quality
 - Audit Quality
 - Manajemen Training & Kompetensi
+
+**🎯 Quality Objective Module:**
+- **Target Manual Per Mesin** - Input target bulanan (penyusutan, maintenance)
+- **Pencapaian Produksi** - Target vs actual per mesin dengan status tercapai/tidak
+- **Top 3 Downtime Analysis** - Exclude design change, idle, istirahat
+- **Root Cause Analysis** - Problem → Root Cause → Corrective → Preventive Action
+- **Downtime by Category** - Grafik visual downtime per kategori (mesin, operator, material)
+- **Achievement Tracking** - Persentase pencapaian, quality rate, working days
+
+**API Endpoints:**
+```bash
+# Quality Objectives
+GET    /api/oee/quality-objectives/production
+GET/POST /api/oee/machine-monthly-targets
+POST   /api/oee/machine-monthly-targets/bulk
+GET    /api/oee/machine-downtime-analysis
+GET/POST/DELETE /api/oee/downtime-root-causes
+
+# Quality Inspections
+GET    /api/quality/incoming
+GET    /api/quality/in-process
+GET    /api/quality/finish-good
+POST   /api/quality/inspections
+```
 
 **Workflow Quality:**
 ```
@@ -500,6 +536,49 @@ Authorization: Bearer <your-jwt-token>
 }
 ```
 
+### API Endpoints Lengkap
+
+#### Production & OEE
+```bash
+GET    /api/production/work-orders
+POST   /api/production/work-orders
+GET    /api/production/daily-controller
+POST   /api/production/work-order-records
+GET    /api/oee/monthly-summary
+GET    /api/oee/quality-objectives/production
+```
+
+#### Quality Control
+```bash
+GET    /api/quality/incoming
+GET    /api/quality/in-process
+GET    /api/quality/finish-good
+POST   /api/quality/inspections
+GET/POST /api/oee/machine-monthly-targets
+POST   /api/oee/machine-monthly-targets/bulk
+GET    /api/oee/machine-downtime-analysis
+GET/POST/DELETE /api/oee/downtime-root-causes
+```
+
+#### Sales & CRM
+```bash
+GET    /api/sales/customers
+POST   /api/sales/customers
+GET    /api/sales/orders
+POST   /api/sales/orders
+GET    /api/sales/forecasts
+POST   /api/sales/quotations
+```
+
+#### Inventory & Warehouse
+```bash
+GET    /api/inventory/items
+POST   /api/inventory/items
+GET    /api/inventory/stock
+POST   /api/inventory/transactions
+GET    /api/inventory/warehouses
+```
+
 ---
 
 ## 🗂️ Struktur Project
@@ -588,35 +667,89 @@ AI Assistant adalah fitur chatbot terintegrasi yang memungkinkan user untuk quer
 🛒 Sales & Purchasing
 - "PO pending"
 - "revenue bulan ini"
-- "invoice belum lunas"
 
-� Production
-- "WO hari ini"
-- "OEE mesin"
-- "downtime kemarin"
+🏭 Production & Quality
+- "target produksi mesin 11"
+- "top 3 downtime mesin 12"
+- "root cause analysis"
+- "achievement rate bulan ini"
 
-📊 Quality
-- "QC hari ini"
-- "defect rate"
-
-👥 HR
-- "karyawan aktif"
-- "absensi hari ini"
-
-🚚 Shipping
-- "pengiriman hari ini"
-- "tracking [nomor]"
+📊 Analytics & Reports
+- "OEE bulan kemarin"
+- "downtime terbanyak"
+- "quality rate"
 ```
 
-### Cara Pakai
+### Quick Links
 
-1. Klik icon chat di pojok kanan bawah
-2. Ketik pertanyaan dalam bahasa Indonesia
-3. AI akan memberikan jawaban beserta link navigasi
+- **Production → Quality Objective** - Set target dan analisa downtime
+- **Production → Daily Controller** - Monitoring shift dan OEE
+- **Quality → Incoming QC** - Inspeksi material masuk
+- **Quality → In-Process QC** - QC proses produksi
+- **Quality → Finish Good QC** - QC produk jadi
 
 ---
 
-## �🎯 Roadmap
+## 📈 Recent Updates (v2.0)
+
+### ✨ New Features
+- **Quality Objective Module** - Target manual per mesin, tracking achievement
+- **Downtime Analysis** - Top 3 downtime, root cause analysis, category charts
+- **Early Stop Tracking** - Monitor shift berakhir lebih awal
+- **Idle Time Management** - Kategori downtime untuk tunggu material
+- **Enhanced QC Workflows** - Incoming, In-Process, Finish Good QC
+
+### 🔧 Improvements
+- Exclude design change dari Top 3 Downtime
+- Parsing downtime format: "15 menit - Sanitasi kecil [design]"
+- Manual monthly targets untuk mesin aktif
+- Root Cause CRUD dengan corrective & preventive actions
+
+### 📊 New API Endpoints
+- `/api/oee/machine-monthly-targets` - CRUD target bulanan
+- `/api/oee/machine-downtime-analysis` - Analisa downtime per mesin
+- `/api/oee/downtime-root-causes` - Manajemen root cause
+- `/api/oee/quality-objectives/production` - Quality objectives report
+
+---
+
+## 🎯 Quick Start Guide
+
+### 1. Login System
+- URL: `http://localhost:5173`
+- Default Admin: `admin / admin123`
+
+### 2. Key Modules Access
+- **Production**: Work Orders → Daily Controller → Quality Objective
+- **Quality**: Incoming → In-Process → Finish Good QC
+- **Sales**: Customers → Orders → Quotations
+- **Inventory**: Items → Stock → Transactions
+
+### 3. Quality Objective Workflow
+1. Go to **Production → Quality Objective**
+2. Select year/month
+3. Click **"Set Target"** to input monthly targets per machine
+4. View achievement rates and status
+5. Click **"Analisa Downtime"** for detailed analysis
+
+---
+
+## 📞 Contact & Support
+
+**Bayu Adhie**
+- 📧 Email: baymngrh@gmail.com
+- 🐙 GitHub: [@baymngrh](https://github.com/baymngrh)
+- 💼 LinkedIn: [Bayu Adhie](https://linkedin.com/in/bayu-adhie)
+
+For technical support, feature requests, or bug reports, please email us at baymngrh@gmail.com
+
+---
+
+**© 2024-2025 PT. Gratia Makmur Sentosa. All Rights Reserved.**
+
+---
+
+## 🎯 Roadmap
 
 ### Selesai ✅
 - Implementasi modul core (15+ modul)
@@ -626,20 +759,30 @@ AI Assistant adalah fitur chatbot terintegrasi yang memungkinkan user untuk quer
 - Executive Dashboard
 - Machine Detail dengan OEE Analytics
 - R&D Module lengkap
+- **Quality Objective Module** - Target manual & downtime analysis
 
 ### Sedang Dikerjakan 🚧
 - Mobile responsive optimization
 - Advanced reporting
+- **Enhanced Analytics** - Predictive maintenance & quality forecasting
 
 ### Direncanakan 📋
 - AI/ML predictive analytics
 - Integrasi IoT
 - Mobile app (React Native)
+- **Multi-plant Support** - Manajemen multi lokasi pabrik
 
 ---
 
 <div align="center">
 
+## 🏆 Achievements
+
+- ✅ **15+ Business Modules** Fully Integrated
+- ✅ **10+ Automated Workflows** End-to-End
+- ✅ **AI Assistant** Natural Language Query
+- ✅ **Real-time Dashboard** 20+ KPIs
+- ✅ **Quality Objectives** Complete Implementation
 
 ⭐ Star repository ini kalau bermanfaat!
 
