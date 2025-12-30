@@ -1517,9 +1517,8 @@ def get_daily_controller():
             # Store MRT for display (integers only)
             mrt_int = int(round(mrt))
             machines_data[machine_id]['mrt'] = mrt_int
-            # Total Waktu = Runtime + Downtime (not MRT-based)
-            total_runtime = machines_data[machine_id]['total_runtime']
-            machines_data[machine_id]['total_time'] = total_runtime + total_downtime + total_idle
+            # Total Waktu = MRT + Downtime + Idle (consistent with efficiency calculation)
+            machines_data[machine_id]['total_time'] = mrt_int + total_downtime + total_idle
             machines_data[machine_id]['machine_speed'] = int(round(machine_speed_per_minute))  # pcs/menit
             
             # Calculate Quality = (Grade A / Total Output) * 100
