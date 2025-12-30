@@ -28,6 +28,13 @@ interface ShiftData {
   product_name?: string;
   pack_per_carton?: number;
   wo_number?: string;
+  // Early stop info
+  early_stop?: boolean;
+  early_stop_time?: string;
+  early_stop_reason?: string;
+  early_stop_notes?: string;
+  operator_reassigned?: boolean;
+  reassignment_task?: string;
 }
 
 interface DowntimeItem {
@@ -337,6 +344,34 @@ const DailyController: React.FC = () => {
                             </div>
                             {shift.wo_number && (
                               <p className="text-xs text-slate-400 mt-2">WO: {shift.wo_number}</p>
+                            )}
+                            {/* Early Stop Indicator */}
+                            {shift.early_stop && (
+                              <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                                <div className="flex items-center gap-2 text-amber-700">
+                                  <span className="text-sm font-medium">⚠️ Shift Berakhir Lebih Awal</span>
+                                  {shift.early_stop_time && (
+                                    <span className="text-xs bg-amber-100 px-2 py-0.5 rounded">
+                                      Jam {shift.early_stop_time}
+                                    </span>
+                                  )}
+                                </div>
+                                {shift.early_stop_reason && (
+                                  <p className="text-xs text-amber-600 mt-1">
+                                    Alasan: <span className="font-medium">{shift.early_stop_reason}</span>
+                                  </p>
+                                )}
+                                {shift.early_stop_notes && (
+                                  <p className="text-xs text-amber-600 mt-0.5">
+                                    Catatan: {shift.early_stop_notes}
+                                  </p>
+                                )}
+                                {shift.operator_reassigned && shift.reassignment_task && (
+                                  <p className="text-xs text-blue-600 mt-1">
+                                    👷 Operator dialihkan ke: <span className="font-medium">{shift.reassignment_task}</span>
+                                  </p>
+                                )}
+                              </div>
                             )}
                           </div>
                         ))}
