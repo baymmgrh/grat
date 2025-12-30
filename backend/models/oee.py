@@ -212,3 +212,59 @@ class OEEAnalytics(db.Model):
         db.Index('idx_oee_analytics_machine_date', 'machine_id', 'analysis_date'),
         db.UniqueConstraint('machine_id', 'analysis_date', 'period_type', name='uq_oee_analytics_machine_period'),
     )
+
+
+class MachineMonthlyTarget(db.Model):
+    """Monthly production targets per machine - manually set"""
+    __tablename__ = 'machine_monthly_targets'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)  # 1-12
+    target_quantity = db.Column(db.Integer, default=0)  # Target output in pcs
+    notes = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    machine = db.relationship('Machine')
+    
+    __table_args__ = (
+        db.UniqueConstraint('machine_id', 'year', 'month', name='uq_machine_monthly_target'),
+    )
+
+
+class DowntimeRootCause(db.Model):
+    """Root cause analysis for downtime - for quality objective reports"""
+    __tablename__ = 'downtime_root_causes'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    
+    # Problem details
+    problem = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(50), nullable=False)  # mesin, operator, material, design, idle, others
+    occurrence_count = db.Column(db.Integer, default=1)
+    total_minutes = db.Column(db.Integer, default=0)
+    percentage = db.Column(db.Numeric(5, 2), default=0)
+    
+    # Analysis
+    root_cause = db.Column(db.Text, nullable=True)
+    corrective_action = db.Column(db.Text, nullable=True)
+    preventive_action = db.Column(db.Text, nullable=True)
+    status = db.Column(db.String(20), default='open')  # open, in_progress, closed
+    
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    machine = db.relationship('Machine')
+    
+    __table_args__ = (
+        db.Index('idx_downtime_root_cause_machine_period', 'machine_id', 'year', 'month'),
+    )
