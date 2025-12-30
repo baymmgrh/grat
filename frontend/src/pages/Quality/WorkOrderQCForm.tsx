@@ -45,6 +45,28 @@ interface QCFormData {
   defect_qty: number;
 }
 
+interface RejectInspectionEntry {
+  id: number;
+  category: string;
+  quantity: number;
+  reason: string;
+}
+
+const REJECT_CATEGORIES = [
+  { value: 'sobek', label: 'Sobek / Robek' },
+  { value: 'kotor', label: 'Kotor / Noda' },
+  { value: 'basah', label: 'Basah / Lembab' },
+  { value: 'lipatan', label: 'Lipatan Tidak Rapi' },
+  { value: 'dimensi', label: 'Dimensi Tidak Sesuai' },
+  { value: 'warna', label: 'Warna Tidak Sesuai' },
+  { value: 'bau', label: 'Bau Tidak Normal' },
+  { value: 'kemasan', label: 'Kemasan Rusak' },
+  { value: 'label', label: 'Label Salah / Rusak' },
+  { value: 'kontaminasi', label: 'Kontaminasi' },
+  { value: 'ter_seal', label: 'Product Ter-seal' },
+  { value: 'lainnya', label: 'Lainnya' },
+];
+
 export default function WorkOrderQCForm() {
   const navigate = useNavigate();
   const { woId } = useParams();
@@ -55,6 +77,7 @@ export default function WorkOrderQCForm() {
   const [submitting, setSubmitting] = useState(false);
   const [workOrder, setWorkOrder] = useState<WorkOrderData | null>(null);
   const [existingTest, setExistingTest] = useState<any>(null);
+  const [rejectEntries, setRejectEntries] = useState<RejectInspectionEntry[]>([]);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<QCFormData>({
     defaultValues: {
@@ -175,7 +198,17 @@ export default function WorkOrderQCForm() {
         `Defect Qty: ${formData.defect_qty}`,
       ].filter(Boolean).join('\n');
       
-      const fullNotes = `${checkResults}\n\n${formData.notes || ''}`.trim();
+      // Build reject inspection summary
+      let rejectSummary = '';
+      if (rejectEntries.length > 0) {
+        const rejectLines = rejectEntries.map((entry, idx) => {
+          const catLabel = REJECT_CATEGORIES.find(c => c.value === entry.category)?.label || entry.category;
+          return `  ${idx + 1}. ${catLabel}: ${entry.quantity} ${workOrder.uom} - ${entry.reason || 'Tidak ada keterangan'}`;
+        });
+        rejectSummary = `\n\n=== INSPEKSI REJECT (${totalInspectedRejects}/${workOrder.quantity_scrap}) ===\n${rejectLines.join('\n')}`;
+      }
+      
+      const fullNotes = `${checkResults}${rejectSummary}\n\n${formData.notes || ''}`.trim();
       
       if (existingTest) {
         // Update existing test
@@ -268,6 +301,29 @@ export default function WorkOrderQCForm() {
       minute: '2-digit',
     });
   };
+
+  // Reject inspection functions
+  const addRejectEntry = () => {
+    setRejectEntries(prev => [...prev, {
+      id: Date.now(),
+      category: '',
+      quantity: 0,
+      reason: ''
+    }]);
+  };
+
+  const updateRejectEntry = (id: number, field: keyof RejectInspectionEntry, value: string | number) => {
+    setRejectEntries(prev => prev.map(entry => 
+      entry.id === id ? { ...entry, [field]: value } : entry
+    ));
+  };
+
+  const removeRejectEntry = (id: number) => {
+    setRejectEntries(prev => prev.filter(entry => entry.id !== id));
+  };
+
+  const totalInspectedRejects = rejectEntries.reduce((sum, entry) => sum + (entry.quantity || 0), 0);
+  const remainingRejects = (workOrder?.quantity_scrap || 0) - totalInspectedRejects;
 
   if (loading) {
     return (
@@ -587,6 +643,125 @@ export default function WorkOrderQCForm() {
             </div>
           </div>
         </div>
+
+        {/* Reject Inspection Section - Only show if there are rejects */}
+        {workOrder.quantity_scrap > 0 && (
+          <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl border border-red-200 dark:border-red-800 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-red-900 dark:text-red-100 flex items-center gap-2">
+                  <XCircleIcon className="w-5 h-5" />
+                  Inspeksi Reject / Scrap
+                </h3>
+                <p className="text-sm text-red-600 dark:text-red-400">
+                  Total reject dari produksi: <span className="font-bold">{workOrder.quantity_scrap.toLocaleString()}</span> {workOrder.uom}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-sm text-gray-600 dark:text-gray-400">Sudah diinspeksi</p>
+                <p className={`text-xl font-bold ${totalInspectedRejects === workOrder.quantity_scrap ? 'text-green-600' : 'text-orange-600'}`}>
+                  {totalInspectedRejects} / {workOrder.quantity_scrap}
+                </p>
+                {remainingRejects > 0 && (
+                  <p className="text-xs text-orange-600">Sisa: {remainingRejects}</p>
+                )}
+                {remainingRejects < 0 && (
+                  <p className="text-xs text-red-600">Melebihi: {Math.abs(remainingRejects)}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Reject Entries */}
+            <div className="space-y-3">
+              {rejectEntries.map((entry, index) => (
+                <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-red-200 dark:border-red-700">
+                  <div className="flex items-start gap-4">
+                    <span className="flex-shrink-0 w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center text-red-600 dark:text-red-400 font-bold text-sm">
+                      {index + 1}
+                    </span>
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                          Kategori Reject
+                        </label>
+                        <select
+                          value={entry.category}
+                          onChange={(e) => updateRejectEntry(entry.id, 'category', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500"
+                        >
+                          <option value="">Pilih kategori...</option>
+                          {REJECT_CATEGORIES.map(cat => (
+                            <option key={cat.value} value={cat.value}>{cat.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                          Jumlah ({workOrder.uom})
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={workOrder.quantity_scrap}
+                          value={entry.quantity || ''}
+                          onChange={(e) => updateRejectEntry(entry.id, 'quantity', parseInt(e.target.value) || 0)}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                          Alasan / Keterangan
+                        </label>
+                        <input
+                          type="text"
+                          value={entry.reason}
+                          onChange={(e) => updateRejectEntry(entry.id, 'reason', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-red-500"
+                          placeholder="Jelaskan alasan reject..."
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeRejectEntry(entry.id)}
+                      className="flex-shrink-0 p-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                    >
+                      <XCircleIcon className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add Entry Button */}
+              <button
+                type="button"
+                onClick={addRejectEntry}
+                disabled={totalInspectedRejects >= workOrder.quantity_scrap}
+                className="w-full py-3 border-2 border-dashed border-red-300 dark:border-red-700 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <span className="text-xl">+</span>
+                Tambah Kategori Reject
+              </button>
+
+              {/* Validation Message */}
+              {rejectEntries.length > 0 && totalInspectedRejects !== workOrder.quantity_scrap && (
+                <div className={`p-3 rounded-lg text-sm ${remainingRejects > 0 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                  {remainingRejects > 0 
+                    ? `⚠️ Masih ada ${remainingRejects} reject yang belum dikategorikan`
+                    : `❌ Total kategori melebihi jumlah reject (${Math.abs(remainingRejects)} lebih)`
+                  }
+                </div>
+              )}
+
+              {totalInspectedRejects === workOrder.quantity_scrap && rejectEntries.length > 0 && (
+                <div className="p-3 rounded-lg text-sm bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                  ✅ Semua reject sudah dikategorikan dengan benar
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Defects & Notes */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">

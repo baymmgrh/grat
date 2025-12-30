@@ -669,3 +669,303 @@ def get_inventory_by_qc_status():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ============ QC BARANG MASUK (INCOMING MATERIAL QC) ============
+
+@quality_bp.route('/incoming-materials', methods=['GET'])
+@jwt_required()
+def get_incoming_materials_for_qc():
+    """Get received materials that need QC inspection"""
+    try:
+        from models.purchasing import PurchaseOrder, PurchaseOrderItem
+        from models.warehouse import GoodsReceipt, GoodsReceiptItem
+        
+        status = request.args.get('status', 'pending')
+        
+        # Get goods receipts that need QC
+        query = GoodsReceipt.query.filter(
+            GoodsReceipt.status == 'received'
+        ).order_by(GoodsReceipt.received_date.desc())
+        
+        materials = []
+        for gr in query.all():
+            for item in gr.items:
+                # Check if QC already done for this item
+                existing_inspection = QualityInspection.query.filter(
+                    QualityInspection.reference_type == 'goods_receipt_item',
+                    QualityInspection.reference_id == item.id
+                ).first()
+                
+                qc_status = 'pending'
+                if existing_inspection:
+                    if existing_inspection.result == 'accepted':
+                        qc_status = 'passed'
+                    elif existing_inspection.result == 'rejected':
+                        qc_status = 'rejected'
+                    elif existing_inspection.result == 'conditional':
+                        qc_status = 'conditional'
+                    else:
+                        qc_status = 'inspecting'
+                
+                # Filter by status
+                if status != 'all' and qc_status != status:
+                    continue
+                
+                materials.append({
+                    'id': item.id,
+                    'gr_number': gr.gr_number,
+                    'po_number': gr.purchase_order.po_number if gr.purchase_order else None,
+                    'supplier_name': gr.purchase_order.supplier.name if gr.purchase_order and gr.purchase_order.supplier else 'Unknown',
+                    'material_id': item.material_id,
+                    'material_code': item.material.code if item.material else None,
+                    'material_name': item.material.name if item.material else None,
+                    'batch_number': item.batch_number,
+                    'quantity': float(item.quantity_received or 0),
+                    'uom': item.uom or 'pcs',
+                    'received_date': gr.received_date.isoformat() if gr.received_date else None,
+                    'qc_status': qc_status,
+                    'inspection_id': existing_inspection.id if existing_inspection else None,
+                    'inspector_name': existing_inspection.inspector.username if existing_inspection and existing_inspection.inspector else None,
+                    'inspected_date': existing_inspection.inspection_date.isoformat() if existing_inspection and existing_inspection.inspection_date else None,
+                })
+        
+        return jsonify({
+            'materials': materials,
+            'total': len(materials)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@quality_bp.route('/incoming-materials/<int:item_id>/inspect', methods=['POST'])
+@jwt_required()
+def inspect_incoming_material(item_id):
+    """Create QC inspection for incoming material"""
+    try:
+        from models.warehouse import GoodsReceiptItem
+        
+        data = request.get_json()
+        user_id = int(get_jwt_identity())
+        
+        # Get goods receipt item
+        gr_item = GoodsReceiptItem.query.get_or_404(item_id)
+        
+        # Check if inspection already exists
+        existing = QualityInspection.query.filter(
+            QualityInspection.reference_type == 'goods_receipt_item',
+            QualityInspection.reference_id == item_id
+        ).first()
+        
+        if existing:
+            return jsonify({'error': 'Inspection already exists', 'inspection_id': existing.id}), 400
+        
+        # Generate inspection number
+        inspection_number = generate_number('IQC', QualityInspection, 'inspection_number')
+        
+        # Build notes from form data
+        notes_parts = [
+            f"Visual Inspection: {data.get('visual_inspection', 'N/A').upper()}",
+            f"Packaging Condition: {data.get('packaging_condition', 'N/A')}",
+            f"Quantity Verified: {'Yes' if data.get('quantity_verified') else 'No'}",
+            f"Sample Size: {data.get('sample_size', 0)}",
+            f"Defects Found: {data.get('defect_found', 0)}",
+            f"Lab Test Required: {'Yes' if data.get('lab_test_required') else 'No'}",
+        ]
+        if data.get('notes'):
+            notes_parts.append(f"\nNotes: {data.get('notes')}")
+        
+        # Create inspection
+        inspection = QualityInspection(
+            inspection_number=inspection_number,
+            inspection_type='incoming',
+            inspection_date=datetime.utcnow(),
+            reference_type='goods_receipt_item',
+            reference_id=item_id,
+            product_id=gr_item.material_id,
+            batch_number=gr_item.batch_number,
+            sample_size=data.get('sample_size', 0),
+            defect_count=data.get('defect_found', 0),
+            status='completed',
+            result=data.get('result', 'pending'),
+            findings=data.get('notes', ''),
+            notes='\n'.join(notes_parts),
+            inspector_id=user_id,
+            created_by=user_id
+        )
+        
+        db.session.add(inspection)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Inspection saved successfully',
+            'inspection_id': inspection.id
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============ QC DALAM PROSES (IN-PROCESS QC / IPQC) ============
+
+@quality_bp.route('/in-process', methods=['GET'])
+@jwt_required()
+def get_in_process_qc():
+    """Get active production processes for IPQC"""
+    try:
+        from models.production import ShiftProduction
+        
+        status = request.args.get('status', 'all')
+        
+        # Get active work orders (in_progress status)
+        active_work_orders = WorkOrder.query.filter(
+            WorkOrder.status == 'in_progress'
+        ).order_by(WorkOrder.scheduled_start_date.desc()).all()
+        
+        processes = []
+        for wo in active_work_orders:
+            # Get latest shift production data
+            latest_sp = ShiftProduction.query.filter_by(
+                work_order_id=wo.id
+            ).order_by(ShiftProduction.production_date.desc(), ShiftProduction.shift.desc()).first()
+            
+            # Get IPQC inspections for this work order
+            ipqc_inspections = QualityInspection.query.filter(
+                QualityInspection.reference_type == 'work_order_ipqc',
+                QualityInspection.reference_id == wo.id
+            ).order_by(QualityInspection.inspection_date.desc()).all()
+            
+            # Determine QC status based on latest inspection
+            qc_status = 'pending'
+            last_inspection = None
+            defect_rate = 0
+            
+            if ipqc_inspections:
+                last_insp = ipqc_inspections[0]
+                last_inspection = last_insp.inspection_date.isoformat() if last_insp.inspection_date else None
+                
+                if last_insp.result == 'passed':
+                    qc_status = 'passed'
+                elif last_insp.result == 'warning':
+                    qc_status = 'warning'
+                elif last_insp.result == 'critical':
+                    qc_status = 'critical'
+                
+                # Calculate defect rate
+                if last_insp.sample_size and last_insp.sample_size > 0:
+                    defect_rate = round((last_insp.defect_count or 0) / last_insp.sample_size * 100, 1)
+            
+            # Filter by status
+            if status != 'all' and qc_status != status:
+                continue
+            
+            current_output = float(wo.quantity_produced or 0)
+            if latest_sp:
+                current_output = float(latest_sp.good_quantity or 0) + float(latest_sp.scrap_quantity or 0)
+            
+            processes.append({
+                'id': wo.id,
+                'wo_number': wo.wo_number,
+                'product_code': wo.product.code if wo.product else None,
+                'product_name': wo.product.name if wo.product else None,
+                'machine_name': wo.machine.name if wo.machine else None,
+                'operator_name': latest_sp.operator.username if latest_sp and latest_sp.operator else 'N/A',
+                'shift': latest_sp.shift if latest_sp else 1,
+                'production_date': latest_sp.production_date.isoformat() if latest_sp and latest_sp.production_date else wo.scheduled_start_date.isoformat() if wo.scheduled_start_date else None,
+                'current_output': current_output,
+                'target_output': float(wo.quantity or 0),
+                'uom': wo.uom or 'pcs',
+                'qc_status': qc_status,
+                'last_inspection': last_inspection,
+                'defect_rate': defect_rate,
+                'inspection_count': len(ipqc_inspections)
+            })
+        
+        return jsonify({
+            'processes': processes,
+            'total': len(processes)
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@quality_bp.route('/in-process/<int:wo_id>/inspect', methods=['POST'])
+@jwt_required()
+def create_ipqc_inspection(wo_id):
+    """Create IPQC inspection for active work order"""
+    try:
+        data = request.get_json()
+        user_id = int(get_jwt_identity())
+        
+        # Get work order
+        work_order = WorkOrder.query.get_or_404(wo_id)
+        
+        if work_order.status != 'in_progress':
+            return jsonify({'error': 'Work order must be in progress for IPQC'}), 400
+        
+        # Generate inspection number
+        inspection_number = generate_number('IPQC', QualityInspection, 'inspection_number')
+        
+        # Build notes from form data
+        notes_parts = [
+            f"Checkpoint: {data.get('checkpoint', 'N/A')}",
+            f"Visual Check: {data.get('visual_check', 'N/A').upper()}",
+            f"Process Compliance: {data.get('process_compliance', 'N/A')}",
+            f"Sample Qty: {data.get('sample_qty', 0)}",
+            f"Defect Qty: {data.get('defect_qty', 0)}",
+        ]
+        
+        # Add parameter checks
+        for param in data.get('parameter_checks', []):
+            notes_parts.append(f"  - {param.get('name')}: Target={param.get('target')}, Actual={param.get('actual')}, Status={param.get('status')}")
+        
+        # Add defect types
+        if data.get('defect_types'):
+            notes_parts.append(f"Defect Types: {', '.join(data.get('defect_types', []))}")
+        
+        if data.get('corrective_action'):
+            notes_parts.append(f"Corrective Action: {data.get('corrective_action')}")
+        
+        if data.get('notes'):
+            notes_parts.append(f"Notes: {data.get('notes')}")
+        
+        # Create inspection
+        inspection = QualityInspection(
+            inspection_number=inspection_number,
+            inspection_type='in_process',
+            inspection_date=datetime.utcnow(),
+            reference_type='work_order_ipqc',
+            reference_id=wo_id,
+            product_id=work_order.product_id,
+            sample_size=data.get('sample_qty', 0),
+            defect_count=data.get('defect_qty', 0),
+            status='completed',
+            result=data.get('result', 'passed'),
+            findings=data.get('corrective_action', ''),
+            notes='\n'.join(notes_parts),
+            inspector_id=user_id,
+            created_by=user_id
+        )
+        
+        db.session.add(inspection)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'IPQC inspection saved successfully',
+            'inspection_id': inspection.id
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500

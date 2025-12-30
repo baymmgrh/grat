@@ -424,6 +424,17 @@ class ShiftProduction(db.Model):
     issues = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(50), default='completed')  # planned, running, completed, cancelled
     
+    # Early Stop / Shift Interruption
+    early_stop = db.Column(db.Boolean, default=False)  # True if shift was terminated early
+    early_stop_time = db.Column(db.Time, nullable=True)  # Time when shift was stopped
+    early_stop_reason = db.Column(db.String(100), nullable=True)  # material_habis, mesin_rusak, listrik_mati, dll
+    early_stop_notes = db.Column(db.Text, nullable=True)  # Additional notes about early stop
+    
+    # Operator Reassignment
+    operator_reassigned = db.Column(db.Boolean, default=False)  # True if operator moved to other task
+    reassignment_task = db.Column(db.String(100), nullable=True)  # packing_manual, mesin_lain, dll
+    reassignment_notes = db.Column(db.Text, nullable=True)  # Notes about reassignment
+    
     # Audit Fields
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)

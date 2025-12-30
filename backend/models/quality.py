@@ -52,14 +52,20 @@ class QualityInspection(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     inspection_number = db.Column(db.String(100), unique=True, nullable=False, index=True)
     inspection_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    inspection_type = db.Column(db.String(50), nullable=False)  # receiving, in_process, final, audit
+    inspection_type = db.Column(db.String(50), nullable=False)  # incoming, in_process, final, audit
     product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=True)  # Link to Work Order
     batch_number = db.Column(db.String(100), nullable=True)
     sample_size = db.Column(db.Integer, nullable=True)
     defect_count = db.Column(db.Integer, default=0)
     status = db.Column(db.String(50), nullable=False, default='pending')  # pending, in_progress, completed
-    result = db.Column(db.String(50), nullable=True)  # accepted, rejected, rework
+    result = db.Column(db.String(50), nullable=True)  # accepted, rejected, rework, passed, warning, critical
+    
+    # Reference for linking to various sources (goods_receipt_item, work_order_ipqc, etc.)
+    reference_type = db.Column(db.String(50), nullable=True)
+    reference_id = db.Column(db.Integer, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     
     # QC Checklist Results - NEW
     total_checklist_items = db.Column(db.Integer, default=0)
@@ -94,6 +100,7 @@ class QualityInspection(db.Model):
     inspector = db.relationship('User', foreign_keys=[inspector_id])
     disposition_user = db.relationship('User', foreign_keys=[disposition_by])
     warehouse_location = db.relationship('WarehouseLocation')
+    created_by_user = db.relationship('User', foreign_keys=[created_by])
     
     def calculate_disposition(self):
         """Calculate disposition based on checklist results"""
