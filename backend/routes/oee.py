@@ -1419,13 +1419,13 @@ def get_daily_controller():
                 'product_name': product_name,
                 'pack_per_carton': pack_per_carton,
                 'wo_number': sp.work_order.wo_number if sp.work_order else None,
-                # Early stop info
-                'early_stop': sp.early_stop if hasattr(sp, 'early_stop') else False,
-                'early_stop_time': sp.early_stop_time.strftime('%H:%M') if hasattr(sp, 'early_stop_time') and sp.early_stop_time else None,
-                'early_stop_reason': sp.early_stop_reason if hasattr(sp, 'early_stop_reason') else None,
-                'early_stop_notes': sp.early_stop_notes if hasattr(sp, 'early_stop_notes') else None,
-                'operator_reassigned': sp.operator_reassigned if hasattr(sp, 'operator_reassigned') else False,
-                'reassignment_task': sp.reassignment_task if hasattr(sp, 'reassignment_task') else None
+                # Early stop info - convert to bool explicitly for safety
+                'early_stop': bool(sp.early_stop) if sp.early_stop else False,
+                'early_stop_time': sp.early_stop_time.strftime('%H:%M') if sp.early_stop_time else None,
+                'early_stop_reason': sp.early_stop_reason or None,
+                'early_stop_notes': sp.early_stop_notes or None,
+                'operator_reassigned': bool(sp.operator_reassigned) if sp.operator_reassigned else False,
+                'reassignment_task': sp.reassignment_task or None
             }
             
             # Get machine_speed from ShiftProduction
