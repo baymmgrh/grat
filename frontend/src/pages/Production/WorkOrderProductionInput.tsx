@@ -130,13 +130,35 @@ const DOWNTIME_CATEGORIES = {
 // PENTING: Urutan pengecekan = idle -> mesin -> material -> design -> operator -> others
 const CATEGORY_KEYWORDS = {
   // IDLE: Menunggu material/resource - waktu tidak produktif bukan karena kerusakan
+  // Semua "tunggu xxx" dan "xxx habis" masuk ke idle
   idle: [
-    'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
-    'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
-    'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
-    'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
-    'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
-    'waiting for', 'standby material'
+    // Tunggu kain
+    'tunggu kain', 'menunggu kain', 'nunggu kain', 'kain belum datang',
+    // Tunggu obat/tinta
+    'tunggu obat', 'menunggu obat', 'nunggu obat', 'obat belum datang',
+    'tunggu tinta', 'menunggu tinta', 'nunggu tinta',
+    // Tunggu ingredient
+    'tunggu ingredient', 'ingredient habis', 'tunggu bahan kimia',
+    // Tunggu stiker
+    'tunggu stiker', 'menunggu stiker', 'nunggu stiker', 'stiker belum datang',
+    // Tunggu packing/packaging
+    'tunggu packing', 'tunggu packaging', 'menunggu packing', 'nunggu packing',
+    'packaging belum datang', 'box belum datang',
+    // Tunggu mixing
+    'tunggu mixing', 'menunggu mixing', 'nunggu mixing', 'mixing belum siap',
+    // Tunggu label/karton/box
+    'tunggu label', 'tunggu box', 'tunggu karton', 'tunggu lem',
+    // General tunggu
+    'tunggu bahan', 'tunggu material', 'tunggu order', 'tunggu instruksi',
+    'tunggu approval', 'tunggu qc', 'tunggu hasil qc',
+    // xxx habis (idle karena kehabisan)
+    'kain habis', 'stiker habis', 'packing habis', 'packaging habis',
+    'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
+    'bahan habis', 'material habis',
+    // English
+    'waiting for', 'standby material', 'waiting material', 'no material',
+    // Idle lainnya
+    'idle', 'standby', 'menganggur', 'tidak ada order', 'no order'
   ],
   // MESIN (Machine/Equipment): Semua masalah teknis mesin dan komponen
   // Referensi: seal bocor, pisau tumpul, belt putus, sensor error, dll
@@ -146,6 +168,8 @@ const CATEGORY_KEYWORDS = {
     // Seal & Sealer
     'seal', 'sealer', 'seal bocor', 'seal samping bocor', 'seal bawah bocor',
     'seal tidak ngeseal', 'seal bawah tdk ngeseal', 'sealer rusak',
+    'perbaikan seal', 'perbaikan seal bawah', 'perbaikan seal samping',
+    'seal samping', 'seal bawah',
     // Pisau & Cutter
     'pisau', 'pisau tumpul', 'pisau folding tumpul', 'pisau folding kotor',
     'cutter', 'cutter tumpul', 'blade', 'blade aus',
@@ -177,10 +201,15 @@ const CATEGORY_KEYWORDS = {
     // Nozzle & Valve
     'nozzle', 'nozzle mampet', 'valve', 'valve bocor',
     'cylinder', 'cylinder bocor',
+    // Pound & Press
+    'pound', 'pound tidak maksimal', 'pound kurang', 'pound lemah',
+    'press', 'bak mesin press', 'mesin press', 'press error',
+    // Stacker
+    'stacker', 'stacker patah', 'stacker rusak', 'stacker error',
     // General mesin
     'mesin rusak', 'mesin error', 'mesin mati', 'mesin macet', 'mesin trouble',
     'breakdown', 'break down', 'kerusakan mesin', 'gangguan mesin',
-    'press error', 'sparepart', 'maintenance', 'perbaikan mesin',
+    'sparepart', 'maintenance', 'perbaikan mesin', 'perbaikan',
     'kalibrasi', 'service mesin'
   ],
   // MATERIAL (Raw Material): Masalah bahan baku
@@ -330,6 +359,15 @@ export default function WorkOrderProductionInput() {
     notes: '',
     planned_runtime: '480', // Bisa diubah manual
     machine_speed: '',      // Speed mesin (pcs/jam) untuk perhitungan efisiensi
+    // Early Stop / Shift Interruption
+    early_stop: false,
+    early_stop_time: '',
+    early_stop_reason: '',
+    early_stop_notes: '',
+    // Operator Reassignment
+    operator_reassigned: false,
+    reassignment_task: '',
+    reassignment_notes: '',
   });
 
   // Downtime entries list
@@ -678,7 +716,7 @@ export default function WorkOrderProductionInput() {
     }
   };
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: string | boolean) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
       
@@ -692,10 +730,11 @@ export default function WorkOrderProductionInput() {
       //   waste_packaging_pcs = waste_pack
       //   waste_stiker_pcs = waste_pack
       if (field === 'quantity_good' || field === 'quantity_reject' || field === 'quantity_rework' || field === 'quantity_setting') {
-        const gradeA = parseFloat(field === 'quantity_good' ? value : updated.quantity_good) || 0;
-        const gradeC = parseFloat(field === 'quantity_reject' ? value : updated.quantity_reject) || 0;
-        const gradeB = parseFloat(field === 'quantity_rework' ? value : updated.quantity_rework) || 0;
-        const setting = parseFloat(field === 'quantity_setting' ? value : updated.quantity_setting) || 0;
+        const strValue = typeof value === 'string' ? value : String(value);
+        const gradeA = parseFloat(field === 'quantity_good' ? strValue : updated.quantity_good) || 0;
+        const gradeC = parseFloat(field === 'quantity_reject' ? strValue : updated.quantity_reject) || 0;
+        const gradeB = parseFloat(field === 'quantity_rework' ? strValue : updated.quantity_rework) || 0;
+        const setting = parseFloat(field === 'quantity_setting' ? strValue : updated.quantity_setting) || 0;
         
         // qty_produced = Grade A + Grade B + Grade C (tanpa setting)
         const produced = gradeA + gradeB + gradeC;
@@ -809,6 +848,7 @@ export default function WorkOrderProductionInput() {
       operator: 0,
       material: 0,
       design: 0,
+      idle: 0,
       others: 0
     };
     
@@ -915,6 +955,7 @@ export default function WorkOrderProductionInput() {
         downtime_material: byCategory.material,
         downtime_design: byCategory.design,
         downtime_others: byCategory.others,
+        idle_time: byCategory.idle,
         efficiency_rate: getEfficiency(),
         has_over_limit: hasOverLimit(),
         downtime_entries: downtimeEntries.filter(e => e.reason && e.duration_minutes).map(e => ({
@@ -927,6 +968,15 @@ export default function WorkOrderProductionInput() {
         })),
         operator_id: formData.operator_id ? parseInt(formData.operator_id) : null,
         notes: formData.notes,
+        // Early Stop / Shift Interruption
+        early_stop: formData.early_stop,
+        early_stop_time: formData.early_stop_time || null,
+        early_stop_reason: formData.early_stop_reason || null,
+        early_stop_notes: formData.early_stop_notes || null,
+        // Operator Reassignment
+        operator_reassigned: formData.operator_reassigned,
+        reassignment_task: formData.reassignment_task || null,
+        reassignment_notes: formData.reassignment_notes || null,
       };
       
       const response = await axiosInstance.post(`/api/production/work-orders/${id}/production-records`, payload);
@@ -1848,6 +1898,122 @@ export default function WorkOrderProductionInput() {
               />
             </div>
           </div>
+        </div>
+
+        {/* Early Stop / Shift Interruption Section */}
+        <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
+          <div className="flex items-center gap-2 mb-4">
+            <input
+              type="checkbox"
+              id="early_stop"
+              checked={formData.early_stop}
+              onChange={(e) => handleChange('early_stop', e.target.checked)}
+              className="w-4 h-4 rounded border-orange-300 text-orange-600 focus:ring-orange-500"
+            />
+            <label htmlFor="early_stop" className="font-medium text-orange-800">
+              ⚠️ Shift Berhenti Lebih Awal
+            </label>
+          </div>
+
+          {formData.early_stop && (
+            <div className="space-y-4 pl-6 border-l-2 border-orange-300">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-orange-700 mb-1">
+                    Waktu Berhenti
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.early_stop_time}
+                    onChange={(e) => handleChange('early_stop_time', e.target.value)}
+                    className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-orange-700 mb-1">
+                    Alasan Berhenti
+                  </label>
+                  <select
+                    value={formData.early_stop_reason}
+                    onChange={(e) => handleChange('early_stop_reason', e.target.value)}
+                    className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value="">Pilih alasan...</option>
+                    <option value="material_habis">Material/Obat Habis</option>
+                    <option value="mesin_rusak">Mesin Rusak</option>
+                    <option value="listrik_mati">Listrik Mati</option>
+                    <option value="target_tercapai">Target Sudah Tercapai</option>
+                    <option value="order_cancel">Order Dibatalkan</option>
+                    <option value="lainnya">Lainnya</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-orange-700 mb-1">
+                  Catatan Tambahan
+                </label>
+                <input
+                  type="text"
+                  value={formData.early_stop_notes}
+                  onChange={(e) => handleChange('early_stop_notes', e.target.value)}
+                  className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  placeholder="Jelaskan detail kondisi..."
+                />
+              </div>
+
+              {/* Operator Reassignment */}
+              <div className="mt-4 pt-4 border-t border-orange-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    type="checkbox"
+                    id="operator_reassigned"
+                    checked={formData.operator_reassigned}
+                    onChange={(e) => handleChange('operator_reassigned', e.target.checked)}
+                    className="w-4 h-4 rounded border-orange-300 text-orange-600 focus:ring-orange-500"
+                  />
+                  <label htmlFor="operator_reassigned" className="font-medium text-orange-800">
+                    👷 Operator Dialihkan ke Tugas Lain
+                  </label>
+                </div>
+
+                {formData.operator_reassigned && (
+                  <div className="grid grid-cols-2 gap-4 pl-6">
+                    <div>
+                      <label className="block text-sm font-medium text-orange-700 mb-1">
+                        Dialihkan ke
+                      </label>
+                      <select
+                        value={formData.reassignment_task}
+                        onChange={(e) => handleChange('reassignment_task', e.target.value)}
+                        className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                      >
+                        <option value="">Pilih tugas...</option>
+                        <option value="packing_manual">Packing Manual</option>
+                        <option value="mesin_lain">Mesin Lain</option>
+                        <option value="cleaning">Cleaning/Bersih-bersih</option>
+                        <option value="maintenance">Maintenance Support</option>
+                        <option value="training">Training</option>
+                        <option value="pulang">Pulang Lebih Awal</option>
+                        <option value="lainnya">Lainnya</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-orange-700 mb-1">
+                        Keterangan
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.reassignment_notes}
+                        onChange={(e) => handleChange('reassignment_notes', e.target.value)}
+                        className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                        placeholder="Detail pengalihan..."
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Submit Buttons */}
