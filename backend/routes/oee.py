@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, MaintenanceRecord, MaintenanceSchedule, User
 from utils.i18n import success_response, error_response, get_message
-from models.oee import OEERecord, OEEDowntimeRecord, OEETarget, OEEAlert, MaintenanceImpact, OEEAnalytics, QualityDefect
+from models.oee import OEERecord, OEEDowntimeRecord, OEETarget, OEEAlert, MaintenanceImpact, OEEAnalytics, QualityDefect, MachineMonthlyTarget, DowntimeRootCause
 from models.product_excel_schema import ProductNew
 from utils import generate_number
 from datetime import datetime, date, timedelta
@@ -1274,14 +1274,35 @@ def get_daily_controller():
         # Group by machine
         machines_data = {}
         
-        # IDLE TIME keywords
+        # IDLE TIME keywords - sinkron dengan frontend
         idle_keywords = [
-            'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
-            'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
-            'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
-            'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
-            'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
-            'waiting for', 'standby'
+            # Tunggu kain
+            'tunggu kain', 'menunggu kain', 'nunggu kain', 'kain belum datang',
+            # Tunggu obat/tinta
+            'tunggu obat', 'menunggu obat', 'nunggu obat', 'obat belum datang',
+            'tunggu tinta', 'menunggu tinta', 'nunggu tinta',
+            # Tunggu ingredient
+            'tunggu ingredient', 'ingredient habis', 'tunggu bahan kimia',
+            # Tunggu stiker
+            'tunggu stiker', 'menunggu stiker', 'nunggu stiker', 'stiker belum datang',
+            # Tunggu packing/packaging
+            'tunggu packing', 'tunggu packaging', 'menunggu packing', 'nunggu packing',
+            'packaging belum datang', 'box belum datang',
+            # Tunggu mixing
+            'tunggu mixing', 'menunggu mixing', 'nunggu mixing', 'mixing belum siap',
+            # Tunggu label/karton/box
+            'tunggu label', 'tunggu box', 'tunggu karton', 'tunggu lem',
+            # General tunggu
+            'tunggu bahan', 'tunggu material', 'tunggu order', 'tunggu instruksi',
+            'tunggu approval', 'tunggu qc', 'tunggu hasil qc',
+            # xxx habis (idle karena kehabisan)
+            'kain habis', 'stiker habis', 'packing habis', 'packaging habis',
+            'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
+            'bahan habis', 'material habis',
+            # English
+            'waiting for', 'standby material', 'waiting material', 'no material',
+            # Idle lainnya
+            'idle', 'standby', 'menganggur', 'tidak ada order', 'no order'
         ]
         
         for sp in shift_records:
@@ -1397,7 +1418,14 @@ def get_daily_controller():
                 'total': int(sp.actual_quantity) if sp.actual_quantity else 0,
                 'product_name': product_name,
                 'pack_per_carton': pack_per_carton,
-                'wo_number': sp.work_order.wo_number if sp.work_order else None
+                'wo_number': sp.work_order.wo_number if sp.work_order else None,
+                # Early stop info
+                'early_stop': sp.early_stop if hasattr(sp, 'early_stop') else False,
+                'early_stop_time': sp.early_stop_time.strftime('%H:%M') if hasattr(sp, 'early_stop_time') and sp.early_stop_time else None,
+                'early_stop_reason': sp.early_stop_reason if hasattr(sp, 'early_stop_reason') else None,
+                'early_stop_notes': sp.early_stop_notes if hasattr(sp, 'early_stop_notes') else None,
+                'operator_reassigned': sp.operator_reassigned if hasattr(sp, 'operator_reassigned') else False,
+                'reassignment_task': sp.reassignment_task if hasattr(sp, 'reassignment_task') else None
             }
             
             # Get machine_speed from ShiftProduction
@@ -1431,11 +1459,25 @@ def get_daily_controller():
                 else:
                     machines_data[machine_id]['top_3_downtime'].append(dt.copy())
         
-        # Keywords to exclude from Top 3 Downtime (biological/personal breaks)
+        # Keywords to exclude from Top 3 Downtime (biological/personal breaks + idle time)
         excluded_keywords = [
+            # Biological/personal breaks
             'istirahat', 'sholat', 'solat', 'makan', 'minum', 'toilet', 
             'wc', 'buang air', 'pipis', 'bab', 'break', 'rest', 'pray',
-            'ibadah', 'jumatan', 'jumat', 'dhuhur', 'ashar', 'maghrib'
+            'ibadah', 'jumatan', 'jumat', 'dhuhur', 'ashar', 'maghrib',
+            # IDLE TIME - exclude from Top 3 downtime (tracked separately)
+            'tunggu kain', 'tunggu obat', 'tunggu tinta', 'tunggu ingredient',
+            'tunggu stiker', 'tunggu packing', 'tunggu packaging', 'tunggu mixing',
+            'tunggu label', 'tunggu box', 'tunggu karton', 'tunggu lem',
+            'tunggu bahan', 'tunggu material', 'tunggu order', 'tunggu instruksi',
+            'menunggu kain', 'menunggu obat', 'menunggu stiker', 'menunggu packing',
+            'nunggu kain', 'nunggu obat', 'nunggu stiker', 'nunggu packing',
+            'kain habis', 'stiker habis', 'packing habis', 'packaging habis',
+            'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
+            'bahan habis', 'material habis', 'ingredient habis', 'obat habis',
+            'waiting for', 'standby', 'idle', 'menganggur', 'no order',
+            # Repack - exclude from Top 3 (design change category)
+            'repack', 'repacking'
         ]
         
         # Sort top 3 downtime and calculate efficiency for each machine
@@ -1822,4 +1864,529 @@ def get_monthly_controller():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/quality-objectives/production', methods=['GET'])
+@jwt_required()
+def get_production_quality_objectives():
+    """Get production quality objectives - target vs actual per machine per month"""
+    try:
+        from models.production import ShiftProduction
+        
+        # Get year and month from params (default to current month)
+        year = request.args.get('year', type=int) or date.today().year
+        month = request.args.get('month', type=int) or date.today().month
+        
+        # Calculate month range
+        month_start = date(year, month, 1)
+        if month == 12:
+            month_end = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            month_end = date(year, month + 1, 1) - timedelta(days=1)
+        
+        # Get machines that have production in this month (only active machines)
+        active_machine_ids = db.session.query(ShiftProduction.machine_id).filter(
+            ShiftProduction.production_date >= month_start,
+            ShiftProduction.production_date <= month_end
+        ).distinct().all()
+        active_machine_ids = [m[0] for m in active_machine_ids]
+        
+        # Get machines sorted by name
+        machines = Machine.query.filter(
+            Machine.id.in_(active_machine_ids),
+            Machine.is_active == True
+        ).order_by(Machine.name).all()
+        
+        # Get manual monthly targets
+        manual_targets = {t.machine_id: t.target_quantity for t in MachineMonthlyTarget.query.filter(
+            MachineMonthlyTarget.year == year,
+            MachineMonthlyTarget.month == month
+        ).all()}
+        
+        result = []
+        total_target = 0
+        total_actual = 0
+        machines_achieved = 0
+        
+        for machine in machines:
+            # Get manual monthly target first, fallback to default calculation
+            monthly_target = manual_targets.get(machine.id, 0)
+            
+            # If no manual target set, use default (0 means no target set)
+            if monthly_target == 0:
+                # Default: leave as 0 to indicate target not set
+                monthly_target = 0
+            
+            # Get actual production from ShiftProduction
+            shift_records = ShiftProduction.query.filter(
+                ShiftProduction.machine_id == machine.id,
+                ShiftProduction.production_date >= month_start,
+                ShiftProduction.production_date <= month_end
+            ).all()
+            
+            # Calculate totals
+            actual_output = sum(int(sp.good_quantity or 0) for sp in shift_records)
+            total_produced = sum(int(sp.actual_quantity or 0) for sp in shift_records)
+            total_reject = sum(int(sp.reject_quantity or 0) for sp in shift_records)
+            total_rework = sum(int(sp.rework_quantity or 0) for sp in shift_records)
+            working_days_actual = len(set(sp.production_date for sp in shift_records))
+            
+            # Calculate achievement percentage
+            achievement_pct = round((actual_output / monthly_target * 100), 1) if monthly_target > 0 else 0
+            
+            # Quality rate
+            quality_rate = round((actual_output / total_produced * 100), 1) if total_produced > 0 else 0
+            
+            # Status
+            is_achieved = achievement_pct >= 100
+            status = 'Tercapai' if is_achieved else 'Tidak Tercapai'
+            
+            if is_achieved:
+                machines_achieved += 1
+            
+            total_target += monthly_target
+            total_actual += actual_output
+            
+            # Get average efficiency from shift records
+            avg_efficiency = 0
+            if shift_records:
+                efficiencies = [float(sp.efficiency_rate or 0) for sp in shift_records if sp.efficiency_rate]
+                avg_efficiency = round(sum(efficiencies) / len(efficiencies), 1) if efficiencies else 0
+            
+            result.append({
+                'machine_id': machine.id,
+                'machine_name': machine.name,
+                'machine_code': machine.code if hasattr(machine, 'code') else None,
+                'target_monthly': int(monthly_target),
+                'actual_output': actual_output,
+                'total_produced': total_produced,
+                'total_reject': total_reject,
+                'total_rework': total_rework,
+                'achievement_pct': achievement_pct,
+                'quality_rate': quality_rate,
+                'avg_efficiency': avg_efficiency,
+                'working_days': working_days_actual,
+                'is_achieved': is_achieved,
+                'status': status,
+                'gap': actual_output - int(monthly_target)
+            })
+        
+        # Sort by achievement percentage descending
+        result.sort(key=lambda x: x['achievement_pct'], reverse=True)
+        
+        # Calculate overall achievement
+        overall_achievement = round((total_actual / total_target * 100), 1) if total_target > 0 else 0
+        
+        # Month names in Indonesian
+        month_names = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+                       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+        
+        return jsonify({
+            'department': 'Produksi',
+            'year': year,
+            'month': month,
+            'month_name': month_names[month],
+            'period': f'{month_names[month]} {year}',
+            'summary': {
+                'total_machines': len(machines),
+                'machines_achieved': machines_achieved,
+                'machines_not_achieved': len(machines) - machines_achieved,
+                'achievement_rate': round((machines_achieved / len(machines) * 100), 1) if machines else 0,
+                'total_target': int(total_target),
+                'total_actual': total_actual,
+                'overall_achievement_pct': overall_achievement,
+                'overall_status': 'Tercapai' if overall_achievement >= 100 else 'Tidak Tercapai'
+            },
+            'machines': result
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/machine-monthly-targets', methods=['GET'])
+@jwt_required()
+def get_machine_monthly_targets():
+    """Get all monthly targets for a specific period"""
+    try:
+        year = request.args.get('year', type=int) or date.today().year
+        month = request.args.get('month', type=int) or date.today().month
+        
+        targets = MachineMonthlyTarget.query.filter(
+            MachineMonthlyTarget.year == year,
+            MachineMonthlyTarget.month == month
+        ).all()
+        
+        result = []
+        for t in targets:
+            result.append({
+                'id': t.id,
+                'machine_id': t.machine_id,
+                'machine_name': t.machine.name if t.machine else None,
+                'year': t.year,
+                'month': t.month,
+                'target_quantity': t.target_quantity,
+                'notes': t.notes
+            })
+        
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/machine-monthly-targets', methods=['POST'])
+@jwt_required()
+def set_machine_monthly_target():
+    """Set or update monthly target for a machine"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        machine_id = data.get('machine_id')
+        year = data.get('year')
+        month = data.get('month')
+        target_quantity = data.get('target_quantity', 0)
+        notes = data.get('notes')
+        
+        # Check if target exists
+        existing = MachineMonthlyTarget.query.filter(
+            MachineMonthlyTarget.machine_id == machine_id,
+            MachineMonthlyTarget.year == year,
+            MachineMonthlyTarget.month == month
+        ).first()
+        
+        if existing:
+            existing.target_quantity = target_quantity
+            existing.notes = notes
+            existing.updated_at = datetime.utcnow()
+        else:
+            new_target = MachineMonthlyTarget(
+                machine_id=machine_id,
+                year=year,
+                month=month,
+                target_quantity=target_quantity,
+                notes=notes,
+                created_by=user_id
+            )
+            db.session.add(new_target)
+        
+        db.session.commit()
+        return jsonify({'message': 'Target saved successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/machine-monthly-targets/bulk', methods=['POST'])
+@jwt_required()
+def set_bulk_machine_monthly_targets():
+    """Set multiple monthly targets at once"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        targets = data.get('targets', [])
+        
+        for t in targets:
+            machine_id = t.get('machine_id')
+            year = t.get('year')
+            month = t.get('month')
+            target_quantity = t.get('target_quantity', 0)
+            
+            existing = MachineMonthlyTarget.query.filter(
+                MachineMonthlyTarget.machine_id == machine_id,
+                MachineMonthlyTarget.year == year,
+                MachineMonthlyTarget.month == month
+            ).first()
+            
+            if existing:
+                existing.target_quantity = target_quantity
+                existing.updated_at = datetime.utcnow()
+            else:
+                new_target = MachineMonthlyTarget(
+                    machine_id=machine_id,
+                    year=year,
+                    month=month,
+                    target_quantity=target_quantity,
+                    created_by=user_id
+                )
+                db.session.add(new_target)
+        
+        db.session.commit()
+        return jsonify({'message': f'{len(targets)} targets saved successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/machine-downtime-analysis', methods=['GET'])
+@jwt_required()
+def get_machine_downtime_analysis():
+    """Get downtime analysis per machine with top downtime reasons"""
+    try:
+        from models.production import ShiftProduction
+        
+        year = request.args.get('year', type=int) or date.today().year
+        month = request.args.get('month', type=int) or date.today().month
+        machine_id = request.args.get('machine_id', type=int)
+        
+        # Calculate month range
+        month_start = date(year, month, 1)
+        if month == 12:
+            month_end = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            month_end = date(year, month + 1, 1) - timedelta(days=1)
+        
+        # Build query
+        query = ShiftProduction.query.filter(
+            ShiftProduction.production_date >= month_start,
+            ShiftProduction.production_date <= month_end
+        )
+        
+        if machine_id:
+            query = query.filter(ShiftProduction.machine_id == machine_id)
+        
+        shift_records = query.all()
+        
+        # Group by machine
+        machines_data = {}
+        
+        for sp in shift_records:
+            mid = sp.machine_id
+            if mid not in machines_data:
+                machines_data[mid] = {
+                    'machine_id': mid,
+                    'machine_name': sp.machine.name if sp.machine else f'Machine {mid}',
+                    'downtime_reasons': {},
+                    'downtime_by_category': {
+                        'mesin': 0, 'operator': 0, 'material': 0, 
+                        'design': 0, 'idle': 0, 'others': 0
+                    },
+                    'total_downtime': 0,
+                    'total_runtime': 0
+                }
+            
+            # Parse issues/downtime from ShiftProduction
+            if sp.issues:
+                # Split by semicolon or comma
+                import re
+                issues_list = re.split(r'[;,]', sp.issues)
+                issues_list = [i.strip() for i in issues_list if i.strip()]
+                for issue in issues_list:
+                    # Parse format: "Xm - reason [category]" or "reason (Xm)" or just "reason"
+                    # Format 1: "15 menit - Sanitasi kecil [design]"
+                    match1 = re.match(r'(\d+)\s*menit?\s*-\s*(.+?)(?:\s*\[.+?\])?\s*$', issue)
+                    # Format 2: "reason (Xm)"
+                    match2 = re.match(r'(.+?)\s*\((\d+)m\)', issue)
+                    
+                    if match1:
+                        minutes = int(match1.group(1))
+                        reason = match1.group(2).strip()
+                    elif match2:
+                        reason = match2.group(1).strip()
+                        minutes = int(match2.group(2))
+                    else:
+                        reason = issue.strip()
+                        # Try to extract category tag
+                        reason = re.sub(r'\s*\[.+?\]\s*$', '', reason)
+                        minutes = 0
+                    
+                    if reason and len(reason) > 2:
+                        if reason in machines_data[mid]['downtime_reasons']:
+                            machines_data[mid]['downtime_reasons'][reason]['count'] += 1
+                            machines_data[mid]['downtime_reasons'][reason]['minutes'] += minutes
+                        else:
+                            machines_data[mid]['downtime_reasons'][reason] = {
+                                'count': 1,
+                                'minutes': minutes
+                            }
+            
+            # Add category totals
+            machines_data[mid]['downtime_by_category']['mesin'] += int(sp.downtime_mesin or 0)
+            machines_data[mid]['downtime_by_category']['operator'] += int(sp.downtime_operator or 0)
+            machines_data[mid]['downtime_by_category']['material'] += int(sp.downtime_material or 0)
+            machines_data[mid]['downtime_by_category']['design'] += int(sp.downtime_design or 0)
+            machines_data[mid]['downtime_by_category']['idle'] += int(sp.idle_time or 0)
+            machines_data[mid]['downtime_by_category']['others'] += int(sp.downtime_others or 0)
+            machines_data[mid]['total_downtime'] += int(sp.downtime_minutes or 0)
+            machines_data[mid]['total_runtime'] += int(sp.actual_runtime or 0)
+        
+        # Keywords to exclude from Top 3 (design change, idle, biological breaks)
+        excluded_keywords = [
+            # Design change - not real downtime
+            'ganti stiker', 'ganti packaging', 'ganti label', 'ganti karton',
+            'repack', 'repacking', 'ganti kemasan', 'change over', 'changeover',
+            'ganti produk', 'ganti order', 'setting mc', 'setting mesin',
+            # Idle time - tracked separately
+            'tunggu', 'menunggu', 'nunggu', 'habis', 'waiting', 'standby', 'idle',
+            # Biological breaks
+            'istirahat', 'sholat', 'makan', 'toilet'
+        ]
+        
+        # Process and sort downtime reasons
+        result = []
+        for mid, data in machines_data.items():
+            # Filter out excluded keywords
+            filtered_reasons = {
+                reason: stats for reason, stats in data['downtime_reasons'].items()
+                if not any(kw in reason.lower() for kw in excluded_keywords)
+            }
+            
+            # Sort by count (frequency) descending
+            sorted_reasons = sorted(
+                filtered_reasons.items(),
+                key=lambda x: (x[1]['count'], x[1]['minutes']),
+                reverse=True
+            )
+            
+            top_3 = []
+            for reason, stats in sorted_reasons[:3]:
+                pct = round((stats['minutes'] / data['total_downtime'] * 100), 1) if data['total_downtime'] > 0 else 0
+                top_3.append({
+                    'reason': reason,
+                    'count': stats['count'],
+                    'minutes': stats['minutes'],
+                    'percentage': pct
+                })
+            
+            # Calculate category percentages
+            category_chart = []
+            for cat, mins in data['downtime_by_category'].items():
+                pct = round((mins / data['total_downtime'] * 100), 1) if data['total_downtime'] > 0 else 0
+                if mins > 0:
+                    category_chart.append({
+                        'category': cat,
+                        'minutes': mins,
+                        'percentage': pct
+                    })
+            
+            result.append({
+                'machine_id': data['machine_id'],
+                'machine_name': data['machine_name'],
+                'top_3_downtime': top_3,
+                'downtime_by_category': category_chart,
+                'total_downtime': data['total_downtime'],
+                'total_runtime': data['total_runtime']
+            })
+        
+        # Sort by machine name
+        result.sort(key=lambda x: x['machine_name'])
+        
+        month_names = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+                       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+        
+        return jsonify({
+            'year': year,
+            'month': month,
+            'month_name': month_names[month],
+            'period': f'{month_names[month]} {year}',
+            'machines': result
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/downtime-root-causes', methods=['GET'])
+@jwt_required()
+def get_downtime_root_causes():
+    """Get root cause analysis records"""
+    try:
+        year = request.args.get('year', type=int) or date.today().year
+        month = request.args.get('month', type=int) or date.today().month
+        machine_id = request.args.get('machine_id', type=int)
+        
+        query = DowntimeRootCause.query.filter(
+            DowntimeRootCause.year == year,
+            DowntimeRootCause.month == month
+        )
+        
+        if machine_id:
+            query = query.filter(DowntimeRootCause.machine_id == machine_id)
+        
+        records = query.order_by(DowntimeRootCause.total_minutes.desc()).all()
+        
+        result = []
+        for r in records:
+            result.append({
+                'id': r.id,
+                'machine_id': r.machine_id,
+                'machine_name': r.machine.name if r.machine else None,
+                'problem': r.problem,
+                'category': r.category,
+                'occurrence_count': r.occurrence_count,
+                'total_minutes': r.total_minutes,
+                'percentage': float(r.percentage) if r.percentage else 0,
+                'root_cause': r.root_cause,
+                'corrective_action': r.corrective_action,
+                'preventive_action': r.preventive_action,
+                'status': r.status
+            })
+        
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/downtime-root-causes', methods=['POST'])
+@jwt_required()
+def create_downtime_root_cause():
+    """Create or update root cause analysis"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        record_id = data.get('id')
+        
+        if record_id:
+            # Update existing
+            record = DowntimeRootCause.query.get(record_id)
+            if not record:
+                return jsonify({'error': 'Record not found'}), 404
+        else:
+            # Create new
+            record = DowntimeRootCause(
+                machine_id=data.get('machine_id'),
+                year=data.get('year'),
+                month=data.get('month'),
+                created_by=user_id
+            )
+            db.session.add(record)
+        
+        record.problem = data.get('problem')
+        record.category = data.get('category')
+        record.occurrence_count = data.get('occurrence_count', 1)
+        record.total_minutes = data.get('total_minutes', 0)
+        record.percentage = data.get('percentage', 0)
+        record.root_cause = data.get('root_cause')
+        record.corrective_action = data.get('corrective_action')
+        record.preventive_action = data.get('preventive_action')
+        record.status = data.get('status', 'open')
+        record.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        return jsonify({'message': 'Root cause analysis saved', 'id': record.id}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/downtime-root-causes/<int:id>', methods=['DELETE'])
+@jwt_required()
+def delete_downtime_root_cause(id):
+    """Delete root cause analysis"""
+    try:
+        record = DowntimeRootCause.query.get(id)
+        if not record:
+            return jsonify({'error': 'Record not found'}), 404
+        
+        db.session.delete(record)
+        db.session.commit()
+        return jsonify({'message': 'Record deleted'}), 200
+    except Exception as e:
+        db.session.rollback()
         return jsonify({'error': str(e)}), 500
