@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppDispatch } from '../../hooks/redux';
 import { setCredentials } from '../../store/slices/authSlice';
+import axiosInstance from '../../utils/axiosConfig';
 import toast from 'react-hot-toast';
 
 export default function OAuthCallback() {
@@ -12,7 +13,7 @@ export default function OAuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Check for error
+      // Check for error from Google
       const error = searchParams.get('error');
       if (error) {
         setStatus('error');
@@ -21,7 +22,55 @@ export default function OAuthCallback() {
         return;
       }
 
-      // Get tokens from URL
+      // Check for Google OAuth code
+      const code = searchParams.get('code');
+      if (code) {
+        try {
+          // Exchange code for tokens via backend
+          const response = await axiosInstance.post('/api/auth/google/callback', { code });
+          const { access_token, refresh_token, user } = response.data;
+
+          // Store tokens
+          localStorage.setItem('token', access_token);
+          if (refresh_token) {
+            localStorage.setItem('refresh_token', refresh_token);
+          }
+
+          // Update Redux
+          dispatch(setCredentials({
+            user: {
+              id: user.id,
+              username: user.username,
+              email: user.email,
+              full_name: user.full_name,
+              is_admin: user.is_admin || false,
+              is_super_admin: user.is_super_admin || false,
+              roles: user.roles || []
+            },
+            token: access_token
+          }));
+
+          // Reset session tracking
+          localStorage.setItem('session_start_time', Date.now().toString());
+          localStorage.setItem('last_activity_time', Date.now().toString());
+
+          // Trigger permission refresh
+          window.dispatchEvent(new Event('auth-change'));
+
+          setStatus('success');
+          toast.success(`Selamat datang, ${user.full_name}!`);
+          setTimeout(() => navigate('/app'), 1000);
+          return;
+        } catch (err: any) {
+          console.error('Google OAuth error:', err);
+          setStatus('error');
+          toast.error(err.response?.data?.error || 'Google login failed');
+          setTimeout(() => navigate('/login'), 2000);
+          return;
+        }
+      }
+
+      // Legacy flow - tokens in URL params
       const accessToken = searchParams.get('access_token');
       const refreshToken = searchParams.get('refresh_token');
       const userId = searchParams.get('user_id');
@@ -30,7 +79,7 @@ export default function OAuthCallback() {
       const fullName = searchParams.get('full_name');
       const isNew = searchParams.get('is_new') === 'true';
 
-      if (!accessToken || !refreshToken) {
+      if (!accessToken) {
         setStatus('error');
         toast.error('Invalid OAuth response');
         setTimeout(() => navigate('/login'), 2000);
@@ -38,18 +87,19 @@ export default function OAuthCallback() {
       }
 
       // Store tokens
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('refresh_token', refreshToken);
+      localStorage.setItem('token', accessToken);
+      if (refreshToken) {
+        localStorage.setItem('refresh_token', refreshToken);
+      }
 
       setStatus('success');
 
       // If new user, redirect to complete profile page
       if (isNew) {
         toast.success(`Akun berhasil dibuat! Silakan lengkapi profil Anda.`);
-        // Pass all params to complete profile page
         const params = new URLSearchParams({
           access_token: accessToken,
-          refresh_token: refreshToken,
+          refresh_token: refreshToken || '',
           user_id: userId || '',
           username: username || '',
           email: email || '',
@@ -73,7 +123,6 @@ export default function OAuthCallback() {
         token: accessToken
       }));
 
-      // Reset session tracking for new login
       localStorage.setItem('session_start_time', Date.now().toString());
       localStorage.setItem('last_activity_time', Date.now().toString());
 

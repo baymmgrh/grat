@@ -85,8 +85,17 @@ export const PermissionProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       }
     };
 
+    // Listen for auth-change event (triggered by OAuth login)
+    const handleAuthChange = () => {
+      fetchPermissions();
+    };
+
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('auth-change', handleAuthChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('auth-change', handleAuthChange);
+    };
   }, [fetchPermissions]);
 
   const hasPermission = useCallback((permission: string): boolean => {

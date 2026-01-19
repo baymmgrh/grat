@@ -57,6 +57,34 @@ const MaterialCreate: React.FC = () => {
     { value: 'packaging_materials', label: 'Packaging Materials' }
   ];
 
+  // Material categories grouped by type
+  const materialCategories: { [key: string]: { value: string; label: string; group: string }[] } = {
+    raw_materials: [
+      { value: 'main_roll', label: 'Main Roll (MR)', group: 'Kain' },
+      { value: 'jumbo_roll', label: 'Jumbo Roll (JR)', group: 'Kain' },
+      { value: 'spunbond', label: 'Spunbond', group: 'Kain' },
+      { value: 'meltblown', label: 'Melt Blown', group: 'Kain' },
+      { value: 'kain', label: 'Kain Lainnya', group: 'Kain' },
+      { value: 'nonwoven', label: 'Nonwoven', group: 'Kain' },
+      { value: 'tissue', label: 'Tissue', group: 'Raw Material' },
+      { value: 'other_raw', label: 'Lainnya', group: 'Raw Material' }
+    ],
+    packaging_materials: [
+      { value: 'packaging', label: 'Packaging', group: 'Packaging' },
+      { value: 'carton_box', label: 'Carton Box', group: 'Packaging' },
+      { value: 'inner_box', label: 'Inner Box', group: 'Packaging' },
+      { value: 'jerigen', label: 'Jerigen', group: 'Packaging' },
+      { value: 'botol', label: 'Botol', group: 'Packaging' },
+      { value: 'stc', label: 'STC', group: 'Aksesoris' },
+      { value: 'fliptop', label: 'Fliptop', group: 'Aksesoris' },
+      { value: 'plastik', label: 'Plastik', group: 'Aksesoris' }
+    ],
+    chemical_materials: [
+      { value: 'parfum', label: 'Parfum', group: 'Chemical' },
+      { value: 'chemical', label: 'Chemical', group: 'Chemical' }
+    ]
+  };
+
   const uomOptions = [
     'KG', 'GRAM', 'TON', 'LITER', 'ML', 'METER', 'CM', 'MM', 'PIECE', 'ROLL', 'SHEET'
   ];
@@ -194,17 +222,22 @@ const MaterialCreate: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category *
+                    Kategori *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     name="category"
                     value={formData.category}
                     onChange={handleInputChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
-                    placeholder="e.g., Synthetic Fibers"
-                  />
+                  >
+                    <option value="">Pilih Kategori...</option>
+                    {materialCategories[formData.material_type]?.map(cat => (
+                      <option key={cat.value} value={cat.value}>
+                        [{cat.group}] {cat.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('common.description')}</label>

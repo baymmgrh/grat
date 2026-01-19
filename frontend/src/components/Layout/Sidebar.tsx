@@ -48,7 +48,8 @@ import {
   SparklesIcon,
   LightBulbIcon,
   ScaleIcon,
-  CheckBadgeIcon
+  CheckBadgeIcon,
+  CameraIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import axiosInstance from '../../utils/axiosConfig'
@@ -94,7 +95,6 @@ function SidebarContent() {
             { name: 'Categories', href: '/app/products/categories', icon: ArchiveBoxIcon },
             { name: 'Bill of Materials', href: '/app/products/bom', icon: ClipboardDocumentListIcon, permission: 'bom' },
             { name: 'Lifecycle', href: '/app/products/lifecycle', icon: ArrowPathIcon },
-            { name: 'Cost Calculator', href: '/app/products/calculator', icon: CalculatorIcon },
           ]
         },
         { 
@@ -121,6 +121,7 @@ function SidebarContent() {
           children: [
             { name: 'Dashboard', href: '/app/production', icon: PresentationChartLineIcon },
             { name: 'Work Orders', href: '/app/production/work-orders', icon: ClipboardDocumentListIcon, permission: 'work_orders' },
+            { name: 'Status Pengerjaan', href: '/app/production/work-order-status', icon: ClipboardDocumentListIcon },
             { name: 'WO Monitoring', href: '/app/production/work-orders-monitoring', icon: ChartBarIcon },
             { name: 'Machine Data', href: '/app/production/machines', icon: CogIcon },
             { name: 'Controller', icon: ChartBarIcon, isSubMenu: true, subChildren: [
@@ -249,7 +250,8 @@ function SidebarContent() {
           children: [
             { name: 'Dashboard', href: '/app/hr/dashboard', icon: PresentationChartLineIcon },
             { name: 'Employees', href: '/app/hr/employees', icon: UserGroupIcon, permission: 'employees' },
-            { name: 'Attendance', href: '/app/hr/attendance', icon: ClockIcon, permission: 'attendance' },
+            { name: 'Absensi (Foto)', href: '/app/hr/absensi', icon: CameraIcon, permission: 'attendance' },
+            { name: 'Laporan Absensi', href: '/app/hr/attendance-report', icon: ClockIcon, permission: 'attendance' },
             { name: 'Leave Management', href: '/app/hr/leaves', icon: CalendarDaysIcon, permission: 'leave' },
             { name: 'Payroll', href: '/app/hr/payroll', icon: CurrencyDollarIcon, permission: 'payroll' },
             { name: 'Performance', href: '/app/hr/appraisal', icon: ChartBarIcon, permission: 'appraisal' },

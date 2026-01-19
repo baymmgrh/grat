@@ -88,6 +88,9 @@ const MonthlyProductionPlan: React.FC = () => {
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<MonthlySchedule | null>(null);
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [calcDisplay, setCalcDisplay] = useState('0');
+  const [calcExpression, setCalcExpression] = useState('');
   
   // Form state
   const [formData, setFormData] = useState({
@@ -107,22 +110,30 @@ const MonthlyProductionPlan: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [machinesRes, productsRes, schedulesRes] = await Promise.all([
+      
+      // Fetch machines and products first (independent)
+      const [machinesRes, productsRes] = await Promise.all([
         axiosInstance.get('/api/production/machines'),
         axiosInstance.get('/api/products-new/?per_page=1000'),
-        axiosInstance.get(`/api/production/monthly-schedule?year=${currentYear}&month=${currentMonth}`),
       ]);
       
       setMachines(machinesRes.data.machines || []);
-      // Map products-new fields to expected format
       const mappedProducts = (productsRes.data.products || []).map((p: any) => ({
         id: p.id,
         code: p.kode_produk || p.code,
         name: p.nama_produk || p.name,
-        primary_uom: p.satuan || p.primary_uom || 'pcs',
+        packs_per_karton: p.pack_per_karton || p.isi_karton,
       }));
       setProducts(mappedProducts);
-      setSchedules(schedulesRes.data.schedules || []);
+      
+      // Fetch schedules separately to avoid blocking products loading
+      try {
+        const schedulesRes = await axiosInstance.get(`/api/production/monthly-schedule?year=${currentYear}&month=${currentMonth}`);
+        setSchedules(schedulesRes.data.schedules || []);
+      } catch (scheduleError) {
+        console.error('Error fetching schedules:', scheduleError);
+        setSchedules([]);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -152,6 +163,14 @@ const MonthlyProductionPlan: React.FC = () => {
         alert('Pilih produk');
         return;
       }
+      
+      // Find selected product to confirm
+      const selectedProduct = products.find(p => p.id === parseInt(formData.product_id));
+      console.log('Saving product:', { 
+        product_id: formData.product_id, 
+        parsed_id: parseInt(formData.product_id),
+        selectedProduct 
+      });
       
       await axiosInstance.post('/api/production/monthly-schedule', {
         year: currentYear,
@@ -595,13 +614,32 @@ const MonthlyProductionPlan: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Target (CTN) <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  value={formData.target_ctn}
-                  onChange={(e) => setFormData({ ...formData, target_ctn: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={formData.target_ctn}
+                    onChange={(e) => setFormData({ ...formData, target_ctn: e.target.value })}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCalcDisplay('0');
+                      setCalcExpression('');
+                      setShowCalculator(true);
+                    }}
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg text-sm"
+                    title="Kalkulator"
+                  >
+                    🧮
+                  </button>
+                </div>
+                {formData.target_ctn && formData.product_id && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    ≈ {(parseFloat(formData.target_ctn) * (products.find(p => p.id === parseInt(formData.product_id))?.packs_per_karton || 0)).toLocaleString()} pack
+                  </p>
+                )}
               </div>
               
               <div>
@@ -665,6 +703,74 @@ const MonthlyProductionPlan: React.FC = () => {
                 className={`px-4 py-2 text-white rounded-lg ${editingItem ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}
               >
                 {editingItem ? 'Update' : 'Simpan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calculator Modal */}
+      {showCalculator && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-72 overflow-hidden">
+            <div className="bg-gray-800 p-4">
+              <div className="text-right text-gray-400 text-sm h-5">{calcExpression || ' '}</div>
+              <div className="text-right text-white text-3xl font-mono">{calcDisplay}</div>
+            </div>
+            <div className="grid grid-cols-4 gap-1 p-2 bg-gray-100">
+              {['C', '±', '%', '÷', '7', '8', '9', '×', '4', '5', '6', '-', '1', '2', '3', '+', '0', '00', '.', '='].map((btn) => (
+                <button
+                  key={btn}
+                  onClick={() => {
+                    if (btn === 'C') {
+                      setCalcDisplay('0');
+                      setCalcExpression('');
+                    } else if (btn === '±') {
+                      setCalcDisplay(d => d.startsWith('-') ? d.slice(1) : '-' + d);
+                    } else if (btn === '%') {
+                      setCalcDisplay(d => String(parseFloat(d) / 100));
+                    } else if (btn === '=') {
+                      try {
+                        const expr = calcExpression + calcDisplay;
+                        const result = eval(expr.replace(/×/g, '*').replace(/÷/g, '/'));
+                        setCalcDisplay(String(Math.round(result * 100) / 100));
+                        setCalcExpression('');
+                      } catch { setCalcDisplay('Error'); }
+                    } else if (['+', '-', '×', '÷'].includes(btn)) {
+                      setCalcExpression(calcExpression + calcDisplay + btn);
+                      setCalcDisplay('0');
+                    } else {
+                      setCalcDisplay(d => d === '0' ? btn : d + btn);
+                    }
+                  }}
+                  className={`p-3 text-lg font-semibold rounded-lg transition ${
+                    btn === '=' ? 'bg-blue-500 text-white hover:bg-blue-600 col-span-1' :
+                    ['+', '-', '×', '÷'].includes(btn) ? 'bg-orange-400 text-white hover:bg-orange-500' :
+                    ['C', '±', '%'].includes(btn) ? 'bg-gray-300 hover:bg-gray-400' :
+                    'bg-white hover:bg-gray-200'
+                  }`}
+                >
+                  {btn}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2 p-3 bg-gray-50 border-t">
+              <button
+                onClick={() => setShowCalculator(false)}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-100"
+              >
+                Batal
+              </button>
+              <button
+                onClick={() => {
+                  if (calcDisplay !== 'Error') {
+                    setFormData({ ...formData, target_ctn: String(Math.round(parseFloat(calcDisplay))) });
+                  }
+                  setShowCalculator(false);
+                }}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Gunakan
               </button>
             </div>
           </div>

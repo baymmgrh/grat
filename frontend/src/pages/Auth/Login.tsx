@@ -68,37 +68,40 @@ export default function Login() {
 
   const checkGoogleOAuth = async () => {
     try {
-      const response = await axiosInstance.get('/api/oauth/google/status')
-      setGoogleEnabled(response.data.configured)
+      const response = await axiosInstance.get('/api/auth/google/url')
+      setGoogleEnabled(!!response.data.url)
     } catch (error) {
       console.error('Error checking Google OAuth:', error)
       setGoogleEnabled(false)
     }
   }
 
-  const handleGoogleLogin = () => {
+  const handleGoogleLogin = async () => {
     const hostname = window.location.hostname
     const isPrivateIP = hostname.startsWith('192.168.') || hostname.startsWith('10.') || hostname.startsWith('172.')
     
     // Google OAuth tidak mendukung private IP
     if (isPrivateIP) {
-      toast.error('Login Google hanya tersedia di production (falmaco.com). Silakan login dengan username/password.')
+      toast.error('Login Google hanya tersedia di production. Silakan login dengan username/password.')
       return
     }
     
     setGoogleLoading(true)
-    // Redirect to backend OAuth endpoint - support production domain
-    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1'
     
-    // For production, use https and same domain; for local, use http with port 5000
-    const backendUrl = isLocal 
-      ? `http://${hostname}:5000`
-      : `https://${hostname}/api`
-    const redirectUri = encodeURIComponent(`${window.location.origin}/oauth/callback`)
-    
-    // Construct OAuth URL
-    const oauthPath = isLocal ? '/api/oauth/google/login' : '/oauth/google/login'
-    window.location.href = `${backendUrl}${oauthPath}?redirect_uri=${redirectUri}`
+    try {
+      // Get Google OAuth URL from backend
+      const response = await axiosInstance.get('/api/auth/google/url')
+      if (response.data.url) {
+        window.location.href = response.data.url
+      } else {
+        toast.error('Google OAuth not configured')
+        setGoogleLoading(false)
+      }
+    } catch (error: any) {
+      console.error('Error getting Google OAuth URL:', error)
+      toast.error(error.response?.data?.error || 'Failed to connect to Google')
+      setGoogleLoading(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {

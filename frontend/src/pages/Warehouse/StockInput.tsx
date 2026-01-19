@@ -255,13 +255,13 @@ const StockInput: React.FC = () => {
   };
 
   const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.code.toLowerCase().includes(searchTerm.toLowerCase())
+    (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (product.code || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const filteredMaterials = materials.filter(material =>
-    material.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    material.code.toLowerCase().includes(searchTerm.toLowerCase())
+    (material.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (material.code || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (

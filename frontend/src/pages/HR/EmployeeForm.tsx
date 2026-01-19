@@ -1,319 +1,375 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useLanguage } from '../../contexts/LanguageContext';
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import {
+  UserIcon,
+  BriefcaseIcon,
+  PhoneIcon,
+  ShieldCheckIcon,
+  ArrowLeftIcon,
+  CheckIcon
+} from '@heroicons/react/24/outline'
+import {
   useGetDepartmentsQuery,
+  useGetPositionsQuery,
   useCreateEmployeeMutation
 } from '../../services/api'
+import axiosInstance from '../../utils/axiosConfig'
+import LoadingSpinner from '../../components/Common/LoadingSpinner'
+
 interface EmployeeFormData {
   employee_number: string
   first_name: string
   last_name: string
-  email?: string
-  phone?: string
-  date_of_birth?: string
-  gender?: string
-  department_id?: number
-  position?: string
-  employment_type?: string
-  hire_date?: string
-  address?: string
-  emergency_contact_name?: string
-  emergency_contact_phone?: string
+  email: string
+  phone: string
+  mobile: string
+  date_of_birth: string
+  gender: string
+  marital_status: string
+  address: string
+  city: string
+  postal_code: string
+  department_id: string
+  position: string
+  employment_type: string
+  hire_date: string
+  salary: string
+  emergency_contact_name: string
+  emergency_contact_phone: string
+  emergency_contact_relation: string
 }
 
 export default function EmployeeForm() {
-    const { t } = useLanguage();
-
-const navigate = useNavigate()
+  const navigate = useNavigate()
+  const { id } = useParams()
+  const isEdit = Boolean(id)
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingData, setLoadingData] = useState(false)
   
   const { data: departments } = useGetDepartmentsQuery({})
+  const { data: positions } = useGetPositionsQuery({})
   const [createEmployee] = useCreateEmployeeMutation()
   
-  const { register, handleSubmit, formState: { errors } } = useForm<EmployeeFormData>({
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<EmployeeFormData>({
     defaultValues: {
-      hire_date: new Date().toISOString().split('T')[0]
+      hire_date: new Date().toISOString().split('T')[0],
+      employment_type: 'full_time'
     }
   })
 
+  // Fetch employee data for edit mode
+  useEffect(() => {
+    if (isEdit && id) {
+      setLoadingData(true)
+      axiosInstance.get(`/api/hr/employees/${id}`)
+        .then(res => {
+          const emp = res.data.employee
+          reset({
+            employee_number: emp.employee_number || '',
+            first_name: emp.first_name || '',
+            last_name: emp.last_name || '',
+            email: emp.email || '',
+            phone: emp.phone || '',
+            mobile: emp.mobile || '',
+            date_of_birth: emp.date_of_birth ? emp.date_of_birth.split('T')[0] : '',
+            gender: emp.gender || '',
+            marital_status: emp.marital_status || '',
+            address: emp.address || '',
+            city: emp.city || '',
+            postal_code: emp.postal_code || '',
+            department_id: emp.department_id?.toString() || '',
+            position: emp.position || '',
+            employment_type: emp.employment_type || 'full_time',
+            hire_date: emp.hire_date ? emp.hire_date.split('T')[0] : '',
+            salary: emp.salary?.toString() || '',
+            emergency_contact_name: emp.emergency_contact_name || '',
+            emergency_contact_phone: emp.emergency_contact_phone || '',
+            emergency_contact_relation: emp.emergency_contact_relation || ''
+          })
+        })
+        .catch(() => {
+          toast.error('Gagal memuat data karyawan')
+          navigate('/app/hr/employees')
+        })
+        .finally(() => setLoadingData(false))
+    }
+  }, [id, isEdit, reset, navigate])
+
   const employmentTypes = [
-    { value: 'full_time', label: 'Full Time' },
+    { value: 'full_time', label: 'Karyawan Tetap' },
+    { value: 'contract', label: 'Kontrak' },
     { value: 'part_time', label: 'Part Time' },
-    { value: 'contract', label: 'Contract' },
-    { value: 'intern', label: 'Intern' },
-    { value: 'consultant', label: 'Consultant' }
+    { value: 'intern', label: 'Magang' },
+    { value: 'outsource', label: 'Outsource' },
+    { value: 'daily', label: 'Harian Lepas' }
   ]
 
   const genderOptions = [
-    { value: 'male', label: 'Male' },
-    { value: 'female', label: 'Female' },
-    { value: 'other', label: 'Other' }
+    { value: 'male', label: 'Laki-laki' },
+    { value: 'female', label: 'Perempuan' }
+  ]
+
+  const maritalOptions = [
+    { value: 'single', label: 'Belum Menikah' },
+    { value: 'married', label: 'Menikah' },
+    { value: 'divorced', label: 'Cerai' },
+    { value: 'widowed', label: 'Duda/Janda' }
+  ]
+
+  const relationOptions = [
+    { value: 'spouse', label: 'Suami/Istri' },
+    { value: 'parent', label: 'Orang Tua' },
+    { value: 'sibling', label: 'Saudara Kandung' },
+    { value: 'child', label: 'Anak' },
+    { value: 'other', label: 'Lainnya' }
   ]
 
   const onSubmit = async (data: EmployeeFormData) => {
     setIsLoading(true)
     try {
-      await createEmployee({
+      const payload = {
         ...data,
-        department_id: data.department_id ? parseInt(data.department_id.toString()) : undefined
-      }).unwrap()
-      
-      toast.success('Employee created successfully!')
+        department_id: data.department_id ? parseInt(data.department_id) : null,
+        salary: data.salary ? parseFloat(data.salary) : null
+      }
+
+      if (isEdit) {
+        await axiosInstance.put(`/api/hr/employees/${id}`, payload)
+        toast.success('Data karyawan berhasil diperbarui!')
+      } else {
+        await createEmployee(payload).unwrap()
+        toast.success('Karyawan baru berhasil ditambahkan!')
+      }
       navigate('/app/hr/employees')
     } catch (error: any) {
-      toast.error(error.data?.error || 'Failed to create employee')
+      toast.error(error.data?.error || error.response?.data?.error || 'Gagal menyimpan data')
     } finally {
       setIsLoading(false)
     }
   }
 
+  if (loadingData) {
+    return <LoadingSpinner />
+  }
+
+  const inputClass = "w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+  const labelClass = "block text-sm font-medium text-gray-700 mb-1.5"
+  const errorClass = "mt-1 text-sm text-red-600"
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Link to="/app/hr/employees" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
+        </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Add New Employee</h1>
-          <p className="text-gray-600">Create a new employee record</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isEdit ? 'Edit Data Karyawan' : 'Tambah Karyawan Baru'}
+          </h1>
+          <p className="text-gray-500 text-sm">
+            {isEdit ? 'Perbarui informasi karyawan' : 'Lengkapi data karyawan baru'}
+          </p>
         </div>
-        <button
-          onClick={() => navigate('/app/hr/employees')}
-          className="btn-secondary"
-        >
-          Back to List
-        </button>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Personal Information */}
-        <div className="card p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Personal Information</h3>
+        {/* Data Pribadi */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <UserIcon className="h-6 w-6 text-white" />
+              <h3 className="text-lg font-semibold text-white">Data Pribadi</h3>
+            </div>
+          </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Employee Number *
-              </label>
+              <label className={labelClass}>NIK / No. Karyawan <span className="text-red-500">*</span></label>
               <input
                 type="text"
-                {...register('employee_number', { required: 'Employee number is required' })}
-                className="input-field"
-                placeholder="e.g., EMP001"
+                {...register('employee_number', { required: 'NIK wajib diisi' })}
+                className={`${inputClass} ${errors.employee_number ? 'border-red-300 bg-red-50' : ''}`}
+                placeholder="Contoh: 001"
               />
-              {errors.employee_number && (
-                <p className="mt-1 text-sm text-red-600">{errors.employee_number.message}</p>
-              )}
+              {errors.employee_number && <p className={errorClass}>{errors.employee_number.message}</p>}
             </div>
 
-            <div></div>
-
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                First Name *
-              </label>
+              <label className={labelClass}>Nama Depan <span className="text-red-500">*</span></label>
               <input
                 type="text"
-                {...register('first_name', { required: 'First name is required' })}
-                className="input-field"
-                placeholder="First name"
+                {...register('first_name', { required: 'Nama depan wajib diisi' })}
+                className={`${inputClass} ${errors.first_name ? 'border-red-300 bg-red-50' : ''}`}
+                placeholder="Nama depan"
               />
-              {errors.first_name && (
-                <p className="mt-1 text-sm text-red-600">{errors.first_name.message}</p>
-              )}
+              {errors.first_name && <p className={errorClass}>{errors.first_name.message}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Last Name *
-              </label>
+              <label className={labelClass}>Nama Belakang <span className="text-red-500">*</span></label>
               <input
                 type="text"
-                {...register('last_name', { required: 'Last name is required' })}
-                className="input-field"
-                placeholder="Last name"
+                {...register('last_name', { required: 'Nama belakang wajib diisi' })}
+                className={`${inputClass} ${errors.last_name ? 'border-red-300 bg-red-50' : ''}`}
+                placeholder="Nama belakang"
               />
-              {errors.last_name && (
-                <p className="mt-1 text-sm text-red-600">{errors.last_name.message}</p>
-              )}
+              {errors.last_name && <p className={errorClass}>{errors.last_name.message}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-              </label>
-              <input
-                type="email"
-                {...register('email')}
-                className="input-field"
-                placeholder="employee@company.com"
-              />
+              <label className={labelClass}>Email</label>
+              <input type="email" {...register('email')} className={inputClass} placeholder="email@perusahaan.com" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-              </label>
-              <input
-                type="tel"
-                {...register('phone')}
-                className="input-field"
-                placeholder="+62-xxx-xxxx-xxxx"
-              />
+              <label className={labelClass}>No. Telepon</label>
+              <input type="tel" {...register('phone')} className={inputClass} placeholder="08xxxxxxxxxx" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Date of Birth
-              </label>
-              <input
-                type="date"
-                {...register('date_of_birth')}
-                className="input-field"
-                max={new Date().toISOString().split('T')[0]}
-              />
+              <label className={labelClass}>No. HP</label>
+              <input type="tel" {...register('mobile')} className={inputClass} placeholder="08xxxxxxxxxx" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-              </label>
-              <select {...register('gender')} className="input-field">
-                <option value="">Select gender</option>
-                {genderOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+              <label className={labelClass}>Tanggal Lahir</label>
+              <input type="date" {...register('date_of_birth')} className={inputClass} max={new Date().toISOString().split('T')[0]} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Jenis Kelamin</label>
+              <select {...register('gender')} className={inputClass}>
+                <option value="">Pilih jenis kelamin</option>
+                {genderOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Status Pernikahan</label>
+              <select {...register('marital_status')} className={inputClass}>
+                <option value="">Pilih status</option>
+                {maritalOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
               </select>
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-              </label>
-              <textarea
-                {...register('address')}
-                rows={3}
-                className="input-field"
-                placeholder="Full address..."
-              />
+              <label className={labelClass}>Alamat</label>
+              <textarea {...register('address')} rows={2} className={inputClass} placeholder="Alamat lengkap..." />
+            </div>
+
+            <div>
+              <label className={labelClass}>Kota</label>
+              <input type="text" {...register('city')} className={inputClass} placeholder="Kota" />
             </div>
           </div>
         </div>
 
-        {/* Employment Information */}
-        <div className="card p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Employment Information</h3>
+        {/* Data Kepegawaian */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <BriefcaseIcon className="h-6 w-6 text-white" />
+              <h3 className="text-lg font-semibold text-white">Data Kepegawaian</h3>
+            </div>
+          </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-              </label>
-              <select {...register('department_id')} className="input-field">
-                <option value="">Select department</option>
+              <label className={labelClass}>Departemen</label>
+              <select {...register('department_id')} className={inputClass}>
+                <option value="">Pilih departemen</option>
                 {departments?.departments?.map((dept: any) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name} ({dept.code})
-                  </option>
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-              </label>
-              <input
-                type="text"
-                {...register('position')}
-                className="input-field"
-                placeholder="e.g., Production Operator"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Employment Type
-              </label>
-              <select {...register('employment_type')} className="input-field">
-                <option value="">Select employment type</option>
-                {employmentTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
+              <label className={labelClass}>Jabatan</label>
+              <select {...register('position')} className={inputClass}>
+                <option value="">Pilih jabatan</option>
+                {positions?.positions?.map((pos: any) => (
+                  <option key={pos.id} value={pos.name}>{pos.name}</option>
                 ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Hire Date
-              </label>
-              <input
-                type="date"
-                {...register('hire_date')}
-                className="input-field"
-                max={new Date().toISOString().split('T')[0]}
-              />
+              <label className={labelClass}>Tipe Karyawan</label>
+              <select {...register('employment_type')} className={inputClass}>
+                {employmentTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label className={labelClass}>Tanggal Masuk</label>
+              <input type="date" {...register('hire_date')} className={inputClass} />
+            </div>
+
+            <div>
+              <label className={labelClass}>Gaji Pokok (Rp)</label>
+              <input type="number" {...register('salary')} className={inputClass} placeholder="0" />
             </div>
           </div>
         </div>
 
-        {/* Emergency Contact */}
-        <div className="card p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Emergency Contact</h3>
+        {/* Kontak Darurat */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4">
+            <div className="flex items-center gap-3">
+              <ShieldCheckIcon className="h-6 w-6 text-white" />
+              <h3 className="text-lg font-semibold text-white">Kontak Darurat</h3>
+            </div>
+          </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Contact Name
-              </label>
-              <input
-                type="text"
-                {...register('emergency_contact_name')}
-                className="input-field"
-                placeholder="Emergency contact name"
-              />
+              <label className={labelClass}>Nama Kontak</label>
+              <input type="text" {...register('emergency_contact_name')} className={inputClass} placeholder="Nama lengkap" />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Contact Phone
-              </label>
-              <input
-                type="tel"
-                {...register('emergency_contact_phone')}
-                className="input-field"
-                placeholder="+62-xxx-xxxx-xxxx"
-              />
+              <label className={labelClass}>No. Telepon</label>
+              <input type="tel" {...register('emergency_contact_phone')} className={inputClass} placeholder="08xxxxxxxxxx" />
+            </div>
+
+            <div>
+              <label className={labelClass}>Hubungan</label>
+              <select {...register('emergency_contact_relation')} className={inputClass}>
+                <option value="">Pilih hubungan</option>
+                {relationOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+              </select>
             </div>
           </div>
         </div>
 
         {/* Form Actions */}
-        <div className="flex justify-end gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/app/hr/employees')}
-            className="btn-secondary"
-            disabled={isLoading}
-          >{t('common.cancel')}</button>
+        <div className="flex justify-end gap-4 pt-4">
+          <Link to="/app/hr/employees" className="btn-secondary px-6 py-2.5">
+            Batal
+          </Link>
           <button
             type="submit"
-            className="btn-primary"
+            className="btn-primary px-6 py-2.5 flex items-center gap-2"
             disabled={isLoading}
           >
-            {isLoading ? 'Creating...' : 'Create Employee'}
+            {isLoading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Menyimpan...
+              </>
+            ) : (
+              <>
+                <CheckIcon className="h-5 w-5" />
+                {isEdit ? 'Simpan Perubahan' : 'Tambah Karyawan'}
+              </>
+            )}
           </button>
         </div>
       </form>
-
-      {/* HR Information Notice */}
-      <div className="card p-4 bg-blue-50 border border-blue-200">
-        <h4 className="font-medium text-blue-900 mb-2">📋 HR Information</h4>
-        <ul className="text-sm text-blue-800 space-y-1">
-          <li>• Employee number should be unique across the organization</li>
-          <li>• Department assignment will determine access permissions and reporting structure</li>
-          <li>• Employment type affects benefits calculation and working hour policies</li>
-          <li>• Emergency contact information is required for safety compliance</li>
-        </ul>
-      </div>
     </div>
   )
 }

@@ -96,49 +96,12 @@ const ProductAnalytics: React.FC = () => {
       setSeasonalityData(seasonalRes.data?.seasonality || []);
     } catch (error) {
       console.error('Failed to load analytics data:', error);
-      // Set mock data for development
-      setProductPerformance([
-        { product_id: 1, product_name: 'Nonwoven Fabric A', category: 'Nonwoven Fabrics', sales_qty: 1250, sales_value: 18750000, profit_margin: 25.5, growth_rate: 15.2, stock_turnover: 8.5, last_sale_date: '2024-01-15' },
-        { product_id: 2, product_name: 'Medical Mask Material', category: 'Medical Products', sales_qty: 2100, sales_value: 12600000, profit_margin: 18.7, growth_rate: 22.8, stock_turnover: 12.3, last_sale_date: '2024-01-14' },
-        { product_id: 3, product_name: 'FunnelIcon Media', category: 'FunnelIcon Media', sales_qty: 750, sales_value: 11250000, profit_margin: 28.9, growth_rate: 8.5, stock_turnover: 6.2, last_sale_date: '2024-01-13' },
-        { product_id: 4, product_name: 'Geotextile Fabric', category: 'Geotextiles', sales_qty: 650, sales_value: 9750000, profit_margin: 21.2, growth_rate: -5.3, stock_turnover: 4.8, last_sale_date: '2024-01-12' },
-        { product_id: 5, product_name: 'PP Granules', category: 'Raw Materials', sales_qty: 3200, sales_value: 8960000, profit_margin: 12.4, growth_rate: 18.7, stock_turnover: 15.6, last_sale_date: '2024-01-15' }
-      ]);
-      
-      setSalesTimeline([
-        { date: '2024-01-01', sales_qty: 1200, sales_value: 18500000, profit: 4625000 },
-        { date: '2024-01-02', sales_qty: 1350, sales_value: 20250000, profit: 5062500 },
-        { date: '2024-01-03', sales_qty: 980, sales_value: 14700000, profit: 3675000 },
-        { date: '2024-01-04', sales_qty: 1580, sales_value: 23700000, profit: 5925000 },
-        { date: '2024-01-05', sales_qty: 1420, sales_value: 21300000, profit: 5325000 },
-        { date: '2024-01-06', sales_qty: 1680, sales_value: 25200000, profit: 6300000 },
-        { date: '2024-01-07', sales_qty: 1250, sales_value: 18750000, profit: 4687500 }
-      ]);
-      
-      setCategoryAnalysis([
-        { category: 'Nonwoven Fabrics', total_products: 45, total_sales: 85000000, avg_margin: 24.5, growth_rate: 12.8 },
-        { category: 'Medical Products', total_products: 32, total_sales: 62000000, avg_margin: 19.2, growth_rate: 28.5 },
-        { category: 'FunnelIcon Media', total_products: 25, total_sales: 38000000, avg_margin: 26.8, growth_rate: 8.2 },
-        { category: 'Geotextiles', total_products: 18, total_sales: 29000000, avg_margin: 21.5, growth_rate: -2.1 },
-        { category: 'Raw Materials', total_products: 28, total_sales: 45000000, avg_margin: 15.8, growth_rate: 15.6 }
-      ]);
-      
-      setProfitabilityData([
-        { product_name: 'Nonwoven Fabric A', revenue: 18750000, cost: 13968750, profit: 4781250, margin_percent: 25.5 },
-        { product_name: 'Medical Mask Material', revenue: 12600000, cost: 10242000, profit: 2358000, margin_percent: 18.7 },
-        { product_name: 'FunnelIcon Media', revenue: 11250000, cost: 7987500, profit: 3262500, margin_percent: 28.9 },
-        { product_name: 'Geotextile Fabric', revenue: 9750000, cost: 7683000, profit: 2067000, margin_percent: 21.2 },
-        { product_name: 'PP Granules', revenue: 8960000, cost: 7848640, profit: 1111360, margin_percent: 12.4 }
-      ]);
-      
-      setSeasonalityData([
-        { month: 'Jan', sales_2023: 15600, sales_2024: 18200, growth: 16.7 },
-        { month: 'Feb', sales_2023: 14200, sales_2024: 16800, growth: 18.3 },
-        { month: 'Mar', sales_2023: 16800, sales_2024: 19500, growth: 16.1 },
-        { month: 'Apr', sales_2023: 18200, sales_2024: 21200, growth: 16.5 },
-        { month: 'May', sales_2023: 19500, sales_2024: 22800, growth: 16.9 },
-        { month: 'Jun', sales_2023: 21200, sales_2024: 24500, growth: 15.6 }
-      ]);
+      // Show empty state instead of mock data
+      setProductPerformance([]);
+      setSalesTimeline([]);
+      setCategoryAnalysis([]);
+      setProfitabilityData([]);
+      setSeasonalityData([]);
     } finally {
       setLoading(false);
     }

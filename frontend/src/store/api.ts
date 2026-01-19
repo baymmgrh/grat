@@ -10,8 +10,12 @@ const getApiBaseUrl = () => {
   
   const hostname = window.location.hostname;
   
-  // Use the same hostname that the user is accessing the frontend from
-  // This ensures LAN users connect to the correct server
+  // Production domain - use HTTPS API subdomain
+  if (hostname === 'erp.graterp.my.id' || hostname.endsWith('.graterp.my.id')) {
+    return 'https://api.graterp.my.id/api';
+  }
+  
+  // Local/LAN - use same hostname with port 5000
   return `http://${hostname}:5000/api`;
 };
 

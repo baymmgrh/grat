@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BuildingOfficeIcon,
   ChartBarIcon,
@@ -19,12 +19,75 @@ import {
 
 export default function Purchasing() {
   const [activeTab, setActiveTab] = useState('overview')
+  const [recentActivities, setRecentActivities] = useState<any[]>([])
+  const [pendingApprovals, setPendingApprovals] = useState<any[]>([])
   
   // Get summary data
   const { data: suppliersData } = useGetSuppliersQuery({ per_page: 5 })
   const { data: purchaseOrdersData } = useGetPurchaseOrdersQuery({ per_page: 5 })
   const { data: contractsData } = useGetContractsQuery({ per_page: 5 })
   const { data: quotesData } = useGetQuotesQuery({ per_page: 5 })
+  
+  // Build recent activities from real data
+  useEffect(() => {
+    const activities: any[] = [];
+    
+    // Add recent POs
+    if (purchaseOrdersData?.purchase_orders) {
+      purchaseOrdersData.purchase_orders.slice(0, 2).forEach((po: any) => {
+        activities.push({
+          id: `po-${po.id}`,
+          type: 'po_created',
+          title: `PO ${po.po_number}`,
+          description: po.supplier?.name || 'Supplier',
+          time: po.created_at ? new Date(po.created_at).toLocaleDateString('id-ID') : '-',
+          icon: DocumentTextIcon,
+          color: 'text-blue-600'
+        });
+      });
+    }
+    
+    // Add recent suppliers
+    if (suppliersData?.suppliers) {
+      suppliersData.suppliers.slice(0, 2).forEach((supplier: any) => {
+        activities.push({
+          id: `sup-${supplier.id}`,
+          type: 'supplier_added',
+          title: supplier.name,
+          description: supplier.contact_person || 'Supplier baru',
+          time: supplier.created_at ? new Date(supplier.created_at).toLocaleDateString('id-ID') : '-',
+          icon: BuildingOfficeIcon,
+          color: 'text-green-600'
+        });
+      });
+    }
+    
+    setRecentActivities(activities.slice(0, 4));
+  }, [purchaseOrdersData, suppliersData]);
+  
+  // Build pending approvals from real data
+  useEffect(() => {
+    const approvals: any[] = [];
+    
+    if (purchaseOrdersData?.purchase_orders) {
+      purchaseOrdersData.purchase_orders
+        .filter((po: any) => po.status === 'pending' || po.status === 'draft')
+        .slice(0, 3)
+        .forEach((po: any) => {
+          approvals.push({
+            id: po.id,
+            type: 'purchase_order',
+            title: po.po_number,
+            description: `Purchase Order - ${new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(po.total_amount || 0)}`,
+            supplier: po.supplier?.name || 'Supplier',
+            amount: po.total_amount || 0,
+            priority: po.priority || 'normal'
+          });
+        });
+    }
+    
+    setPendingApprovals(approvals);
+  }, [purchaseOrdersData]);
 
   const tabs = [
     { id: 'overview', name: 'Overview', icon: ChartBarIcon },
@@ -66,65 +129,6 @@ export default function Purchasing() {
     },
   ]
 
-  const recentActivities = [
-    {
-      id: 1,
-      type: 'po_created',
-      title: 'New Purchase Order Created',
-      description: 'PO-2024-001 for ABC Supplier',
-      time: '2 hours ago',
-      icon: DocumentTextIcon,
-      color: 'text-blue-600'
-    },
-    {
-      id: 2,
-      type: 'supplier_added',
-      title: 'New Supplier Added',
-      description: 'XYZ Manufacturing registered',
-      time: '4 hours ago',
-      icon: BuildingOfficeIcon,
-      color: 'text-green-600'
-    },
-    {
-      id: 3,
-      type: 'contract_approved',
-      title: 'Contract Approved',
-      description: 'Framework contract CON-2024-005',
-      time: '1 day ago',
-      icon: CheckCircleIcon,
-      color: 'text-purple-600'
-    },
-    {
-      id: 4,
-      type: 'quote_received',
-      title: 'Quote Received',
-      description: 'Quote QUO-2024-012 from DEF Supplier',
-      time: '2 days ago',
-      icon: BanknotesIcon,
-      color: 'text-orange-600'
-    },
-  ]
-
-  const pendingApprovals = [
-    {
-      id: 1,
-      type: 'purchase_order',
-      title: 'PO-2024-003',
-      description: 'Purchase Order - Rp 15,000',
-      supplier: 'Tech Solutions Ltd',
-      amount: 15000,
-      priority: 'high'
-    },
-    {
-      id: 2,
-      type: 'contract',
-      title: 'CON-2024-007',
-      description: 'Service Contract - Annual',
-      supplier: 'Maintenance Pro',
-      amount: 50000,
-      priority: 'normal'
-    },
-  ]
 
   return (
     <div className="space-y-6">

@@ -35,15 +35,45 @@ def get_week_number(date):
     return date.isocalendar()[1], date.isocalendar()[0]
 
 # Role definitions with display names and whether they require machine assignment
-ROSTER_ROLES = {
-    'operator': {'name': 'Operator', 'requires_machine': True, 'color': '#3B82F6'},
-    'qc': {'name': 'QC', 'requires_machine': True, 'color': '#10B981'},
-    'maintenance': {'name': 'Maintenance', 'requires_machine': False, 'color': '#F59E0B'},
-    'packing_machine': {'name': 'Packing Mesin', 'requires_machine': True, 'color': '#8B5CF6'},
-    'packing_manual': {'name': 'Packing Manual', 'requires_machine': False, 'color': '#EC4899'},
-    'timbang_box': {'name': 'Timbang Box', 'requires_machine': False, 'color': '#6366F1'},
-    'helper': {'name': 'Helper', 'requires_machine': False, 'color': '#6B7280'},
+# Machine-based roles (per mesin produksi): Operator, Helper, Checker, Infeeding, Timbang Box
+ROSTER_ROLES_MACHINE = {
+    'operator': {'name': 'Operator', 'requires_machine': True, 'color': '#3B82F6', 'order': 1},
+    'helper': {'name': 'Helper', 'requires_machine': True, 'color': '#6B7280', 'order': 2},
+    'checker': {'name': 'Checker', 'requires_machine': True, 'color': '#F59E0B', 'order': 3},
+    'infeeding': {'name': 'Infeeding', 'requires_machine': True, 'color': '#8B5CF6', 'order': 4},
+    'timbang_box': {'name': 'Timbang Box', 'requires_machine': True, 'color': '#EC4899', 'order': 5},
 }
+
+# Packing Manual Lines (5 lines with product per line)
+PACKING_LINES = [
+    {'id': 'packing_line_1', 'name': 'Packing Line 1', 'color': '#EC4899'},
+    {'id': 'packing_line_2', 'name': 'Packing Line 2', 'color': '#DB2777'},
+    {'id': 'packing_line_3', 'name': 'Packing Line 3', 'color': '#BE185D'},
+    {'id': 'packing_line_4', 'name': 'Packing Line 4', 'color': '#9D174D'},
+    {'id': 'packing_line_5', 'name': 'Packing Line 5', 'color': '#831843'},
+]
+
+# General roles (manual input, not tied to production machines)
+ROSTER_ROLES_GENERAL = {
+    'packing_line_1': {'name': 'Packing Line 1', 'requires_machine': False, 'color': '#EC4899', 'order': 1, 'has_product': True},
+    'packing_line_2': {'name': 'Packing Line 2', 'requires_machine': False, 'color': '#DB2777', 'order': 2, 'has_product': True},
+    'packing_line_3': {'name': 'Packing Line 3', 'requires_machine': False, 'color': '#BE185D', 'order': 3, 'has_product': True},
+    'packing_line_4': {'name': 'Packing Line 4', 'requires_machine': False, 'color': '#9D174D', 'order': 4, 'has_product': True},
+    'packing_line_5': {'name': 'Packing Line 5', 'requires_machine': False, 'color': '#831843', 'order': 5, 'has_product': True},
+    'qc_ipc': {'name': 'QC IPC', 'requires_machine': False, 'color': '#10B981', 'order': 6},
+    'qc_fg': {'name': 'QC Finish Goods', 'requires_machine': False, 'color': '#059669', 'order': 7},
+    'distribusi': {'name': 'Distribusi', 'requires_machine': False, 'color': '#6366F1', 'order': 8, 'has_machine_ref': True},
+}
+
+# Special machines that appear in roster (Bag Maker, Inkjet, Fliptop)
+SPECIAL_MACHINES = [
+    {'id': -1, 'name': 'Mesin Bag Maker', 'code': 'BAG'},
+    {'id': -2, 'name': 'Mesin Inkjet', 'code': 'INK'},
+    {'id': -3, 'name': 'Mesin Fliptop', 'code': 'FLP'},
+]
+
+# Combined for backward compatibility
+ROSTER_ROLES = {**ROSTER_ROLES_MACHINE, **ROSTER_ROLES_GENERAL}
 
 
 # ===========================
@@ -184,7 +214,19 @@ def get_roster_by_week():
             week_number=week_number
         ).first()
         
-        week_start, week_end = get_week_dates(datetime.strptime(f'{year}-W{week_number:02d}-1', '%Y-W%W-%w').date())
+        # Calculate week start/end from year and week number using ISO format
+        try:
+            # ISO week date format: %G = ISO year, %V = ISO week, %u = ISO weekday (1=Monday)
+            week_start_dt = datetime.strptime(f'{year}-W{week_number:02d}-1', '%G-W%V-%u')
+            week_start = week_start_dt.date()
+            week_end = week_start + timedelta(days=6)
+        except ValueError:
+            # Fallback for edge cases
+            from datetime import date
+            jan4 = date(year, 1, 4)
+            start_of_week1 = jan4 - timedelta(days=jan4.weekday())
+            week_start = start_of_week1 + timedelta(weeks=week_number - 1)
+            week_end = week_start + timedelta(days=6)
         
         if not roster:
             # Return empty structure for new roster

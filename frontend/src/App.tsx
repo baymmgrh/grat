@@ -1,8 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useParams, useNavigate } from 'react-router-dom'
 import { useAppSelector, useAppDispatch } from './hooks/redux'
 import { checkAuth } from './store/slices/authSlice'
 import { useDocumentTitle } from './hooks/useDocumentTitle'
+import axiosInstance from './utils/axiosConfig'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { LanguageProvider } from './contexts/LanguageContext'
 import { PermissionProvider } from './contexts/PermissionContext'
@@ -11,6 +12,8 @@ import SessionTimeoutModal from './components/SessionTimeoutModal'
 import Layout from './components/Layout/Layout'
 import Login from './pages/Auth/Login'
 import Register from './pages/Auth/Register'
+import ForgotPassword from './pages/Auth/ForgotPassword'
+import ResetPassword from './pages/Auth/ResetPassword'
 import OAuthCallback from './pages/Auth/OAuthCallback'
 import CompleteProfile from './pages/Auth/CompleteProfile'
 import Dashboard from './pages/Dashboard/Dashboard'
@@ -112,6 +115,9 @@ import WeeklyController from './pages/Production/WeeklyController'
 import MonthlyController from './pages/Production/MonthlyController'
 import WorkOrderMonitoring from './pages/Production/WorkOrderMonitoring'
 import BreakdownSummary from './pages/Production/BreakdownSummary'
+import WorkOrderTimeline from './pages/Production/WorkOrderTimeline'
+import WorkOrderBreakdown from './pages/Production/WorkOrderBreakdown'
+import WorkOrderStatus from './pages/Production/WorkOrderStatus'
 import QualityTestList from './pages/Quality/QualityTestList'
 import QualityTestForm from './pages/Quality/QualityTestForm'
 import QualityDashboardEnhanced from './pages/Quality/QualityDashboardEnhanced'
@@ -167,6 +173,9 @@ import HRDashboard from './pages/HR/HRDashboard'
 import PayrollList from './pages/HR/PayrollList'
 import PayrollPeriodForm from './pages/HR/PayrollPeriodForm'
 import AttendanceManagement from './pages/HR/AttendanceManagement'
+import AttendancePage from './pages/HR/AttendancePage'
+import AttendanceReport from './pages/HR/AttendanceReport'
+import PublicAttendance from './pages/Public/PublicAttendance'
 import LeaveManagement from './pages/HR/LeaveManagement'
 import LeaveRequestForm from './pages/HR/LeaveRequestForm'
 import AppraisalList from './pages/HR/AppraisalList'
@@ -176,6 +185,8 @@ import AttendanceForm from './pages/HR/AttendanceForm'
 import LeaveForm from './pages/HR/LeaveForm'
 import PayrollForm from './pages/HR/PayrollForm'
 import AppraisalForm from './pages/HR/AppraisalForm'
+import Departments from './pages/HR/Departments'
+import HRReports from './pages/HR/Reports'
 import MaintenanceList from './pages/Maintenance/MaintenanceList'
 import MaintenanceDashboard from './pages/Maintenance/MaintenanceDashboard'
 import MaintenanceWorkOrderForm from './pages/Maintenance/MaintenanceWorkOrderForm'
@@ -269,6 +280,7 @@ import DemandPlanning from './pages/MRP/DemandPlanning'
 import CapacityPlanning from './pages/MRP/CapacityPlanning'
 import MaterialRequirements from './pages/MRP/MaterialRequirements'
 import SupplierIntegration from './pages/MRP/SupplierIntegration'
+import NotificationsPage from './pages/Notifications/NotificationsPage'
 // Redirect component for warehouse zones with ID
 const WarehouseZoneRedirect = () => {
   const { id } = useParams()
@@ -284,13 +296,34 @@ const WarehouseZoneLocationsRedirect = () => {
 // Wrapper for ProductFormNew to handle routing
 const ProductFormNewWrapper = () => {
   const navigate = useNavigate()
+  const { id } = useParams<{ id: string }>()
+  const [product, setProduct] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  
+  useEffect(() => {
+    if (id) {
+      setLoading(true)
+      axiosInstance.get(`/api/products-new/${id}`)
+        .then(res => setProduct(res.data))
+        .catch(err => console.error('Error loading product:', err))
+        .finally(() => setLoading(false))
+    }
+  }, [id])
+  
   const handleSave = () => {
     navigate('/app/products/list')
   }
   const handleCancel = () => {
     navigate(-1)
   }
-  return <ProductFormNew onSave={handleSave} onCancel={handleCancel} />
+  
+  if (loading) {
+    return <div className="flex items-center justify-center h-64">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+    </div>
+  }
+  
+  return <ProductFormNew product={product} onSave={handleSave} onCancel={handleCancel} />
 }
 
 function App() {
@@ -329,7 +362,10 @@ function App() {
         <Routes>
       {/* System Overview for non-authenticated users */}
       <Route path="/" element={!isAuthenticated ? <SystemOverview /> : <Navigate to="/app" />} />
+      <Route path="/absensi" element={<PublicAttendance />} />
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/app" />} />
+      <Route path="/forgot-password" element={!isAuthenticated ? <ForgotPassword /> : <Navigate to="/app" />} />
+      <Route path="/reset-password" element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/app" />} />
       <Route path="/register" element={!isAuthenticated ? <Register /> : <Navigate to="/app" />} />
       <Route path="/oauth/callback" element={<OAuthCallback />} />
       <Route path="/complete-profile" element={<CompleteProfile />} />
@@ -424,7 +460,7 @@ function App() {
         </div>
       } />
       
-      <Route path="/app" element={isAuthenticated ? <Layout /> : <Navigate to="/login" />}>
+      <Route path="/app" element={isAuthenticated ? <Layout /> : <Navigate to="/" />}>
         <Route index element={<ExecutiveDashboardAdvanced />} />
         
         {/* Old Dashboard */}
@@ -452,7 +488,6 @@ function App() {
         <Route path="products/:id/edit" element={<ProductFormNewWrapper />} />
         <Route path="products/:kode_produk/versions" element={<ProductVersionHistory />} />
         <Route path="products/:kode_produk/compare" element={<ProductCompare />} />
-        <Route path="products/calculator" element={<NonwovenCalculator />} />
         <Route path="products-v2" element={<ProductsNewPage />} />
         
         {/* Warehouse */}
@@ -580,6 +615,9 @@ function App() {
         <Route path="production/work-orders/:id/edit" element={<WorkOrderEdit />} />
         <Route path="production/work-orders/:id/input" element={<WorkOrderProductionInput />} />
         <Route path="production/work-orders/:id/records/:recordId/edit" element={<EditProductionRecord />} />
+        <Route path="production/work-orders/:id/timeline" element={<WorkOrderTimeline />} />
+        <Route path="production/work-orders/:id/breakdown" element={<WorkOrderBreakdown />} />
+        <Route path="production/work-order-status" element={<WorkOrderStatus />} />
         <Route path="production/work-orders/:id/bom-edit" element={<WorkOrderBOMEdit />} />
         <Route path="production/remaining-stock" element={<RemainingStock />} />
         <Route path="production/scheduling" element={<WeeklyProductionPlan />} />
@@ -722,8 +760,11 @@ function App() {
         <Route path="hr/employees/new" element={<EmployeeForm />} />
         <Route path="hr/employees/:id" element={<EmployeeForm />} />
         <Route path="hr/employees/:id/edit" element={<EmployeeForm />} />
-        <Route path="hr/departments" element={<HRDashboard />} />
+        <Route path="hr/departments" element={<Departments />} />
+        <Route path="hr/reports" element={<HRReports />} />
         <Route path="hr/attendance" element={<AttendanceManagement />} />
+        <Route path="hr/attendance-report" element={<AttendanceReport />} />
+        <Route path="hr/absensi" element={<AttendancePage />} />
         <Route path="hr/leaves" element={<LeaveManagement />} />
         <Route path="hr/leaves/new" element={<LeaveRequestForm />} />
         <Route path="hr/attendance/new" element={<AttendanceForm />} />
@@ -827,6 +868,9 @@ function App() {
         
         {/* TV Display */}
         <Route path="tv-display" element={<TVDisplaySelector />} />
+        
+        {/* Notifications */}
+        <Route path="notifications" element={<NotificationsPage />} />
         
         {/* Settings - Admin Only */}
         <Route path="settings" element={<AdminRoute><Settings /></AdminRoute>} />

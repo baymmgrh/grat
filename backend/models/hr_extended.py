@@ -371,8 +371,8 @@ class WorkRoster(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     
     # Week identification
-    week_start_date = db.Column(db.Date, nullable=False, index=True)  # Monday of the week
-    week_end_date = db.Column(db.Date, nullable=False)  # Sunday of the week
+    week_start_date = db.Column(db.Date, nullable=True, index=True)  # Monday of the week
+    week_end_date = db.Column(db.Date, nullable=True)  # Sunday of the week
     week_number = db.Column(db.Integer, nullable=False)  # Week number in year (1-52)
     year = db.Column(db.Integer, nullable=False)
     

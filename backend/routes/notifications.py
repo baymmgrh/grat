@@ -31,7 +31,10 @@ def get_notifications():
                 'message': n.message,
                 'priority': n.priority,
                 'is_read': n.is_read,
-                'created_at': n.created_at.isoformat()
+                'created_at': n.created_at.isoformat(),
+                'action_url': n.action_url,
+                'reference_type': n.reference_type,
+                'reference_id': n.reference_id
             } for n in notifications.items],
             'total': notifications.total,
             'unread_count': Notification.query.filter_by(user_id=user_id, is_read=False, is_dismissed=False).count()
@@ -51,6 +54,21 @@ def mark_as_read(id):
         notification.read_at = datetime.utcnow()
         db.session.commit()
         
+        return jsonify(success_response('api.success')), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@notifications_bp.route('/mark-all-read', methods=['PUT'])
+@jwt_required()
+def mark_all_as_read():
+    try:
+        user_id = get_jwt_identity()
+        Notification.query.filter_by(user_id=user_id, is_read=False).update({
+            'is_read': True,
+            'read_at': datetime.utcnow()
+        })
+        db.session.commit()
         return jsonify(success_response('api.success')), 200
     except Exception as e:
         db.session.rollback()

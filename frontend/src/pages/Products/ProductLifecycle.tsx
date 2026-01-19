@@ -101,127 +101,11 @@ const ProductLifecycle: React.FC = () => {
       setTransitions(transitionsRes.data?.transitions || []);
     } catch (error) {
       console.error('Failed to load lifecycle data:', error);
-      // Set mock data for development
-      setProducts([
-        {
-          product_id: 1,
-          product_name: 'Nonwoven Fabric A',
-          product_code: 'NWF-001',
-          category: 'Nonwoven Fabrics',
-          launch_date: '2023-03-15',
-          current_stage: 'maturity',
-          stage_duration: 180,
-          total_sales: 15600,
-          total_revenue: 234000000,
-          profit_margin: 25.5,
-          market_share: 18.2,
-          growth_rate: 8.5,
-          roi: 145.2,
-          last_updated: '2024-01-15T10:30:00Z'
-        },
-        {
-          product_id: 2,
-          product_name: 'Medical Mask Material',
-          product_code: 'MMM-001',
-          category: 'Medical Products',
-          launch_date: '2023-08-20',
-          current_stage: 'growth',
-          stage_duration: 95,
-          total_sales: 8900,
-          total_revenue: 156000000,
-          profit_margin: 22.8,
-          market_share: 12.5,
-          growth_rate: 35.2,
-          roi: 89.6,
-          last_updated: '2024-01-15T10:30:00Z'
-        },
-        {
-          product_id: 3,
-          product_name: 'FunnelIcon Media Pro',
-          product_code: 'FMP-001',
-          category: 'FunnelIcon Media',
-          launch_date: '2023-11-10',
-          current_stage: 'introduction',
-          stage_duration: 45,
-          total_sales: 2100,
-          total_revenue: 42000000,
-          profit_margin: 18.5,
-          market_share: 3.8,
-          growth_rate: 125.8,
-          roi: 25.4,
-          last_updated: '2024-01-15T10:30:00Z'
-        },
-        {
-          product_id: 4,
-          product_name: 'Legacy Geotextile',
-          product_code: 'LGT-001',
-          category: 'Geotextiles',
-          launch_date: '2021-05-12',
-          current_stage: 'decline',
-          stage_duration: 220,
-          total_sales: 3200,
-          total_revenue: 64000000,
-          profit_margin: 15.2,
-          market_share: 8.9,
-          growth_rate: -12.5,
-          roi: 78.9,
-          last_updated: '2024-01-15T10:30:00Z'
-        },
-        {
-          product_id: 5,
-          product_name: 'Old PP Fabric',
-          product_code: 'OPF-001',
-          category: 'Nonwoven Fabrics',
-          launch_date: '2020-02-28',
-          current_stage: 'discontinued',
-          stage_duration: 365,
-          total_sales: 850,
-          total_revenue: 12750000,
-          profit_margin: 8.5,
-          market_share: 1.2,
-          growth_rate: -45.8,
-          roi: 45.2,
-          last_updated: '2024-01-15T10:30:00Z'
-        }
-      ]);
-      
-      setStageMetrics([
-        { stage: 'Introduction', product_count: 8, total_revenue: 180000000, avg_duration: 65, success_rate: 75.0 },
-        { stage: 'Growth', product_count: 15, total_revenue: 450000000, avg_duration: 120, success_rate: 85.2 },
-        { stage: 'Maturity', product_count: 45, total_revenue: 1200000000, avg_duration: 280, success_rate: 92.5 },
-        { stage: 'Decline', product_count: 12, total_revenue: 180000000, avg_duration: 180, success_rate: 45.8 },
-        { stage: 'Discontinued', product_count: 5, total_revenue: 25000000, avg_duration: 320, success_rate: 20.0 }
-      ]);
-      
-      setTimeline([
-        { date: '2023-07', introduction: 2, growth: 8, maturity: 35, decline: 8, discontinued: 2 },
-        { date: '2023-08', introduction: 3, growth: 12, maturity: 38, decline: 10, discontinued: 2 },
-        { date: '2023-09', introduction: 4, growth: 15, maturity: 40, decline: 8, discontinued: 3 },
-        { date: '2023-10', introduction: 6, growth: 18, maturity: 42, decline: 9, discontinued: 3 },
-        { date: '2023-11', introduction: 8, growth: 15, maturity: 45, decline: 12, discontinued: 4 },
-        { date: '2023-12', introduction: 8, growth: 15, maturity: 45, decline: 12, discontinued: 5 }
-      ]);
-      
-      setTransitions([
-        {
-          product_id: 2,
-          product_name: 'Medical Mask Material',
-          from_stage: 'introduction',
-          to_stage: 'growth',
-          transition_date: '2023-12-15',
-          reason: 'Strong market adoption and sales growth',
-          impact_score: 8.5
-        },
-        {
-          product_id: 4,
-          product_name: 'Legacy Geotextile',
-          from_stage: 'maturity',
-          to_stage: 'decline',
-          transition_date: '2023-11-20',
-          reason: 'Market saturation and new competitor products',
-          impact_score: 6.2
-        }
-      ]);
+      // Show empty state instead of mock data
+      setProducts([]);
+      setStageMetrics([]);
+      setTimeline([]);
+      setTransitions([]);
     } finally {
       setLoading(false);
     }
@@ -266,18 +150,21 @@ const ProductLifecycle: React.FC = () => {
     }).format(amount);
   };
 
-  const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('id-ID').format(num);
+  const formatNumber = (num: number | string | null | undefined) => {
+    const n = Number(num) || 0;
+    return new Intl.NumberFormat('id-ID').format(n);
   };
 
-  const formatPercent = (num: number) => {
-    return `${num.toFixed(1)}%`;
+  const formatPercent = (num: number | string | null | undefined) => {
+    const n = Number(num) || 0;
+    return `${n.toFixed(1)}%`;
   };
 
-  const formatDuration = (days: number) => {
-    if (days < 30) return `${days} days`;
-    if (days < 365) return `${Math.round(days / 30)} months`;
-    return `${Math.round(days / 365)} years`;
+  const formatDuration = (days: number | string | null | undefined) => {
+    const d = Number(days) || 0;
+    if (d < 30) return `${d} days`;
+    if (d < 365) return `${Math.round(d / 30)} months`;
+    return `${Math.round(d / 365)} years`;
   };
 
   const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
@@ -513,10 +400,11 @@ const ProductLifecycle: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <Link
-                      to={`/app/products/${product.product_id}`}
+                      to={`/app/products-v2?view=detail&code=${product.product_code}`}
                       className="text-blue-600 hover:text-blue-900"
+                      title="Lihat detail produk"
                     >
-                      <EyeIcon className="h-4 w-4" />
+                      <EyeIcon className="h-5 w-5" />
                     </Link>
                   </td>
                 </tr>

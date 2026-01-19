@@ -139,6 +139,7 @@ def get_inventory():
         zone_id = request.args.get('zone_id', type=int)
         item_type = request.args.get('item_type')  # 'product', 'material', or None for all
         stock_status = request.args.get('stock_status')  # released, quarantine, reject
+        category_group = request.args.get('category_group')  # packaging, aksesoris, chemical, lainnya
         search = request.args.get('search', '')
         
         query = db.session.query(Inventory).filter(Inventory.is_active == True)
@@ -188,6 +189,36 @@ def get_inventory():
                              )
                          )
         
+        # Filter by category group
+        if category_group:
+            # Category mappings
+            kain_categories = ['main_roll', 'jumbo_roll', 'spunbond', 'meltblown', 'kain', 'nonwoven']
+            packaging_categories = ['packaging', 'carton_box', 'inner_box', 'jerigen', 'botol']
+            aksesoris_categories = ['stc', 'fliptop', 'plastik']
+            chemical_categories = ['parfum', 'chemical']
+            
+            # Join Material if not already joined
+            if not search:
+                query = query.outerjoin(Material, Inventory.material_id == Material.id)
+            
+            if category_group == 'kain':
+                query = query.filter(Material.category.in_(kain_categories))
+            elif category_group == 'packaging':
+                query = query.filter(Material.category.in_(packaging_categories))
+            elif category_group == 'aksesoris':
+                query = query.filter(Material.category.in_(aksesoris_categories))
+            elif category_group == 'chemical':
+                query = query.filter(Material.category.in_(chemical_categories))
+            elif category_group == 'lainnya':
+                all_known = kain_categories + packaging_categories + aksesoris_categories + chemical_categories
+                query = query.filter(
+                    db.or_(
+                        Material.category.notin_(all_known),
+                        Material.category.is_(None),
+                        Inventory.product_id.isnot(None)  # Products go to "lainnya"
+                    )
+                )
+        
         inventory = query.order_by(Inventory.updated_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
         
         inventory_list = []
@@ -213,6 +244,8 @@ def get_inventory():
                     'material_id': i.material_id,
                     'item_code': product.code if product else (material.code if material else 'N/A'),
                     'item_name': product.name if product else (material.name if material else 'N/A'),
+                    'material_type': material.material_type if material else None,
+                    'category': material.category if material else None,
                     'location_id': i.location_id,
                     'location_code': location.location_code if location else 'N/A',
                     'zone_name': location.zone.name if location and location.zone else 'N/A',

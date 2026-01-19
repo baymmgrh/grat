@@ -15,11 +15,13 @@ import {
   Skeleton, CardSkeleton, ChartSkeleton, ListSkeleton, 
   UserCardSkeleton, KPISkeleton 
 } from '../../components/ui/Skeleton';
+import ProductionOutputModal from '../../components/Production/ProductionOutputModal';
 
 const ExecutiveDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState('30');
   const [canViewProfiles, setCanViewProfiles] = useState(false);
+  const [showProductionOutput, setShowProductionOutput] = useState(false);
 
   // Check if current user can view other profiles (admin roles only)
   useEffect(() => {
@@ -115,28 +117,39 @@ const ExecutiveDashboard: React.FC = () => {
   const isLoading = loadingOverview || loadingTrends || loadingScorecard;
 
   return (
-    <div className="space-y-6 bg-slate-50 dark:bg-slate-900 min-h-screen -m-6 p-6">
+    <div className="space-y-6 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 dark:from-slate-900 dark:via-slate-900 dark:to-slate-800 min-h-screen -m-6 p-6">
       {/* Header with Gradient */}
-      <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl p-6 text-white shadow-2xl shadow-indigo-500/25">
+        {/* Animated background shapes */}
+        <div className="absolute inset-0 overflow-hidden">
+          <div className="absolute -top-1/2 -right-1/2 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
+          <div className="absolute -bottom-1/2 -left-1/4 w-72 h-72 bg-purple-400/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+        </div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-white/20 rounded-lg backdrop-blur-sm">
-                <BarChart3 className="w-6 h-6" />
+              <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm border border-white/20 shadow-lg">
+                <BarChart3 className="w-7 h-7" />
               </div>
-              <h1 className="text-2xl md:text-3xl font-bold">Executive Dashboard</h1>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Executive Dashboard</h1>
+                <p className="text-blue-100 text-sm">PT. Gratia Makmur Sentosa</p>
+              </div>
             </div>
-            <div className="text-blue-100 mt-2 text-sm md:text-base">
+            </div>
+          <div className="mt-3 flex items-center gap-2 text-blue-100 text-sm">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-white/10 rounded-full backdrop-blur-sm">
+              <Activity className="w-3.5 h-3.5 animate-pulse" />
               {isLoading ? (
-                <Skeleton className="h-4 w-64 bg-white/20" />
+                <Skeleton className="h-3 w-32 bg-white/20" />
               ) : (
-                <span>Real-time business performance • {overview?.period?.start_date} - {overview?.period?.end_date}</span>
+                <span>Live • {overview?.period?.start_date} - {overview?.period?.end_date}</span>
               )}
             </div>
           </div>
           <div className="flex items-center gap-3">
             <select 
-              className="px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white text-sm font-medium backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-white/30 transition-all"
+              className="px-4 py-2.5 bg-white/10 border border-white/20 rounded-xl text-white text-sm font-medium backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-white/30 transition-all cursor-pointer hover:bg-white/20"
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
             >
@@ -146,7 +159,8 @@ const ExecutiveDashboard: React.FC = () => {
             </select>
             <button 
               onClick={() => refetchOverview()}
-              className="p-2.5 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 transition-all"
+              className="p-2.5 bg-white/10 border border-white/20 rounded-xl hover:bg-white/20 hover:scale-105 active:scale-95 transition-all"
+              title="Refresh data"
             >
               <RefreshCw className={`w-5 h-5 ${loadingOverview ? 'animate-spin' : ''}`} />
             </button>
@@ -179,127 +193,145 @@ const ExecutiveDashboard: React.FC = () => {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Revenue Card */}
         {loadingOverview ? <CardSkeleton /> : (
-          <div className="group bg-white dark:bg-slate-800 rounded-xl shadow-sm p-5 border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Revenue</p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                  {formatCurrency(overview?.financial?.revenue || 0)}
-                </h3>
+          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-xl p-6 border border-slate-200/80 dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-600 transition-all duration-500 overflow-hidden">
+            {/* Decorative gradient */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/10 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div className="relative">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Total Revenue</p>
+                  <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">
+                    {formatCurrency(overview?.financial?.revenue || 0)}
+                  </h3>
+                </div>
+                <div className="p-3.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg shadow-blue-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                  <DollarSign className="w-6 h-6 text-white" />
+                </div>
               </div>
-              <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
-                <DollarSign className="w-5 h-5 text-white" />
+              <div className="mt-5 flex items-center gap-2">
+                <div className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${
+                  (overview?.financial?.revenue_growth || 0) >= 0 
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
+                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                }`}>
+                  {(overview?.financial?.revenue_growth || 0) >= 0 ? (
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                  )}
+                  {Math.abs(overview?.financial?.revenue_growth || 0).toFixed(1)}%
+                </div>
+                <span className="text-xs text-slate-500 dark:text-slate-400">vs last period</span>
               </div>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${
-                (overview?.financial?.revenue_growth || 0) >= 0 
-                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' 
-                  : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-              }`}>
-                {(overview?.financial?.revenue_growth || 0) >= 0 ? (
-                  <ArrowUpRight className="w-3 h-3" />
-                ) : (
-                  <ArrowDownRight className="w-3 h-3" />
-                )}
-                {Math.abs(overview?.financial?.revenue_growth || 0).toFixed(1)}%
-              </div>
-              <span className="text-xs text-slate-500 dark:text-slate-400">vs last period</span>
             </div>
           </div>
         )}
 
         {/* Sales Orders Card */}
         {loadingOverview ? <CardSkeleton /> : (
-          <div className="group bg-white dark:bg-slate-800 rounded-xl shadow-sm p-5 border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-600 transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Sales Orders</p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                  {overview?.sales?.total_orders || 0}
-                </h3>
+          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-xl p-6 border border-slate-200/80 dark:border-slate-700 hover:border-emerald-200 dark:hover:border-emerald-600 transition-all duration-500 overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-500/10 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div className="relative">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Sales Orders</p>
+                  <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">
+                    {overview?.sales?.total_orders || 0}
+                  </h3>
+                </div>
+                <div className="p-3.5 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl shadow-lg shadow-emerald-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                  <ShoppingCart className="w-6 h-6 text-white" />
+                </div>
               </div>
-              <div className="p-3 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform">
-                <ShoppingCart className="w-5 h-5 text-white" />
+              <div className="mt-5 flex items-center gap-2">
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {overview?.sales?.fulfillment_rate || 0}%
+                </div>
+                <span className="text-xs text-slate-500 dark:text-slate-400">fulfillment rate</span>
               </div>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
-                <CheckCircle className="w-3 h-3" />
-                {overview?.sales?.fulfillment_rate || 0}%
-              </div>
-              <span className="text-xs text-slate-500 dark:text-slate-400">fulfillment rate</span>
             </div>
           </div>
         )}
 
-        {/* Production Output Card */}
+        {/* Production Output Card - Clickable */}
         {loadingOverview ? <CardSkeleton /> : (
-          <div className="group bg-white dark:bg-slate-800 rounded-xl shadow-sm p-5 border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-violet-300 dark:hover:border-violet-600 transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Production Output</p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                  {(overview?.production?.output || 0).toLocaleString()}
-                </h3>
+          <div 
+            className="group relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-xl p-6 border border-slate-200/80 dark:border-slate-700 hover:border-violet-200 dark:hover:border-violet-600 transition-all duration-500 overflow-hidden cursor-pointer"
+            onClick={() => setShowProductionOutput(true)}
+            title="Klik untuk lihat detail per mesin & produk"
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-violet-500/10 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div className="relative">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Production Output</p>
+                  <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">
+                    {(overview?.production?.output || 0).toLocaleString()}
+                  </h3>
+                </div>
+                <div className="p-3.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-2xl shadow-lg shadow-violet-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                  <Factory className="w-6 h-6 text-white" />
+                </div>
               </div>
-              <div className="p-3 bg-gradient-to-br from-violet-500 to-violet-600 rounded-xl shadow-lg shadow-violet-500/30 group-hover:scale-110 transition-transform">
-                <Factory className="w-5 h-5 text-white" />
+              <div className="mt-5 flex items-center gap-2">
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+                  <Zap className="w-3.5 h-3.5" />
+                  {overview?.production?.avg_oee || 0}%
+                </div>
+                <span className="text-xs text-slate-500 dark:text-slate-400">avg OEE</span>
               </div>
-            </div>
-            <div className="mt-4 flex items-center gap-2">
-              <div className="flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
-                <Zap className="w-3 h-3" />
-                {overview?.production?.avg_oee || 0}%
-              </div>
-              <span className="text-xs text-slate-500 dark:text-slate-400">avg OEE</span>
+              <p className="text-xs text-violet-500 mt-2">Klik untuk detail →</p>
             </div>
           </div>
         )}
 
         {/* Quality Pass Rate Card */}
         {loadingOverview ? <CardSkeleton /> : (
-          <div className="group bg-white dark:bg-slate-800 rounded-xl shadow-sm p-5 border border-slate-200 dark:border-slate-700 hover:shadow-md hover:border-amber-300 dark:hover:border-amber-600 transition-all duration-300">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Quality Pass Rate</p>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                  {overview?.quality?.pass_rate || 0}%
-                </h3>
+          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-xl p-6 border border-slate-200/80 dark:border-slate-700 hover:border-amber-200 dark:hover:border-amber-600 transition-all duration-500 overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-500/10 to-transparent rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div className="relative">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Quality Pass Rate</p>
+                  <h3 className="text-3xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">
+                    {overview?.quality?.pass_rate || 0}%
+                  </h3>
+                </div>
+                <div className="p-3.5 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-lg shadow-amber-500/30 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
+                  <BadgeCheck className="w-6 h-6 text-white" />
+                </div>
               </div>
-              <div className="p-3 bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
-                <BadgeCheck className="w-5 h-5 text-white" />
+              <div className="mt-5">
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className="bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 h-2.5 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${overview?.quality?.pass_rate || 0}%` }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+                  {overview?.quality?.passed_inspections || 0} / {overview?.quality?.total_inspections || 0} inspections
+                </p>
               </div>
-            </div>
-            <div className="mt-4">
-              <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-amber-400 to-amber-500 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${overview?.quality?.pass_rate || 0}%` }}
-                />
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-                {overview?.quality?.passed_inspections || 0} / {overview?.quality?.total_inspections || 0} inspections
-              </p>
             </div>
           </div>
         )}
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Revenue Trend */}
         {loadingTrends ? <ChartSkeleton /> : (
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-6 border border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg p-6 border border-slate-200/80 dark:border-slate-700 transition-all duration-300">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Revenue Trend</h3>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Revenue Trend</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Monthly revenue performance</p>
               </div>
-              <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <div className="p-2.5 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl">
                 <TrendUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
@@ -326,13 +358,13 @@ const ExecutiveDashboard: React.FC = () => {
 
         {/* Production & OEE Trend */}
         {loadingTrends ? <ChartSkeleton /> : (
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-6 border border-slate-200 dark:border-slate-700">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg p-6 border border-slate-200/80 dark:border-slate-700 transition-all duration-300">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Production & OEE</h3>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Production & OEE</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">Output vs efficiency</p>
               </div>
-              <div className="p-2 bg-violet-100 dark:bg-violet-900/30 rounded-lg">
+              <div className="p-2.5 bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 rounded-xl">
                 <Factory className="w-5 h-5 text-violet-600 dark:text-violet-400" />
               </div>
             </div>
@@ -356,10 +388,10 @@ const ExecutiveDashboard: React.FC = () => {
 
 
       {/* Top Performers */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Top Customers */}
         {loadingPerformers ? <ListSkeleton rows={5} /> : (
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg border border-slate-200/80 dark:border-slate-700 overflow-hidden transition-all duration-300">
             <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -399,7 +431,7 @@ const ExecutiveDashboard: React.FC = () => {
 
         {/* Top Products */}
         {loadingPerformers ? <ListSkeleton rows={5} /> : (
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg border border-slate-200/80 dark:border-slate-700 overflow-hidden transition-all duration-300">
             <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
@@ -439,10 +471,10 @@ const ExecutiveDashboard: React.FC = () => {
       </div>
 
       {/* Financial Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-5 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div className="group bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg p-6 border border-slate-200/80 dark:border-slate-700 transition-all duration-300">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 rounded-xl group-hover:scale-110 transition-transform">
               <Wallet className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400">Cash Collected</h4>
@@ -461,9 +493,9 @@ const ExecutiveDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-5 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
+        <div className="group bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg p-6 border border-slate-200/80 dark:border-slate-700 transition-all duration-300">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 rounded-xl group-hover:scale-110 transition-transform">
               <CreditCard className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             </div>
             <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400">Outstanding AR</h4>
@@ -471,12 +503,12 @@ const ExecutiveDashboard: React.FC = () => {
           <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
             {formatCurrency(overview?.financial?.outstanding_ar || 0)}
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">Accounts Receivable</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">Accounts Receivable</p>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-5 border border-slate-200 dark:border-slate-700">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-violet-100 dark:bg-violet-900/30 rounded-lg">
+        <div className="group bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg p-6 border border-slate-200/80 dark:border-slate-700 transition-all duration-300">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2.5 bg-gradient-to-br from-violet-100 to-purple-100 dark:from-violet-900/30 dark:to-purple-900/30 rounded-xl group-hover:scale-110 transition-transform">
               <Boxes className="w-5 h-5 text-violet-600 dark:text-violet-400" />
             </div>
             <h4 className="text-sm font-medium text-slate-600 dark:text-slate-400">Inventory Value</h4>
@@ -484,21 +516,21 @@ const ExecutiveDashboard: React.FC = () => {
           <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">
             {formatCurrency(overview?.inventory?.total_value || 0)}
           </p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
-            <span className="text-amber-500 font-medium">{overview?.inventory?.low_stock_items || 0}</span> low stock items
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-3">
+            <span className="text-amber-500 font-semibold">{overview?.inventory?.low_stock_items || 0}</span> low stock items
           </p>
         </div>
       </div>
 
       {/* Active Users Section */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-6 border border-slate-200 dark:border-slate-700">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm hover:shadow-lg p-6 border border-slate-200/80 dark:border-slate-700 transition-all duration-300">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+            <div className="p-2.5 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl">
               <Users className="w-5 h-5 text-blue-600 dark:text-blue-400" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Active Users</h3>
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Active Users</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">Real-time user activity</p>
             </div>
           </div>
@@ -603,6 +635,13 @@ const ExecutiveDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Production Output Detail Modal */}
+      <ProductionOutputModal
+        isOpen={showProductionOutput}
+        onClose={() => setShowProductionOutput(false)}
+        days={parseInt(dateRange)}
+      />
     </div>
   );
 };

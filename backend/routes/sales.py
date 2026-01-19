@@ -541,20 +541,23 @@ def create_order():
             
             db.session.commit()
             
-            # CREATE NOTIFICATION: Sales Order Created
+            # CREATE NOTIFICATION: Sales Order Created - Send to all active users
             try:
-                notification = Notification(
-                    user_id=user_id,
-                    notification_type='success',
-                    category='sales',
-                    title='Sales Order Created',
-                    message=f'Sales Order {order_number} created successfully for {order.customer.company_name if order.customer else "customer"}',
-                    reference_type='sales_order',
-                    reference_id=order.id,
-                    priority='normal',
-                    action_url=f'/app/sales/orders/{order.id}'
-                )
-                db.session.add(notification)
+                from models.user import User
+                all_users = User.query.filter(User.is_active == True).all()
+                for u in all_users:
+                    notification = Notification(
+                        user_id=u.id,
+                        notification_type='success',
+                        category='sales',
+                        title='Sales Order Created',
+                        message=f'Sales Order {order_number} created successfully for {order.customer.company_name if order.customer else "customer"}',
+                        reference_type='sales_order',
+                        reference_id=order.id,
+                        priority='normal',
+                        action_url=f'/app/sales/orders/{order.id}'
+                    )
+                    db.session.add(notification)
                 db.session.commit()
             except Exception as notif_error:
                 print(f"Notification creation failed: {notif_error}")
@@ -673,38 +676,41 @@ def confirm_order(id):
         
         db.session.commit()
         
-        # CREATE NOTIFICATION: Sales Order Confirmed
+        # CREATE NOTIFICATION: Sales Order Confirmed - Send to all active users
         try:
-            notification = Notification(
-                user_id=user_id,
-                notification_type='success',
-                category='sales',
-                title='Sales Order Confirmed',
-                message=f'Sales Order {order.order_number} confirmed successfully',
-                reference_type='sales_order',
-                reference_id=order.id,
-                priority='high',
-                action_url=f'/app/sales/orders/{order.id}'
-            )
-            db.session.add(notification)
-            
-            # If inventory warnings, create alert notification
-            if inventory_warnings:
-                warning_msg = f"Sales Order {order.order_number} confirmed with inventory shortages: "
-                warning_msg += ", ".join([f"{w['product_name']} (shortage: {w['shortage']})" for w in inventory_warnings[:3]])
-                
-                alert_notification = Notification(
-                    user_id=user_id,
-                    notification_type='warning',
-                    category='inventory',
-                    title='Inventory Shortage Alert',
-                    message=warning_msg,
+            from models.user import User
+            all_users = User.query.filter(User.is_active == True).all()
+            for u in all_users:
+                notification = Notification(
+                    user_id=u.id,
+                    notification_type='success',
+                    category='sales',
+                    title='Sales Order Confirmed',
+                    message=f'Sales Order {order.order_number} confirmed successfully',
                     reference_type='sales_order',
                     reference_id=order.id,
                     priority='high',
-                    action_url=f'/app/warehouse/inventory'
+                    action_url=f'/app/sales/orders/{order.id}'
                 )
-                db.session.add(alert_notification)
+                db.session.add(notification)
+                
+                # If inventory warnings, create alert notification for all users
+                if inventory_warnings:
+                    warning_msg = f"Sales Order {order.order_number} confirmed with inventory shortages: "
+                    warning_msg += ", ".join([f"{w['product_name']} (shortage: {w['shortage']})" for w in inventory_warnings[:3]])
+                    
+                    alert_notification = Notification(
+                        user_id=u.id,
+                        notification_type='warning',
+                        category='inventory',
+                        title='Inventory Shortage Alert',
+                        message=warning_msg,
+                        reference_type='sales_order',
+                        reference_id=order.id,
+                        priority='high',
+                        action_url=f'/app/warehouse/inventory'
+                    )
+                    db.session.add(alert_notification)
             
             db.session.commit()
         except Exception as notif_error:

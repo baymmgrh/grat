@@ -421,6 +421,15 @@ const SystemOverviewEnhanced: React.FC = () => {
                 {/* Language Switcher */}
                 <LanguageSwitcher showLabel={false} className="text-white" />
                 
+                {/* Attendance Button */}
+                <Link
+                  to="/absensi"
+                  className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2"
+                >
+                  <ClockIcon className="w-5 h-5" />
+                  Absensi
+                </Link>
+                
                 {/* Login Button */}
                 <Link
                   to="/login"

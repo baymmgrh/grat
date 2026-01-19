@@ -116,8 +116,8 @@ const [batchNumber, setBatchNumber] = useState('')
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">🔍 Batch Traceability</h1>
-          <p className="text-gray-600 mt-1">Track product batches and production history</p>
+          <h1 className="text-3xl font-bold text-gray-900">🔍 Traceability</h1>
+          <p className="text-gray-600 mt-1">Track work orders and production history</p>
         </div>
       </div>
 
@@ -126,12 +126,12 @@ const [batchNumber, setBatchNumber] = useState('')
         <div className="flex items-center gap-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Batch Number
+              Work Order / Batch Number
             </label>
             <div className="relative">
               <input
                 type="text"
-                placeholder="Enter batch number to trace..."
+                placeholder="Masukkan nomor WO atau batch (contoh: WO-001)..."
                 value={batchNumber}
                 onChange={(e) => setBatchNumber(e.target.value)}
                 onKeyPress={handleKeyPress}
@@ -408,19 +408,19 @@ const [batchNumber, setBatchNumber] = useState('')
       {!traceData && !loading && !error && (
         <div className="card p-12 text-center">
           <DocumentMagnifyingGlassIcon className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Enter a batch number to start tracing</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Masukkan nomor Work Order untuk mulai tracking</h3>
           <p className="text-gray-500 mb-6">
-            Search for any batch number to view its complete production history, quality data, and traceability information.
+            Cari dengan nomor WO (contoh: WO-001) atau batch number untuk melihat histori produksi lengkap.
           </p>
           <div className="max-w-md mx-auto">
             <div className="bg-gray-50 rounded-lg p-4 text-left">
-              <h4 className="font-medium text-gray-900 mb-2">What you'll see:</h4>
+              <h4 className="font-medium text-gray-900 mb-2">Yang akan ditampilkan:</h4>
               <ul className="text-sm text-gray-600 space-y-1">
-                <li>• Work order details and timeline</li>
-                <li>• Machine and operator information</li>
-                <li>• Production quantities and quality metrics</li>
-                <li>• Downtime and efficiency data</li>
-                <li>• Complete production history</li>
+                <li>• Detail work order dan timeline</li>
+                <li>• Informasi mesin dan operator</li>
+                <li>• Jumlah produksi dan metrik kualitas</li>
+                <li>• Data downtime dan efisiensi</li>
+                <li>• Histori produksi lengkap</li>
               </ul>
             </div>
           </div>

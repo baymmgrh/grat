@@ -1,11 +1,27 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db, Employee, Department, ShiftSchedule, Attendance, Leave, EmployeeRoster
+from models import db, Employee, Department, ShiftSchedule, Attendance, Leave, EmployeeRoster, Role
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime
 
 hr_bp = Blueprint('hr', __name__)
+
+@hr_bp.route('/positions', methods=['GET'])
+@jwt_required()
+def get_positions():
+    """Get all roles/positions for employee dropdown"""
+    try:
+        roles = Role.query.filter_by(is_active=True).order_by(Role.name).all()
+        return jsonify({
+            'positions': [{
+                'id': r.id,
+                'name': r.name,
+                'description': r.description
+            } for r in roles]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @hr_bp.route('/employees', methods=['GET'])
 @jwt_required()

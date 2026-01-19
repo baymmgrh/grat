@@ -7,6 +7,7 @@ from flask import Blueprint, request, jsonify, send_file, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, Product
 from models.product import ProductPackaging
+from models.product_new_schema import ProductNew
 from models.production import WorkOrder, BillOfMaterials
 from datetime import datetime, timedelta
 import json
@@ -88,7 +89,7 @@ class MonthlySchedule(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     year = db.Column(db.Integer, nullable=False)
     month = db.Column(db.Integer, nullable=False)  # 1-12
-    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    product_id = db.Column(db.Integer, nullable=False)  # References products_new.id
     machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
     
     # Target quantities
@@ -111,7 +112,6 @@ class MonthlySchedule(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    product = db.relationship('Product', backref='monthly_schedules')
     machine = db.relationship('Machine', backref='monthly_schedules')
     
     __table_args__ = (
@@ -119,10 +119,19 @@ class MonthlySchedule(db.Model):
     )
     
     def to_dict(self):
-        # Get pack per carton from Product Packaging
+        # Lookup ProductNew directly using raw SQL to avoid model column mismatch
+        product_data = db.session.execute(
+            db.text("SELECT kode_produk, nama_produk, pack_per_karton FROM products_new WHERE id = :id"),
+            {'id': self.product_id}
+        ).fetchone()
+        
         pack_per_ctn = 0
-        if self.product and self.product.packaging:
-            pack_per_ctn = self.product.packaging.packs_per_karton or 0
+        product_code = None
+        product_name = None
+        if product_data:
+            product_code = product_data[0]
+            product_name = product_data[1]
+            pack_per_ctn = product_data[2] or 0
         
         return {
             'id': self.id,
@@ -131,8 +140,8 @@ class MonthlySchedule(db.Model):
             'month_name': ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
                           'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][self.month],
             'product_id': self.product_id,
-            'product_code': self.product.code if self.product else None,
-            'product_name': self.product.name if self.product else None,
+            'product_code': product_code,
+            'product_name': product_name,
             'machine_id': self.machine_id,
             'machine_code': self.machine.code if self.machine else None,
             'machine_name': self.machine.name if self.machine else None,

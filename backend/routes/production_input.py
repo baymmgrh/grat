@@ -22,11 +22,12 @@ def get_shift_productions():
     try:
         # Query parameters
         page = request.args.get('page', 1, type=int)
-        per_page = request.args.get('per_page', 20, type=int)
+        per_page = request.args.get('per_page', 100, type=int)
         production_date = request.args.get('date')
         date_from = request.args.get('date_from')
         date_to = request.args.get('date_to')
         machine_id = request.args.get('machine_id', type=int)
+        work_order_id = request.args.get('work_order_id', type=int)
         shift = request.args.get('shift')
         
         # Build query
@@ -40,6 +41,8 @@ def get_shift_productions():
             query = query.filter(ShiftProduction.production_date <= date_to)
         if machine_id:
             query = query.filter(ShiftProduction.machine_id == machine_id)
+        if work_order_id:
+            query = query.filter(ShiftProduction.work_order_id == work_order_id)
         if shift:
             query = query.filter(ShiftProduction.shift == shift)
         
@@ -94,10 +97,24 @@ def get_shift_productions():
                 'efficiency_rate': float(prod.efficiency_rate or 0),
                 'base_efficiency': float(prod.base_efficiency or 0),
                 'oee_score': float(prod.oee_score or 0),
-                'operator': prod.operator.name if prod.operator else None,
+                # New time fields
+                'machine_speed': prod.machine_speed or 0,
+                'average_time': prod.planned_runtime or 510,
+                'runtime': prod.actual_runtime or 0,
+                'waktu_tercatat': (prod.actual_runtime or 0) + (prod.downtime_minutes or 0),
+                'waktu_tidak_tercatat': max(0, (prod.planned_runtime or 510) - (prod.actual_runtime or 0) - (prod.downtime_minutes or 0)),
+                'rework_quantity': float(prod.rework_quantity or 0),
+                # Work order info
+                'work_order_id': prod.work_order_id,
+                'work_order': {
+                    'id': prod.work_order.id,
+                    'wo_number': prod.work_order.wo_number
+                } if prod.work_order else None,
+                'operator_name': prod.operator.name if prod.operator else None,
                 'supervisor': prod.supervisor.name if prod.supervisor else None,
                 'status': prod.status,
                 'notes': prod.notes,
+                'issues': prod.issues,
                 'created_at': prod.created_at.isoformat()
             })
         

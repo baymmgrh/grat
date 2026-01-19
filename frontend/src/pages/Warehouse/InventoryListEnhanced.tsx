@@ -22,6 +22,8 @@ interface InventoryItem {
   material_id: number | null
   item_code: string
   item_name: string
+  material_type: string | null
+  category: string | null
   location_id: number
   location_code: string
   zone_name: string
@@ -59,6 +61,7 @@ export default function InventoryListEnhanced() {
   const [itemType, setItemType] = useState<string>('')
   const [zoneId, setZoneId] = useState<string>('')
   const [stockStatus, setStockStatus] = useState<string>('')
+  const [categoryGroup, setCategoryGroup] = useState<string>('')
   const [showFilters, setShowFilters] = useState(false)
 
   // Summary
@@ -75,7 +78,7 @@ export default function InventoryListEnhanced() {
 
   useEffect(() => {
     fetchInventory()
-  }, [currentPage, search, itemType, zoneId, stockStatus])
+  }, [currentPage, search, itemType, zoneId, stockStatus, categoryGroup])
 
   const fetchZones = async () => {
     try {
@@ -98,6 +101,7 @@ export default function InventoryListEnhanced() {
       if (itemType) params.append('item_type', itemType)
       if (zoneId) params.append('zone_id', zoneId)
       if (stockStatus) params.append('stock_status', stockStatus)
+      if (categoryGroup) params.append('category_group', categoryGroup)
 
       const response = await axiosInstance.get(`/api/warehouse/inventory?${params}`)
       setInventory(response.data.inventory || [])
@@ -169,6 +173,61 @@ export default function InventoryListEnhanced() {
         Material
       </span>
     )
+  }
+
+  // Category group mapping
+  const getCategoryGroup = (category: string): string => {
+    const kainCategories = ['main_roll', 'jumbo_roll', 'spunbond', 'meltblown', 'kain', 'nonwoven']
+    const packagingCategories = ['packaging', 'carton_box', 'inner_box', 'jerigen', 'botol']
+    const aksesorisCategories = ['stc', 'fliptop', 'plastik']
+    const chemicalCategories = ['parfum', 'chemical']
+    
+    const catLower = (category || '').toLowerCase()
+    if (kainCategories.includes(catLower)) return 'Kain'
+    if (packagingCategories.includes(catLower)) return 'Packaging'
+    if (aksesorisCategories.includes(catLower)) return 'Aksesoris'
+    if (chemicalCategories.includes(catLower)) return 'Chemical'
+    return 'Lainnya'
+  }
+
+  const getCategoryColor = (category: string) => {
+    const group = getCategoryGroup(category)
+    switch (group) {
+      case 'Kain':
+        return 'bg-blue-100 text-blue-800'
+      case 'Packaging':
+        return 'bg-green-100 text-green-800'
+      case 'Aksesoris':
+        return 'bg-purple-100 text-purple-800'
+      case 'Chemical':
+        return 'bg-orange-100 text-orange-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getCategoryLabel = (category: string) => {
+    const labels: { [key: string]: string } = {
+      main_roll: 'Main Roll',
+      jumbo_roll: 'Jumbo Roll',
+      spunbond: 'Spunbond',
+      meltblown: 'Melt Blown',
+      kain: 'Kain',
+      nonwoven: 'Nonwoven',
+      packaging: 'Packaging',
+      carton_box: 'Carton Box',
+      inner_box: 'Inner Box',
+      jerigen: 'Jerigen',
+      botol: 'Botol',
+      stc: 'STC',
+      fliptop: 'Fliptop',
+      plastik: 'Plastik',
+      parfum: 'Parfum',
+      chemical: 'Chemical',
+      tissue: 'Tissue',
+      other_raw: 'Raw Material'
+    }
+    return labels[category?.toLowerCase()] || category || '-'
   }
 
   const handleExport = async () => {
@@ -283,7 +342,7 @@ export default function InventoryListEnhanced() {
         </div>
 
         {showFilters && (
-          <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Tipe Item</label>
               <select
@@ -294,6 +353,21 @@ export default function InventoryListEnhanced() {
                 <option value="">Semua</option>
                 <option value="product">Produk</option>
                 <option value="material">Material</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+              <select
+                value={categoryGroup}
+                onChange={(e) => setCategoryGroup(e.target.value)}
+                className="input w-full"
+              >
+                <option value="">Semua Kategori</option>
+                <option value="kain">🔵 Kain</option>
+                <option value="packaging">🟢 Packaging</option>
+                <option value="aksesoris">🟣 Aksesoris</option>
+                <option value="chemical">🟠 Chemical</option>
+                <option value="lainnya">⚪ Lainnya</option>
               </select>
             </div>
             <div>
@@ -353,6 +427,7 @@ export default function InventoryListEnhanced() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipe</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kode</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kategori</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lokasi</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stok</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tersedia</th>
@@ -374,6 +449,18 @@ export default function InventoryListEnhanced() {
                       <td className="px-4 py-3">
                         <div className="text-sm text-gray-900">{item.item_name}</div>
                         <div className="text-xs text-gray-500">{item.uom}</div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {item.category ? (
+                          <div className="flex flex-col gap-1">
+                            <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${getCategoryColor(item.category)}`}>
+                              {getCategoryGroup(item.category)}
+                            </span>
+                            <span className="text-xs text-gray-500">{getCategoryLabel(item.category)}</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{item.location_code}</div>

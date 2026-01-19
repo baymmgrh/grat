@@ -5,9 +5,15 @@ export const SESSION_EXPIRED_EVENT = 'session-expired';
 
 // Get the current host for LAN access - always use the same hostname as frontend
 const getBaseURL = () => {
-  // Use the same hostname that the user is accessing the frontend from
-  // This ensures LAN users connect to the correct server
-  return `http://${window.location.hostname}:5000`;
+  const hostname = window.location.hostname;
+  
+  // Production domain - use HTTPS API subdomain
+  if (hostname === 'erp.graterp.my.id' || hostname.endsWith('.graterp.my.id')) {
+    return 'https://api.graterp.my.id';
+  }
+  
+  // Local development - use same hostname with port 5000
+  return `http://${hostname}:5000`;
 };
 
 const axiosInstance = axios.create({
@@ -84,5 +90,14 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// Public axios instance (no auth, no session handling)
+export const publicApi = axios.create({
+  baseURL: getBaseURL(),
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 export default axiosInstance;

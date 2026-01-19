@@ -21,6 +21,7 @@ import { useState, useEffect } from 'react'
 import axiosInstance from '../../utils/axiosConfig'
 import LoadingSpinner from '../../components/Common/LoadingSpinner'
 import ActivityLogModal from '../../components/ActivityLogModal'
+import ProductionOutputModal from '../../components/Production/ProductionOutputModal'
 interface WorkOrder {
   id: number
   wo_number: string
@@ -38,6 +39,8 @@ interface WorkOrder {
   scheduled_end_date?: string
   actual_start_date?: string
   actual_end_date?: string
+  last_input_date?: string
+  last_input_by?: string
   created_at: string
 }
 
@@ -55,6 +58,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
     search: ''
   })
   const [showActivityLog, setShowActivityLog] = useState(false)
+  const [showProductionOutput, setShowProductionOutput] = useState(false)
 
   useEffect(() => {
     loadWorkOrders()
@@ -235,7 +239,11 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
           </div>
         </div>
         
-        <div className="card p-6">
+        <div 
+          className="card p-6 cursor-pointer hover:shadow-lg hover:border-purple-300 transition-all"
+          onClick={() => setShowProductionOutput(true)}
+          title="Klik untuk lihat detail per mesin & produk"
+        >
           <div className="flex items-center">
             <div className="bg-purple-500 p-3 rounded-lg">
               <ChartBarIcon className="h-6 w-6 text-white" />
@@ -245,6 +253,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
               <p className="text-2xl font-bold text-gray-900">
                 {workOrders.reduce((sum, wo) => sum + wo.quantity_produced, 0).toLocaleString()}
               </p>
+              <p className="text-xs text-purple-500 mt-1">Klik untuk detail →</p>
             </div>
           </div>
         </div>
@@ -323,20 +332,21 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Tanggal
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Work Order
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('production.product')}</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('production.product')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Quantity & Progress
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('production.machine')}</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('production.machine')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status & Priority
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -346,7 +356,25 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
                 
                 return (
                   <tr key={wo.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    {/* Tanggal - First Column (WO start date) */}
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {wo.start_date ? (
+                          <div className="font-medium">
+                            {new Date(wo.start_date).toLocaleDateString('id-ID', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 italic text-xs">-</span>
+                        )}
+                      </div>
+                    </td>
+                    
+                    {/* Work Order */}
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div>
                         <Link 
                           to={`/app/production/work-orders/${wo.id}`}
@@ -363,14 +391,14 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
                       </div>
                     </td>
                     
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{wo.product_name}</div>
                       {wo.supervisor_name && (
                         <div className="text-xs text-gray-500">{wo.supervisor_name}</div>
                       )}
                     </td>
                     
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         <div className="font-medium">
                           {wo.quantity_produced.toLocaleString()} / {wo.quantity.toLocaleString()}
@@ -385,7 +413,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
                       </div>
                     </td>
                     
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       {wo.machine_name ? (
                         <div className="flex items-center">
                           <CogIcon className="h-4 w-4 text-gray-400 mr-2" />
@@ -396,7 +424,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
                       )}
                     </td>
                     
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-4 whitespace-nowrap">
                       <div className="space-y-1">
                         <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(wo.status)}`}>
                           <StatusIcon className="h-3 w-3" />
@@ -408,22 +436,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
                       </div>
                     </td>
                     
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {wo.scheduled_start_date && wo.scheduled_end_date ? (
-                          <>
-                            <div>{new Date(wo.scheduled_start_date).toLocaleDateString()}</div>
-                            <div className="text-xs text-gray-500">
-                              to {new Date(wo.scheduled_end_date).toLocaleDateString()}
-                            </div>
-                          </>
-                        ) : (
-                          <span className="text-gray-400">Not scheduled</span>
-                        )}
-                      </div>
-                    </td>
-                    
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-1">
                         {/* View Detail */}
                         <Link
@@ -535,6 +548,13 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
         onClose={() => setShowActivityLog(false)}
         resourceType="work_order"
         title="Log Aktivitas Work Order"
+      />
+
+      {/* Production Output Detail Modal */}
+      <ProductionOutputModal
+        isOpen={showProductionOutput}
+        onClose={() => setShowProductionOutput(false)}
+        days={30}
       />
     </div>
   )

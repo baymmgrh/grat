@@ -45,6 +45,7 @@ def get_materials():
                 'code': m.code,
                 'name': m.name,
                 'material_type': m.material_type,
+                'category': m.category,
                 'description': m.description,
                 'unit_of_measure': m.primary_uom,
                 'cost_per_unit': float(m.cost_per_unit) if m.cost_per_unit else 0,

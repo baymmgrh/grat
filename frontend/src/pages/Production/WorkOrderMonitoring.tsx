@@ -27,6 +27,9 @@ interface WorkOrder {
   quantity_produced: number;
   quantity_good: number;
   quantity_scrap: number;
+  quantity_rework: number;
+  setting_sticker: number;
+  setting_packaging: number;
   progress_percentage: number;
   scheduled_start: string;
   scheduled_end: string;

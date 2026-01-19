@@ -9,10 +9,40 @@ from models import db
 from models.production import WorkOrder, ProductionApproval
 from models.wip_job_costing import WIPBatch, JobCostEntry
 from models.user import User
+from models.notification import Notification
 from utils.helpers import generate_number
 from utils.i18n import success_response, error_response
+from sqlalchemy import or_
 
 production_approval_bp = Blueprint('production_approval', __name__)
+
+def create_approval_notification(user_ids, notification_type, title, message, reference_type=None, reference_id=None, priority='normal', action_url=None):
+    """Create notifications for approval events"""
+    try:
+        for user_id in user_ids:
+            notification = Notification(
+                user_id=user_id,
+                notification_type=notification_type,
+                category='production',
+                title=title,
+                message=message,
+                reference_type=reference_type,
+                reference_id=reference_id,
+                priority=priority,
+                action_url=action_url
+            )
+            db.session.add(notification)
+        db.session.commit()
+    except Exception as e:
+        print(f"Error creating approval notification: {e}")
+
+def get_manager_user_ids():
+    """Get user IDs of all active users for notifications"""
+    try:
+        users = User.query.filter(User.is_active == True).all()
+        return [u.id for u in users]
+    except:
+        return []
 
 
 @production_approval_bp.route('/production-approvals', methods=['GET'])
@@ -600,6 +630,24 @@ def approve_production(id):
         
         db.session.commit()
         
+        # Send notification for approval
+        try:
+            wo = approval.work_order
+            product_name = wo.product.name if wo and wo.product else 'Unknown'
+            manager_ids = get_manager_user_ids()
+            create_approval_notification(
+                user_ids=manager_ids,
+                notification_type='success',
+                title='Approval Disetujui',
+                message=f'Approval {approval.approval_number} untuk {wo.wo_number if wo else "N/A"} - {product_name} telah disetujui',
+                reference_type='production_approval',
+                reference_id=approval.id,
+                priority='normal',
+                action_url=f'/app/production/approvals/{approval.id}'
+            )
+        except Exception as notif_err:
+            print(f"Notification error: {notif_err}")
+        
         return jsonify({
             'message': 'Produksi disetujui. Siap diteruskan ke Finance.',
             'approval': approval.to_dict()
@@ -634,6 +682,28 @@ def reject_production(id):
         approval.manager_notes = data.get('reason')
         
         db.session.commit()
+        
+        # Send notification for rejection
+        try:
+            wo = approval.work_order
+            product_name = wo.product.name if wo and wo.product else 'Unknown'
+            # Notify the submitter and managers
+            notify_ids = [approval.submitted_by] if approval.submitted_by else []
+            notify_ids.extend(get_manager_user_ids())
+            notify_ids = list(set(notify_ids))  # Remove duplicates
+            
+            create_approval_notification(
+                user_ids=notify_ids,
+                notification_type='error',
+                title='Approval Ditolak',
+                message=f'Approval {approval.approval_number} untuk {wo.wo_number if wo else "N/A"} - {product_name} ditolak. Alasan: {data.get("reason")}',
+                reference_type='production_approval',
+                reference_id=approval.id,
+                priority='high',
+                action_url=f'/app/production/approvals/{approval.id}'
+            )
+        except Exception as notif_err:
+            print(f"Notification error: {notif_err}")
         
         return jsonify({
             'message': 'Produksi ditolak',
@@ -800,6 +870,23 @@ def submit_wo_for_approval(wo_id):
         
         db.session.add(approval)
         db.session.commit()
+        
+        # Send notification to managers
+        try:
+            manager_ids = get_manager_user_ids()
+            product_name = wo.product.name if wo.product else 'Unknown'
+            create_approval_notification(
+                user_ids=manager_ids,
+                notification_type='warning',
+                title='Approval Produksi Baru',
+                message=f'Work Order {wo.wo_number} - {product_name} menunggu approval. Qty: {quantity_good:,.0f} pcs, Total Cost: Rp {total_cost:,.0f}',
+                reference_type='production_approval',
+                reference_id=approval.id,
+                priority='high',
+                action_url=f'/app/production/approvals/{approval.id}'
+            )
+        except Exception as notif_err:
+            print(f"Notification error: {notif_err}")
         
         return jsonify({
             'message': 'Work Order berhasil disubmit untuk approval Manager Produksi',

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import {
   ChartBarIcon,
@@ -10,6 +10,7 @@ import ProductListNew from '../components/ProductListNew';
 import ProductFormNew from '../components/ProductFormNew';
 import ProductDetailNew from '../components/ProductDetailNew';
 import ProductDashboardNew from '../components/ProductDashboardNew';
+import axiosInstance from '../utils/axiosConfig';
 interface ProductNew {
   id: number;
   kode_produk: string;
@@ -60,8 +61,28 @@ const ProductsNewPage: React.FC = () => {
   const { t } = useLanguage();
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [selectedProduct, setSelectedProduct] = useState<ProductNew | null>(null);
+
+  // Handle URL params for direct navigation to detail view
+  useEffect(() => {
+    const view = searchParams.get('view');
+    const code = searchParams.get('code');
+    
+    if (view === 'detail' && code) {
+      // Fetch product by code and show detail view
+      axiosInstance.get(`/api/products-new/kode/${code}`)
+        .then(res => {
+          setSelectedProduct(res.data.product);
+          setViewMode('detail');
+        })
+        .catch(err => {
+          console.error('Error loading product:', err);
+          setViewMode('list');
+        });
+    }
+  }, [searchParams]);
 
   const handleSaveProduct = async (productData: ProductNew) => {
     try {

@@ -870,12 +870,18 @@ def get_production_executive_dashboard():
         total_target_pcs = 0
         
         for ms in monthly_schedules:
-            product_name = ms.product.name if ms.product else f"Product {ms.product_id}"
+            # Get product data via raw SQL (MonthlySchedule uses products_new table)
+            product_data = db.session.execute(
+                db.text("SELECT kode_produk, nama_produk, pack_per_karton FROM products_new WHERE id = :id"),
+                {'id': ms.product_id}
+            ).fetchone()
+            
+            product_name = product_data[1] if product_data else f"Product {ms.product_id}"
             machine_name = ms.machine.name if ms.machine else "Unassigned"
             
             pack_per_ctn = 50  # Default
-            if ms.product and ms.product.packaging:
-                pack_per_ctn = ms.product.packaging.packs_per_karton or 50
+            if product_data and product_data[2]:
+                pack_per_ctn = int(product_data[2])
             
             target_ctn = float(ms.target_ctn or 0)
             target_pcs = target_ctn * pack_per_ctn
@@ -1033,8 +1039,9 @@ def get_production_executive_dashboard():
             machine['quality_rate'] = round((machine['total_good'] / machine['total_produced'] * 100), 2) if machine['total_produced'] > 0 else 0
         
         # ===== 3. CALCULATE ACHIEVEMENT =====
-        total_actual_ctn = total_actual_pcs / 50 if total_target_ctn > 0 else 0  # Use average pack per ctn
-        achievement_pct = round((total_actual_pcs / total_target_pcs * 100), 2) if total_target_pcs > 0 else 0
+        # Sum actual_ctn from each product (already calculated with correct pack_per_ctn)
+        total_actual_ctn = sum(p['actual_ctn'] for p in targets_by_product.values())
+        achievement_pct = round((total_actual_ctn / total_target_ctn * 100), 2) if total_target_ctn > 0 else 0
         gap_pcs = total_target_pcs - total_actual_pcs
         gap_ctn = total_target_ctn - total_actual_ctn
         
@@ -1110,6 +1117,163 @@ def get_production_executive_dashboard():
                 'products': products_list,
                 'machines': machines_list,
                 'daily_trend': daily_trend_list
+            }
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@executive_dashboard_bp.route('/production-output-details', methods=['GET'])
+@jwt_required(optional=True)
+def get_production_output_details():
+    """
+    Get detailed production output breakdown by machine, product, and shift
+    Returns pack count and carton count
+    """
+    try:
+        from models.production import Machine
+        from models.product import ProductPackaging
+        
+        # Get date range from query params
+        days = request.args.get('days', 30, type=int)
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        
+        if start_date_str and end_date_str:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        else:
+            end_date = datetime.now().date()
+            start_date = end_date - timedelta(days=days)
+        
+        # Get all shift productions in date range
+        shift_productions = db.session.query(
+            ShiftProduction.production_date,
+            ShiftProduction.shift,
+            ShiftProduction.machine_id,
+            Machine.name.label('machine_name'),
+            Machine.code.label('machine_code'),
+            ShiftProduction.product_id,
+            Product.name.label('product_name'),
+            Product.code.label('product_code'),
+            ProductPackaging.packs_per_karton,
+            func.sum(ShiftProduction.good_quantity).label('total_pack'),
+            func.sum(ShiftProduction.actual_quantity).label('total_actual'),
+            func.sum(ShiftProduction.reject_quantity).label('total_reject'),
+            func.avg(ShiftProduction.oee_score).label('avg_oee')
+        ).join(
+            Machine, ShiftProduction.machine_id == Machine.id, isouter=True
+        ).join(
+            Product, ShiftProduction.product_id == Product.id
+        ).outerjoin(
+            ProductPackaging, Product.id == ProductPackaging.product_id
+        ).filter(
+            ShiftProduction.production_date >= start_date,
+            ShiftProduction.production_date <= end_date
+        ).group_by(
+            ShiftProduction.production_date,
+            ShiftProduction.shift,
+            ShiftProduction.machine_id,
+            Machine.name,
+            Machine.code,
+            ShiftProduction.product_id,
+            Product.name,
+            Product.code,
+            ProductPackaging.packs_per_karton
+        ).order_by(
+            ShiftProduction.production_date.desc(),
+            ShiftProduction.shift,
+            Machine.name
+        ).all()
+        
+        # Format results
+        details = []
+        total_pack = 0
+        total_carton = 0
+        
+        # Group by machine
+        machine_summary = {}
+        product_summary = {}
+        shift_summary = {'shift_1': 0, 'shift_2': 0, 'shift_3': 0}
+        
+        for sp in shift_productions:
+            pack_count = float(sp.total_pack or 0)
+            packs_per_karton = float(sp.packs_per_karton or 1) if sp.packs_per_karton else 1
+            carton_count = pack_count / packs_per_karton if packs_per_karton > 0 else 0
+            
+            total_pack += pack_count
+            total_carton += carton_count
+            
+            # Machine summary
+            machine_key = sp.machine_name or 'Unknown'
+            if machine_key not in machine_summary:
+                machine_summary[machine_key] = {'pack': 0, 'carton': 0, 'code': sp.machine_code}
+            machine_summary[machine_key]['pack'] += pack_count
+            machine_summary[machine_key]['carton'] += carton_count
+            
+            # Product summary
+            product_key = sp.product_name or 'Unknown'
+            if product_key not in product_summary:
+                product_summary[product_key] = {'pack': 0, 'carton': 0, 'code': sp.product_code, 'packs_per_karton': packs_per_karton}
+            product_summary[product_key]['pack'] += pack_count
+            product_summary[product_key]['carton'] += carton_count
+            
+            # Shift summary
+            shift_key = sp.shift or 'shift_1'
+            if shift_key in shift_summary:
+                shift_summary[shift_key] += pack_count
+            
+            details.append({
+                'date': sp.production_date.isoformat(),
+                'shift': sp.shift,
+                'machine_id': sp.machine_id,
+                'machine_name': sp.machine_name or 'Unknown',
+                'machine_code': sp.machine_code,
+                'product_id': sp.product_id,
+                'product_name': sp.product_name,
+                'product_code': sp.product_code,
+                'pack_count': round(pack_count, 2),
+                'carton_count': round(carton_count, 2),
+                'packs_per_karton': packs_per_karton,
+                'reject_count': float(sp.total_reject or 0),
+                'oee': round(float(sp.avg_oee or 0), 2)
+            })
+        
+        # Format summaries
+        machines_list = [
+            {'name': k, 'code': v['code'], 'pack': round(v['pack'], 2), 'carton': round(v['carton'], 2)}
+            for k, v in sorted(machine_summary.items(), key=lambda x: x[1]['pack'], reverse=True)
+        ]
+        
+        products_list = [
+            {'name': k, 'code': v['code'], 'pack': round(v['pack'], 2), 'carton': round(v['carton'], 2), 'packs_per_karton': v['packs_per_karton']}
+            for k, v in sorted(product_summary.items(), key=lambda x: x[1]['pack'], reverse=True)
+        ]
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'period': {
+                    'start_date': start_date.isoformat(),
+                    'end_date': end_date.isoformat(),
+                    'days': days
+                },
+                'summary': {
+                    'total_pack': round(total_pack, 2),
+                    'total_carton': round(total_carton, 2),
+                    'total_records': len(details)
+                },
+                'by_machine': machines_list,
+                'by_product': products_list,
+                'by_shift': {
+                    'shift_1': round(shift_summary['shift_1'], 2),
+                    'shift_2': round(shift_summary['shift_2'], 2),
+                    'shift_3': round(shift_summary['shift_3'], 2)
+                },
+                'details': details
             }
         }), 200
         

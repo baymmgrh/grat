@@ -33,7 +33,8 @@ interface ProductionRecord {
   quantity_good: number;
   quantity_scrap: number;
   quantity_rework?: number;
-  quantity_setting?: number;
+  setting_sticker?: number;
+  setting_packaging?: number;
   downtime_minutes: number;
   planned_runtime?: number;
   operator_id: number | null;
@@ -68,9 +69,16 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
     'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
     'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
+    'tunggu obat', 'tunggu ingredient', 'tunggu packing', 'tunggu instruksi',
+    'tunggu approval', 'tunggu qc', 'tunggu hasil qc',
     'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
+    'menunggu obat', 'menunggu ingredient',
     'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
-    'waiting for', 'standby material'
+    'kain habis', 'stiker habis', 'packing habis', 'packaging habis',
+    'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
+    'bahan habis', 'material habis', 'ingredient habis', 'obat habis',
+    'waiting for', 'standby material', 'standby', 'idle', 'menganggur',
+    'tidak ada order', 'no order', 'no material'
   ],
   // MESIN (Machine/Equipment): Semua masalah teknis mesin dan komponen
   mesin: [
@@ -210,11 +218,19 @@ export default function EditProductionRecord() {
     quantity_good: '',      // Grade A
     quantity_rework: '0',   // Grade B
     quantity_reject: '0',   // Grade C
-    quantity_setting: '0',  // Setting
+    setting_sticker: '0',   // Setting Sticker
+    setting_packaging: '0', // Setting Packaging
     quantity_produced: '0', // Auto: A+B+C
-    quantity_waste: '0',    // Auto: C+Setting
+    quantity_waste: '0',    // Auto: C+Setting Sticker+Setting Packaging
+    average_time: '510',    // Average time manual input
+    machine_speed: '',      // Speed mesin (pcs/menit)
     operator_id: '',
     notes: '',
+    // Early Stop / Shift Berhenti Lebih Awal
+    early_stop: false as boolean,
+    early_stop_time: '',
+    early_stop_reason: '',
+    early_stop_notes: '',
   });
 
   useEffect(() => {
@@ -290,11 +306,19 @@ export default function EditProductionRecord() {
         quantity_good: rec.quantity_good?.toString() || '',
         quantity_rework: rec.quantity_rework?.toString() || '0',
         quantity_reject: rec.quantity_scrap?.toString() || '0',
-        quantity_setting: rec.quantity_setting?.toString() || '0',
+        setting_sticker: rec.setting_sticker?.toString() || '0',
+        setting_packaging: rec.setting_packaging?.toString() || '0',
         quantity_produced: rec.quantity_produced?.toString() || '0',
-        quantity_waste: ((rec.quantity_scrap || 0) + (rec.quantity_setting || 0)).toString(),
+        quantity_waste: ((rec.quantity_scrap || 0) + (rec.setting_sticker || 0) + (rec.setting_packaging || 0)).toString(),
+        average_time: rec.average_time?.toString() || '510',
+        machine_speed: rec.machine_speed?.toString() || '',
         operator_id: rec.operator_id?.toString() || '',
         notes: cleanNotes,
+        // Early Stop
+        early_stop: rec.early_stop || false,
+        early_stop_time: rec.early_stop_time || '',
+        early_stop_reason: rec.early_stop_reason || '',
+        early_stop_notes: rec.early_stop_notes || '',
       });
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -304,23 +328,25 @@ export default function EditProductionRecord() {
     }
   };
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: string, value: string | boolean) => {
     setFormData(prev => {
       const updated = { ...prev, [field]: value };
       
       // Auto-calculate when grade fields change
-      if (field === 'quantity_good' || field === 'quantity_reject' || field === 'quantity_rework' || field === 'quantity_setting') {
-        const gradeA = parseFloat(field === 'quantity_good' ? value : updated.quantity_good) || 0;
-        const gradeC = parseFloat(field === 'quantity_reject' ? value : updated.quantity_reject) || 0;
-        const gradeB = parseFloat(field === 'quantity_rework' ? value : updated.quantity_rework) || 0;
-        const setting = parseFloat(field === 'quantity_setting' ? value : updated.quantity_setting) || 0;
+      if (field === 'quantity_good' || field === 'quantity_reject' || field === 'quantity_rework' || field === 'setting_sticker' || field === 'setting_packaging') {
+        const strValue = String(value);
+        const gradeA = parseFloat(field === 'quantity_good' ? strValue : updated.quantity_good) || 0;
+        const gradeC = parseFloat(field === 'quantity_reject' ? strValue : updated.quantity_reject) || 0;
+        const gradeB = parseFloat(field === 'quantity_rework' ? strValue : updated.quantity_rework) || 0;
+        const settingSticker = parseFloat(field === 'setting_sticker' ? strValue : updated.setting_sticker) || 0;
+        const settingPackaging = parseFloat(field === 'setting_packaging' ? strValue : updated.setting_packaging) || 0;
         
         // qty_produced = Grade A + Grade B + Grade C
         const produced = gradeA + gradeB + gradeC;
         updated.quantity_produced = produced.toString();
         
-        // Waste = Grade C + Setting
-        const wastePack = gradeC + setting;
+        // Waste = Grade C + Setting Sticker + Setting Packaging
+        const wastePack = gradeC + settingSticker + settingPackaging;
         updated.quantity_waste = wastePack.toString();
       }
       
@@ -372,6 +398,37 @@ export default function EditProductionRecord() {
     }, 0);
   };
 
+  // Get average time from form (manual input, default 510)
+  const getAverageTime = () => {
+    return parseInt(formData.average_time) || 510;
+  };
+
+  // Calculate runtime = Grade A / speed mesin (in minutes)
+  const getRuntime = () => {
+    const gradeA = parseFloat(formData.quantity_good) || 0;
+    const speed = parseFloat(formData.machine_speed) || 0;
+    if (speed <= 0) return 0;
+    return Math.round(gradeA / speed);
+  };
+
+  // Get waktu tercatat = runtime + downtime
+  const getWaktuTercatat = () => {
+    return getRuntime() + getTotalDowntime();
+  };
+
+  // Get waktu tidak tercatat = average_time - waktu_tercatat
+  const getWaktuTidakTercatat = () => {
+    return Math.max(0, getAverageTime() - getWaktuTercatat());
+  };
+
+  // Calculate efficiency: runtime / average_time * 100
+  const getEfficiency = () => {
+    const runtime = getRuntime();
+    const avgTime = getAverageTime();
+    const efficiency = avgTime > 0 ? (runtime / avgTime * 100) : 0;
+    return Math.max(0, Math.min(100, efficiency));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -405,10 +462,22 @@ export default function EditProductionRecord() {
         quantity_good: parseFloat(formData.quantity_good),
         quantity_scrap: parseFloat(formData.quantity_reject),
         quantity_rework: parseFloat(formData.quantity_rework),
-        quantity_setting: parseFloat(formData.quantity_setting),
+        setting_sticker: parseFloat(formData.setting_sticker),
+        setting_packaging: parseFloat(formData.setting_packaging),
+        average_time: getAverageTime(),
+        runtime: getRuntime(),
+        waktu_tercatat: getWaktuTercatat(),
+        waktu_tidak_tercatat: getWaktuTidakTercatat(),
         downtime_minutes: getTotalDowntime(),
+        machine_speed: parseInt(formData.machine_speed) || 0,
+        efficiency_rate: getEfficiency(),
         operator_id: formData.operator_id ? parseInt(formData.operator_id) : null,
         notes: finalNotes,
+        // Early Stop / Shift Berhenti Lebih Awal
+        early_stop: formData.early_stop,
+        early_stop_time: formData.early_stop_time || null,
+        early_stop_reason: formData.early_stop_reason || null,
+        early_stop_notes: formData.early_stop_notes || null,
         downtime_entries: downtimeEntries.filter(e => e.reason && e.duration_minutes).map(e => ({
           reason: e.reason,
           category: e.category,
@@ -474,7 +543,7 @@ export default function EditProductionRecord() {
       {/* Form */}
       <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-6">
         {/* Date & Shift */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tanggal Produksi *
@@ -504,23 +573,79 @@ export default function EditProductionRecord() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Total Downtime (menit)
+              Waktu Kerja Shift (menit)
+              <span className="text-xs text-gray-500 font-normal block">Kurangi jika shift berhenti lebih awal</span>
             </label>
             <input
               type="number"
-              value={getTotalDowntime()}
-              readOnly
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+              value={formData.average_time}
+              onChange={(e) => handleChange('average_time', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="510"
               min="0"
             />
-            <p className="text-xs text-gray-500 mt-1">Dihitung dari entries di bawah</p>
+            <p className="text-xs text-gray-400 mt-1">Default: Shift 1=510, Shift 2=480, Shift 3=450</p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Speed Mesin (pcs/menit)
+            </label>
+            <input
+              type="number"
+              value={formData.machine_speed}
+              onChange={(e) => handleChange('machine_speed', e.target.value)}
+              className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-blue-50"
+              placeholder="0"
+              min="0"
+            />
+          </div>
+        </div>
+
+        {/* Time Calculation Summary */}
+        <div className="bg-gray-100 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-gray-700 mb-3">Perhitungan Waktu</h4>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
+            <div>
+              <p className="text-xs text-gray-500">Average Time</p>
+              <p className="text-lg font-bold text-gray-700">{getAverageTime()}m</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Runtime</p>
+              <p className="text-lg font-bold text-blue-600">{getRuntime()}m</p>
+              <p className="text-xs text-gray-400">= A ÷ Speed</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Downtime</p>
+              <p className="text-lg font-bold text-orange-600">{getTotalDowntime()}m</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Waktu Tercatat</p>
+              <p className={`text-lg font-bold ${getWaktuTercatat() > getAverageTime() ? 'text-red-600' : 'text-green-600'}`}>
+                {getWaktuTercatat()}m
+              </p>
+              {getWaktuTercatat() > getAverageTime() && (
+                <p className="text-xs text-red-600 font-medium">
+                  ⚠ +{getWaktuTercatat() - getAverageTime()}m
+                </p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Waktu Tidak Tercatat</p>
+              <p className="text-lg font-bold text-red-600">{getWaktuTidakTercatat()}m</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Efisiensi</p>
+              <p className={`text-lg font-bold ${getEfficiency() >= 60 ? 'text-green-600' : 'text-red-600'}`}>
+                {getEfficiency().toFixed(1)}%
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Quantity Section */}
         <div className="border-t pt-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Hasil Produksi</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Grade A <span className="text-green-600">(Good)</span> *
@@ -563,13 +688,26 @@ export default function EditProductionRecord() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Setting <span className="text-gray-500">(pack)</span>
+                Setting Sticker <span className="text-purple-500">(pack)</span>
               </label>
               <input
                 type="number"
-                value={formData.quantity_setting}
-                onChange={(e) => handleChange('quantity_setting', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                value={formData.setting_sticker}
+                onChange={(e) => handleChange('setting_sticker', e.target.value)}
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Setting Packaging <span className="text-indigo-500">(pack)</span>
+              </label>
+              <input
+                type="number"
+                value={formData.setting_packaging}
+                onChange={(e) => handleChange('setting_packaging', e.target.value)}
+                className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="0"
                 min="0"
               />
@@ -602,6 +740,72 @@ export default function EditProductionRecord() {
               />
               <span className="text-xs text-gray-500">= C + Setting</span>
             </div>
+          </div>
+        </div>
+
+        {/* Shift Berhenti Lebih Awal Section */}
+        <div className="border-t pt-6">
+          <div className="bg-orange-50 border-2 border-orange-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <input
+                type="checkbox"
+                id="early_stop"
+                checked={formData.early_stop}
+                onChange={(e) => handleChange('early_stop', e.target.checked)}
+                className="w-4 h-4 rounded border-orange-300 text-orange-600 focus:ring-orange-500"
+              />
+              <label htmlFor="early_stop" className="font-medium text-orange-800">
+                ⚠️ Shift Berhenti Lebih Awal
+              </label>
+            </div>
+
+            {formData.early_stop && (
+              <div className="space-y-4 pl-6 border-l-2 border-orange-300">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-orange-700 mb-1">
+                      Waktu Berhenti
+                    </label>
+                    <input
+                      type="time"
+                      value={formData.early_stop_time}
+                      onChange={(e) => handleChange('early_stop_time', e.target.value)}
+                      className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-orange-700 mb-1">
+                      Alasan Berhenti
+                    </label>
+                    <select
+                      value={formData.early_stop_reason}
+                      onChange={(e) => handleChange('early_stop_reason', e.target.value)}
+                      className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Pilih alasan...</option>
+                      <option value="material_habis">Material Habis</option>
+                      <option value="mesin_rusak">Mesin Rusak</option>
+                      <option value="listrik_padam">Listrik Padam</option>
+                      <option value="order_selesai">Order Selesai</option>
+                      <option value="instruksi_atasan">Instruksi Atasan</option>
+                      <option value="lainnya">Lainnya</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-orange-700 mb-1">
+                    Catatan Tambahan
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.early_stop_notes}
+                    onChange={(e) => handleChange('early_stop_notes', e.target.value)}
+                    className="w-full px-3 py-2 border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    placeholder="Jelaskan detail kondisi..."
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

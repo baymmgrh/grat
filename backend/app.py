@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from middleware.i18n import setup_i18n_middleware
@@ -13,6 +13,18 @@ def create_app(config_class=Config):
     """Application factory pattern"""
     app = Flask(__name__)
     app.config.from_object(config_class)
+    
+    # Setup logging
+    from utils.logger import setup_logging, log_request, log_exception
+    app_logger, access_logger = setup_logging(app)
+    
+    # Log request middleware
+    before_req, after_req = log_request(access_logger)
+    app.before_request(before_req)
+    app.after_request(after_req)
+    
+    # Log unhandled exceptions
+    app.register_error_handler(Exception, log_exception(app_logger))
     
     # Disable automatic trailing slash redirects to prevent CORS preflight issues
     app.url_map.strict_slashes = False
@@ -30,11 +42,37 @@ def create_app(config_class=Config):
     from utils.audit_middleware import init_audit_middleware
     init_audit_middleware(app)
     
+    # CORS configuration - allow production domain, local development, and LAN
+    allowed_origins = [
+        'https://erp.graterp.my.id',
+        'https://api.graterp.my.id',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://192.168.0.62:3000',  # LAN access
+    ]
+    
     CORS(app, 
-         origins=['*'],  # Allow all origins for LAN access
+         origins=allowed_origins,
          allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
          methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-         supports_credentials=False)  # Set to False when using wildcard origins
+         supports_credentials=True)
+    
+    # Global handler for OPTIONS preflight requests
+    @app.before_request
+    def handle_preflight():
+        from flask import request as req, make_response
+        if req.method == 'OPTIONS':
+            response = make_response()
+            origin = req.headers.get('Origin', '*')
+            # Allow specific origins or fallback
+            if origin in allowed_origins or origin.endswith('.graterp.my.id'):
+                response.headers.add('Access-Control-Allow-Origin', origin)
+            else:
+                response.headers.add('Access-Control-Allow-Origin', '*')
+            response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+            response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+            response.headers.add('Access-Control-Allow-Credentials', 'true')
+            return response
     
     # Import all blueprints
     from routes.health import health_bp
@@ -84,6 +122,8 @@ def create_app(config_class=Config):
     from routes.workflow_integration import workflow_bp
     from routes.production_planning import planning_bp
     from routes.executive_dashboard import executive_dashboard_bp
+    from routes.attendance import attendance_bp
+    from routes.logs import logs_bp
     
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -116,6 +156,8 @@ def create_app(config_class=Config):
     app.register_blueprint(hr_appraisal_bp, url_prefix='/api/hr/appraisal')
     app.register_blueprint(hr_training_bp, url_prefix='/api/hr/training')
     app.register_blueprint(hr_extended_bp, url_prefix='/api/hr')
+    app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
+    app.register_blueprint(logs_bp, url_prefix='/api/logs')
     app.register_blueprint(work_roster_bp, url_prefix='/api/hr/work-roster')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(mrp_bp, url_prefix='/api/mrp')

@@ -8,6 +8,9 @@ import App from './App'
 import { store } from './store'
 import './index.css'
 
+// Initialize error logger (catches unhandled errors and sends to backend)
+import './utils/errorLogger'
+
 // Session expired event constant
 const SESSION_EXPIRED_EVENT = 'session-expired';
 

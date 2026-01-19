@@ -30,6 +30,8 @@ def register_routes(app):
     from .tv_display import tv_display_bp
     from .mrp import mrp_bp
     from .warehouse_enhanced import warehouse_enhanced_bp
+    from .attendance import attendance_bp
+    from .logs import logs_bp
     
     # Register all blueprints
     app.register_blueprint(health_bp, url_prefix='/api')
@@ -57,6 +59,8 @@ def register_routes(app):
     app.register_blueprint(tv_display_bp, url_prefix='/api/tv-display')
     app.register_blueprint(mrp_bp, url_prefix='/api/mrp')
     app.register_blueprint(warehouse_enhanced_bp, url_prefix='/api/warehouse-enhanced')
+    app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
+    app.register_blueprint(logs_bp, url_prefix='/api/logs')
     
     # API documentation endpoint
     @app.route('/api/docs')

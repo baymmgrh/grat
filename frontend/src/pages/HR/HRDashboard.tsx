@@ -1,6 +1,5 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useLanguage } from '../../contexts/LanguageContext';
+import React, { useState, useEffect } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   useGetEmployeesQuery, 
   useGetAttendanceRecordsQuery,
@@ -16,14 +15,21 @@ import {
   CheckCircleIcon,
   ClockIcon,
   ExclamationTriangleIcon,
-  KeyIcon,
-  UserGroupIcon
+  UserGroupIcon,
+  UserPlusIcon,
+  DocumentTextIcon,
+  CogIcon,
+  BuildingOfficeIcon,
+  ArrowPathIcon,
+  ClipboardDocumentListIcon
 } from '@heroicons/react/24/outline';
+import axiosInstance from '../../utils/axiosConfig'
+import LoadingSpinner from '../../components/Common/LoadingSpinner'
 
 export default function HRDashboard() {
   const navigate = useNavigate()
-  const { t } = useLanguage();
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
+  const [loading, setLoading] = useState(false)
   
   // Fetch data for dashboard
   const { data: employeesData } = useGetEmployeesQuery({})
@@ -45,120 +51,196 @@ export default function HRDashboard() {
 
   const attendanceRate = activeEmployees > 0 ? ((presentToday / activeEmployees) * 100).toFixed(1) : 0
 
+  // Quick Stats
+  const quickStats = [
+    {
+      name: 'Total Karyawan',
+      value: activeEmployees,
+      icon: UserGroupIcon,
+      color: 'bg-blue-500',
+      subtext: `${totalEmployees} terdaftar`
+    },
+    {
+      name: 'Kehadiran Hari Ini',
+      value: `${attendanceRate}%`,
+      icon: ClockIcon,
+      color: 'bg-green-500',
+      subtext: `${presentToday} hadir`
+    },
+    {
+      name: 'Cuti Pending',
+      value: pendingLeaves,
+      icon: CalendarDaysIcon,
+      color: 'bg-yellow-500',
+      subtext: 'Menunggu approval'
+    },
+    {
+      name: 'Training Aktif',
+      value: ongoingTrainings,
+      icon: AcademicCapIcon,
+      color: 'bg-purple-500',
+      subtext: 'Sesi berjalan'
+    }
+  ]
+
+  // Module Cards
+  const moduleCards = [
+    {
+      title: 'Data Karyawan',
+      description: 'Kelola data karyawan, jabatan, dan departemen',
+      icon: UserGroupIcon,
+      href: '/app/hr/employees',
+      color: 'bg-blue-500',
+      stats: `${activeEmployees} karyawan aktif`
+    },
+    {
+      title: 'Absensi',
+      description: 'Pantau kehadiran dan rekam absensi harian',
+      icon: ClockIcon,
+      href: '/app/hr/attendance',
+      color: 'bg-green-500',
+      stats: 'Real-time tracking'
+    },
+    {
+      title: 'Manajemen Cuti',
+      description: 'Kelola pengajuan dan approval cuti karyawan',
+      icon: CalendarDaysIcon,
+      href: '/app/hr/leaves',
+      color: 'bg-yellow-500',
+      stats: `${pendingLeaves} pending`
+    },
+    {
+      title: 'Payroll',
+      description: 'Proses penggajian dan slip gaji karyawan',
+      icon: BanknotesIcon,
+      href: '/app/hr/payroll',
+      color: 'bg-emerald-500',
+      stats: 'Kalkulasi otomatis'
+    },
+    {
+      title: 'Training',
+      description: 'Kelola program training dan pengembangan',
+      icon: AcademicCapIcon,
+      href: '/app/hr/training',
+      color: 'bg-purple-500',
+      stats: `${ongoingTrainings} sesi aktif`
+    },
+    {
+      title: 'Jadwal Kerja / Roster',
+      description: 'Atur jadwal shift dan penugasan karyawan',
+      icon: ClipboardDocumentListIcon,
+      href: '/app/hr/roster',
+      color: 'bg-pink-500',
+      stats: 'Drag & drop roster'
+    },
+    {
+      title: 'Departemen',
+      description: 'Kelola struktur organisasi dan departemen',
+      icon: BuildingOfficeIcon,
+      href: '/app/hr/departments',
+      color: 'bg-indigo-500',
+      stats: 'Struktur organisasi'
+    },
+    {
+      title: 'Laporan HR',
+      description: 'Laporan absensi, cuti, dan statistik karyawan',
+      icon: ChartBarIcon,
+      href: '/app/hr/reports',
+      color: 'bg-orange-500',
+      stats: 'Export Excel/PDF'
+    }
+  ]
+
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
+      {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-gray-900">{t('hr.dashboard')}</h1>
-        <div className="flex items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">👥 HR Dashboard</h1>
+          <p className="text-gray-600 mt-1">Kelola sumber daya manusia perusahaan</p>
+        </div>
+        <div className="flex items-center gap-3">
           <input
             type="date"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
-            className="input"
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
+          <button
+            onClick={() => window.location.reload()}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <ArrowPathIcon className="h-4 w-4" />
+            Refresh
+          </button>
         </div>
       </div>
 
-      {/* KeyIcon Metrics Cards */}
+      {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Total Employees */}
-        <div className="card bg-blue-50 border-blue-200">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <UserGroupIcon className="w-5 h-5 text-blue-600" />
+        {quickStats.map((stat, index) => (
+          <div key={index} className="card p-6">
+            <div className="flex items-center">
+              <div className={`${stat.color} p-3 rounded-lg`}>
+                <stat.icon className="h-6 w-6 text-white" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">{stat.name}</p>
+                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-xs text-gray-500">{stat.subtext}</p>
               </div>
             </div>
-            <div className="ml-5 w-0 flex-1">
-              <dl>
-                <dt className="text-sm font-medium text-blue-700 truncate">{t('hr.total_employees')}</dt>
-                <dd className="text-lg font-medium text-blue-900">{activeEmployees}</dd>
-              </dl>
-            </div>
           </div>
-        </div>
+        ))}
+      </div>
 
-        {/* Attendance Rate */}
-        <div className="card bg-green-50 border-green-200">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <ClockIcon className="w-5 h-5 text-green-600" />
+      {/* HR Modules */}
+      <div>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Modul HR</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {moduleCards.map((module, index) => (
+            <Link
+              key={index}
+              to={module.href}
+              className="card p-6 hover:shadow-lg transition-shadow group"
+            >
+              <div className="flex items-start space-x-4">
+                <div className={`${module.color} p-3 rounded-lg group-hover:scale-110 transition-transform`}>
+                  <module.icon className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                    {module.title}
+                  </h4>
+                  <p className="text-gray-600 text-sm mt-1">{module.description}</p>
+                  <p className="text-xs text-gray-500 mt-2">{module.stats}</p>
+                </div>
               </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-green-600">Attendance Rate</p>
-              <p className="text-2xl font-bold text-green-900">{attendanceRate}%</p>
-              <p className="text-sm text-green-700">{presentToday} present today</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Pending Leaves */}
-        <div className="card bg-yellow-50 border-yellow-200">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                <CalendarDaysIcon className="w-5 h-5 text-yellow-600" />
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-yellow-600">Pending Leaves</p>
-              <p className="text-2xl font-bold text-yellow-900">{pendingLeaves}</p>
-              <p className="text-sm text-yellow-700">Require approval</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Ongoing Trainings */}
-        <div className="card bg-purple-50 border-purple-200">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                <AcademicCapIcon className="w-5 h-5 text-purple-600" />
-              </div>
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-purple-600">Ongoing Trainings</p>
-              <p className="text-2xl font-bold text-purple-900">{ongoingTrainings}</p>
-              <p className="text-sm text-purple-700">Active sessions</p>
-            </div>
-          </div>
+            </Link>
+          ))}
         </div>
       </div>
 
       {/* Quick Actions */}
-      <div className="card">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <button 
-            onClick={() => navigate('/app/hr/employees/new')}
-            className="btn-outline flex flex-col items-center gap-2 p-4"
-          >
-            <UserGroupIcon className="w-6 h-6" />
-            <span className="text-sm">Add Employee</span>
-          </button>
-          <button 
-            onClick={() => navigate('/app/hr/attendance')}
-            className="btn-outline flex flex-col items-center gap-2 p-4"
-          >
-            <ClockIcon className="w-6 h-6" />
-            <span className="text-sm">Mark Attendance</span>
-          </button>
-          <button 
-            onClick={() => navigate('/app/hr/leaves')}
-            className="btn-outline flex flex-col items-center gap-2 p-4"
-          >
-            <CalendarDaysIcon className="w-6 h-6" />
-            <span className="text-sm">Approve Leaves</span>
-          </button>
-          <button 
-            onClick={() => navigate('/app/hr/payroll')}
-            className="btn-outline flex flex-col items-center gap-2 p-4"
-          >
-            <BanknotesIcon className="w-6 h-6" />
-            <span className="text-sm">Process Payroll</span>
-          </button>
+      <div className="card p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Aksi Cepat</h3>
+        <div className="flex flex-wrap gap-3">
+          <Link to="/app/hr/employees/new" className="btn-primary flex items-center gap-2">
+            <UserPlusIcon className="h-4 w-4" />
+            Tambah Karyawan
+          </Link>
+          <Link to="/app/hr/attendance" className="btn-secondary flex items-center gap-2">
+            <ClockIcon className="h-4 w-4" />
+            Rekam Absensi
+          </Link>
+          <Link to="/app/hr/leaves" className="btn-secondary flex items-center gap-2">
+            <CalendarDaysIcon className="h-4 w-4" />
+            Approval Cuti
+          </Link>
+          <Link to="/app/hr/payroll" className="btn-secondary flex items-center gap-2">
+            <BanknotesIcon className="h-4 w-4" />
+            Proses Payroll
+          </Link>
         </div>
       </div>
 
@@ -309,9 +391,8 @@ export default function HRDashboard() {
             <ChartBarIcon className="w-5 h-5 text-gray-400" />
           </div>
           <div className="space-y-3">
-            {/* This would be populated with actual department data */}
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">{t('navigation.production')}</span>
+              <span className="text-sm text-gray-600">Production</span>
               <span className="text-sm font-medium">45%</span>
             </div>
             <div className="flex items-center justify-between">
@@ -319,7 +400,7 @@ export default function HRDashboard() {
               <span className="text-sm font-medium">20%</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">{t('navigation.maintenance')}</span>
+              <span className="text-sm text-gray-600">Maintenance</span>
               <span className="text-sm font-medium">15%</span>
             </div>
             <div className="flex items-center justify-between">

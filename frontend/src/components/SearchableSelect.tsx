@@ -167,6 +167,7 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   }, [disabled, isOpen, highlightedIndex, filteredOptions, handleTypeahead]);
 
   const handleSelect = (optionId: number | string) => {
+    console.log('SearchableSelect - Selected option id:', optionId, 'type:', typeof optionId);
     onChange(optionId);
     setIsOpen(false);
     setSearchTerm('');

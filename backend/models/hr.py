@@ -76,7 +76,8 @@ class Attendance(db.Model):
     __tablename__ = 'attendances'
     
     id = db.Column(db.Integer, primary_key=True)
-    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=False)
+    employee_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)  # Made nullable for user-based attendance
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # NEW: User-based attendance
     attendance_date = db.Column(db.Date, nullable=False, index=True)
     shift_id = db.Column(db.Integer, db.ForeignKey('shift_schedules.id'), nullable=True)
     clock_in = db.Column(db.DateTime, nullable=True)
@@ -85,16 +86,62 @@ class Attendance(db.Model):
     worked_hours = db.Column(db.Numeric(5, 2), default=0)
     overtime_hours = db.Column(db.Numeric(5, 2), default=0)
     notes = db.Column(db.Text, nullable=True)
+    
+    # Photo verification fields (photo NOT stored, only hash and metadata)
+    photo_hash = db.Column(db.String(64), nullable=True)  # SHA-256 hash of photo
+    photo_size_bytes = db.Column(db.Integer, nullable=True)  # Original photo size for verification
+    face_detected = db.Column(db.Boolean, default=False)  # Was a face detected?
+    face_confidence = db.Column(db.Float, nullable=True)  # Face detection confidence (0-100)
+    face_count = db.Column(db.Integer, default=0)  # Number of faces in photo
+    
+    # Device/Network metadata
+    device_info = db.Column(db.String(500), nullable=True)  # User agent
+    ip_address = db.Column(db.String(45), nullable=True)  # IPv4/IPv6
+    
+    # Verification status
+    verification_status = db.Column(db.String(20), default='pending')  # pending, verified, rejected
+    verified_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    verified_at = db.Column(db.DateTime, nullable=True)
+    rejection_reason = db.Column(db.String(255), nullable=True)
+    
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     employee = db.relationship('Employee', back_populates='attendances')
     shift = db.relationship('ShiftSchedule')
+    user = db.relationship('User', foreign_keys=[user_id], backref='user_attendances')
+    verifier = db.relationship('User', foreign_keys=[verified_by])
     
     __table_args__ = (
         db.Index('idx_employee_date', 'employee_id', 'attendance_date'),
+        db.Index('idx_user_date', 'user_id', 'attendance_date'),
     )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'employee_id': self.employee_id,
+            'user_id': self.user_id,
+            'user_name': self.user.full_name if self.user else (self.employee.name if self.employee else None),
+            'attendance_date': self.attendance_date.isoformat() if self.attendance_date else None,
+            'clock_in': self.clock_in.isoformat() if self.clock_in else None,
+            'clock_out': self.clock_out.isoformat() if self.clock_out else None,
+            'status': self.status,
+            'worked_hours': float(self.worked_hours) if self.worked_hours else 0,
+            'overtime_hours': float(self.overtime_hours) if self.overtime_hours else 0,
+            'photo_hash': self.photo_hash,
+            'face_detected': self.face_detected,
+            'face_confidence': self.face_confidence,
+            'face_count': self.face_count,
+            'device_info': self.device_info,
+            'ip_address': self.ip_address,
+            'verification_status': self.verification_status,
+            'verified_by': self.verified_by,
+            'verified_at': self.verified_at.isoformat() if self.verified_at else None,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
 
 class Leave(db.Model):
     __tablename__ = 'leaves'

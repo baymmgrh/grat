@@ -24,6 +24,8 @@ interface ShiftData {
   grade_a_carton: number;
   grade_b: number;
   grade_c: number;
+  setting_sticker: number;
+  setting_packaging: number;
   total: number;
   product_name?: string;
   pack_per_carton?: number;
@@ -66,6 +68,10 @@ interface MachineData {
   mrt: number;
   total_time: number;
   machine_speed: number;
+  average_time: number;
+  runtime: number;
+  waktu_tercatat: number;
+  waktu_tidak_tercatat: number;
 }
 
 const DailyController: React.FC = () => {
@@ -329,6 +335,14 @@ const DailyController: React.FC = () => {
                                 <p className="text-slate-400">Grade C</p>
                                 <p className="font-bold text-red-600">{shift.grade_c.toLocaleString()}</p>
                               </div>
+                              <div className="bg-purple-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Set Sticker</p>
+                                <p className="font-bold text-purple-600">{Math.round(shift.setting_sticker || 0).toLocaleString()}</p>
+                              </div>
+                              <div className="bg-indigo-50 rounded p-1.5 text-center">
+                                <p className="text-slate-400">Set Packaging</p>
+                                <p className="font-bold text-indigo-600">{Math.round(shift.setting_packaging || 0).toLocaleString()}</p>
+                              </div>
                               <div className="bg-emerald-50 rounded p-1.5 text-center">
                                 <p className="text-slate-400">Runtime</p>
                                 <p className="font-bold text-emerald-600">{shift.runtime_minutes}m</p>
@@ -376,6 +390,128 @@ const DailyController: React.FC = () => {
                           </div>
                         ))}
                       </div>
+                      
+                      {/* Time Distribution Pie Chart */}
+                      <div className="mt-4">
+                        <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                          <ChartBarIcon className="h-4 w-4" />
+                          Distribusi Waktu
+                        </h4>
+                        <div className="bg-white rounded-lg p-4 border border-slate-200">
+                          <div className="flex items-center gap-4">
+                            {/* Donut Chart */}
+                            <div className="relative w-32 h-32">
+                              <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
+                                {(() => {
+                                  const total = (machine.runtime || 0) + (machine.total_downtime || 0) + (machine.total_idle || 0);
+                                  if (total === 0) return <circle cx="18" cy="18" r="15.915" fill="none" stroke="#e5e7eb" strokeWidth="3" />;
+                                  
+                                  const runtime = (machine.runtime || 0) / total * 100;
+                                  const downtime = (machine.total_downtime || 0) / total * 100;
+                                  const idle = (machine.total_idle || 0) / total * 100;
+                                  
+                                  return (
+                                    <>
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="#10b981" strokeWidth="3"
+                                        strokeDasharray={`${runtime} ${100 - runtime}`} strokeDashoffset="0" />
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="#ef4444" strokeWidth="3"
+                                        strokeDasharray={`${downtime} ${100 - downtime}`} strokeDashoffset={`${-runtime}`} />
+                                      <circle cx="18" cy="18" r="15.915" fill="none" stroke="#f97316" strokeWidth="3"
+                                        strokeDasharray={`${idle} ${100 - idle}`} strokeDashoffset={`${-(runtime + downtime)}`} />
+                                    </>
+                                  );
+                                })()}
+                              </svg>
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="text-center">
+                                  <p className="text-lg font-bold text-slate-700">
+                                    {(machine.runtime || 0) + (machine.total_downtime || 0) + (machine.total_idle || 0)}
+                                  </p>
+                                  <p className="text-xs text-slate-400">menit</p>
+                                </div>
+                              </div>
+                            </div>
+                            {/* Legend */}
+                            <div className="flex-1 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
+                                  <span className="text-sm text-slate-600">Runtime</span>
+                                </div>
+                                <span className="font-semibold text-emerald-600">{machine.runtime || 0}m</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                  <span className="text-sm text-slate-600">Downtime</span>
+                                </div>
+                                <span className="font-semibold text-red-600">{machine.total_downtime || 0}m</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                                  <span className="text-sm text-slate-600">Idle</span>
+                                </div>
+                                <span className="font-semibold text-orange-600">{machine.total_idle || 0}m</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Quality Breakdown */}
+                      <div className="mt-4">
+                        <h4 className="font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                          <CubeIcon className="h-4 w-4" />
+                          Quality Breakdown
+                        </h4>
+                        <div className="bg-white rounded-lg p-4 border border-slate-200">
+                          {(() => {
+                            const totalOutput = machine.total_output || 0;
+                            const gradeA = machine.total_grade_a || 0;
+                            const gradeB = machine.total_grade_b || 0;
+                            const gradeC = machine.total_grade_c || 0;
+                            const pctA = totalOutput > 0 ? (gradeA / totalOutput * 100).toFixed(1) : 0;
+                            const pctB = totalOutput > 0 ? (gradeB / totalOutput * 100).toFixed(1) : 0;
+                            const pctC = totalOutput > 0 ? (gradeC / totalOutput * 100).toFixed(1) : 0;
+                            
+                            return (
+                              <div className="space-y-3">
+                                <div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-slate-600">Grade A</span>
+                                    <span className="font-semibold text-green-600">{pctA}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-3">
+                                    <div className="bg-green-500 h-3 rounded-full transition-all" style={{ width: `${pctA}%` }}></div>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-slate-600">Grade B</span>
+                                    <span className="font-semibold text-yellow-600">{pctB}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-3">
+                                    <div className="bg-yellow-500 h-3 rounded-full transition-all" style={{ width: `${pctB}%` }}></div>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="flex justify-between text-sm mb-1">
+                                    <span className="text-slate-600">Grade C</span>
+                                    <span className="font-semibold text-red-600">{pctC}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-3">
+                                    <div className="bg-red-500 h-3 rounded-full transition-all" style={{ width: `${pctC}%` }}></div>
+                                  </div>
+                                </div>
+                                <div className="pt-2 border-t text-xs text-slate-500 text-center">
+                                  Total: {totalOutput.toLocaleString()} pcs
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Daily Summary & Top Downtime */}
@@ -404,23 +540,31 @@ const DailyController: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex justify-between border-t pt-2">
-                              <span className="text-slate-500">MRT (Grade A ÷ Speed):</span>
-                              <span className="font-bold text-blue-600">{machine.mrt || 0} menit</span>
+                              <span className="text-slate-500">Average Time:</span>
+                              <span className="font-bold text-slate-700">{machine.average_time || 510} menit</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-500">Downtime:</span>
+                              <span className="text-slate-500">Runtime (Grade A ÷ Speed):</span>
+                              <span className="font-bold text-blue-600">{machine.runtime || 0} menit</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Total Downtime:</span>
                               <span className="font-medium text-red-600">{machine.total_downtime || 0} menit</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-500">Idle Time:</span>
+                              <span className="text-slate-500">Total Idle (Tunggu Bahan):</span>
                               <span className="font-medium text-orange-600">{machine.total_idle || 0} menit</span>
                             </div>
                             <div className="flex justify-between border-t pt-2">
-                              <span className="text-slate-500">Total Waktu:</span>
-                              <span className="font-bold">{machine.total_time || 0} menit</span>
+                              <span className="text-slate-500">Waktu Tercatat (Runtime + Down + Idle):</span>
+                              <span className="font-bold text-green-600">{machine.waktu_tercatat || 0} menit</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Waktu Tidak Tercatat:</span>
+                              <span className="font-bold text-red-600">{machine.waktu_tidak_tercatat || 0} menit</span>
                             </div>
                             <div className={`flex justify-between p-2 rounded mt-2 ${machine.efficiency >= (machine.target_efficiency || 60) ? 'bg-green-50' : machine.efficiency >= (machine.target_efficiency || 60) * 0.7 ? 'bg-yellow-50' : 'bg-red-50'}`}>
-                              <span className="font-semibold text-slate-700">Efisiensi Waktu (MRT ÷ Total):</span>
+                              <span className="font-semibold text-slate-700">Efisiensi (Runtime ÷ Average):</span>
                               <div className="text-right">
                                 <span className={`text-xl font-bold ${machine.efficiency >= (machine.target_efficiency || 60) ? 'text-green-600' : machine.efficiency >= (machine.target_efficiency || 60) * 0.7 ? 'text-yellow-600' : 'text-red-600'}`}>
                                   {machine.efficiency || 0}%

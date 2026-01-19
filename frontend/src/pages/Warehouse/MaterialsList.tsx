@@ -16,6 +16,7 @@ interface Material {
   code: string;
   name: string;
   material_type: string;
+  category: string;
   description: string;
   unit_of_measure: string;
   cost_per_unit: number;
@@ -159,6 +160,60 @@ const MaterialsList: React.FC = () => {
     }
   };
 
+  // Category group mapping
+  const getCategoryGroup = (category: string): string => {
+    const kainCategories = ['main_roll', 'jumbo_roll', 'spunbond', 'meltblown', 'kain', 'nonwoven'];
+    const packagingCategories = ['packaging', 'carton_box', 'inner_box', 'jerigen', 'botol'];
+    const aksesorisCategories = ['stc', 'fliptop', 'plastik'];
+    const chemicalCategories = ['parfum', 'chemical'];
+    
+    const catLower = (category || '').toLowerCase();
+    if (kainCategories.includes(catLower)) return 'Kain';
+    if (packagingCategories.includes(catLower)) return 'Packaging';
+    if (aksesorisCategories.includes(catLower)) return 'Aksesoris';
+    if (chemicalCategories.includes(catLower)) return 'Chemical';
+    return 'Lainnya';
+  };
+
+  const getCategoryColor = (category: string) => {
+    const group = getCategoryGroup(category);
+    switch (group) {
+      case 'Kain':
+        return 'bg-blue-100 text-blue-800';
+      case 'Packaging':
+        return 'bg-green-100 text-green-800';
+      case 'Aksesoris':
+        return 'bg-purple-100 text-purple-800';
+      case 'Chemical':
+        return 'bg-orange-100 text-orange-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getCategoryLabel = (category: string) => {
+    const labels: { [key: string]: string } = {
+      main_roll: 'Main Roll',
+      jumbo_roll: 'Jumbo Roll',
+      spunbond: 'Spunbond',
+      meltblown: 'Melt Blown',
+      kain: 'Kain',
+      nonwoven: 'Nonwoven',
+      packaging: 'Packaging',
+      carton_box: 'Carton Box',
+      inner_box: 'Inner Box',
+      jerigen: 'Jerigen',
+      botol: 'Botol',
+      stc: 'STC',
+      fliptop: 'Fliptop',
+      plastik: 'Plastik',
+      parfum: 'Parfum',
+      chemical: 'Chemical',
+      tissue: 'Tissue'
+    };
+    return labels[category?.toLowerCase()] || category || '-';
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -236,15 +291,10 @@ const MaterialsList: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('products.bom.material')}</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cost/Unit
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kategori</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost/Unit</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.status')}</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
               </tr>
@@ -270,14 +320,19 @@ const MaterialsList: React.FC = () => {
                       {getTypeLabel(material.material_type)}
                     </span>
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getCategoryColor(material.category)}`}>
+                        {getCategoryGroup(material.category)}
+                      </span>
+                      <span className="text-xs text-gray-500">{getCategoryLabel(material.category)}</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {material.unit_of_measure}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     Rp {material.cost_per_unit?.toLocaleString('id-ID') || '0'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {material.supplier || '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

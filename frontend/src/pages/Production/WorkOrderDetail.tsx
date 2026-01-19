@@ -15,6 +15,8 @@ interface ProductionRecord {
   quantity_produced: number;
   quantity_good: number;
   quantity_reject: number;
+  setting_sticker: number;
+  setting_packaging: number;
   downtime_minutes: number;
   operator_name: string;
   notes: string;
@@ -495,6 +497,8 @@ export default function WorkOrderDetail() {
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produced</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Good</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Reject</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Set Sticker</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Set Packaging</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Downtime</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Operator</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
@@ -509,6 +513,8 @@ export default function WorkOrderDetail() {
                     <td className="px-4 py-3 text-sm text-right font-medium">{record.quantity_produced}</td>
                     <td className="px-4 py-3 text-sm text-right text-green-600">{record.quantity_good}</td>
                     <td className="px-4 py-3 text-sm text-right text-red-600">{record.quantity_reject}</td>
+                    <td className="px-4 py-3 text-sm text-right text-purple-600">{record.setting_sticker || 0}</td>
+                    <td className="px-4 py-3 text-sm text-right text-indigo-600">{record.setting_packaging || 0}</td>
                     <td className="px-4 py-3 text-sm text-right text-orange-600">{record.downtime_minutes} min</td>
                     <td className="px-4 py-3 text-sm">{record.operator_name || '-'}</td>
                     <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">{record.notes || '-'}</td>

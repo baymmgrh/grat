@@ -11,6 +11,15 @@ import {
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 
+// Public routes that should NOT trigger session handling
+const PUBLIC_ROUTES = ['/absensi', '/', '/login', '/register'];
+
+// Check if current path is public (no hooks needed)
+const isPublicPath = () => {
+  const path = window.location.pathname;
+  return PUBLIC_ROUTES.some(route => path === route || path.startsWith('/tv/'));
+};
+
 // Session timeout configuration (in milliseconds)
 const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes of inactivity
 const WARNING_BEFORE_TIMEOUT = 5 * 60 * 1000; // Show warning 5 minutes before timeout
@@ -105,20 +114,25 @@ export default function SessionTimeoutModal({ onExtendSession }: SessionTimeoutM
   // Show notification and redirect to login
   useEffect(() => {
     const handleSessionExpired = () => {
+      // Skip session handling on public routes
+      if (isPublicPath()) {
+        console.log('On public route, skipping session expired handling');
+        return;
+      }
+      
       if (isSessionInitialized) {
         // User was active - show modal
         setShowWarning(false);
         setShowExpired(true);
       } else {
-        // Initial load with expired token - clear auth and redirect silently
-        // But show a toast notification
+        // Initial load with expired token - clear auth and redirect to login
         console.log('Session expired on initial load, redirecting to login...');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem(SESSION_START_KEY);
         localStorage.removeItem('last_activity_time');
         
-        // Dispatch logout and redirect
+        // Dispatch logout and redirect to login (session expired)
         dispatch(logout());
         navigate('/login', { 
           replace: true,
@@ -137,7 +151,8 @@ export default function SessionTimeoutModal({ onExtendSession }: SessionTimeoutM
   // Check session timeout - only after session is initialized
   useEffect(() => {
     // Don't check until session is properly initialized
-    if (!isAuthenticated || !token || !isSessionInitialized) return;
+    // Also skip on public routes
+    if (!isAuthenticated || !token || !isSessionInitialized || isPublicPath()) return;
 
     const checkSession = () => {
       const now = Date.now();
@@ -261,6 +276,9 @@ export default function SessionTimeoutModal({ onExtendSession }: SessionTimeoutM
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
+  // Don't render anything on public routes
+  if (isPublicPath()) return null;
+  
   if (!showWarning && !showExpired) return null;
 
   return (

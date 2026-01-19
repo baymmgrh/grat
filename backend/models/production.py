@@ -329,6 +329,9 @@ class ProductionRecord(db.Model):
     quantity_produced = db.Column(db.Numeric(15, 2), nullable=False)
     quantity_good = db.Column(db.Numeric(15, 2), nullable=False)
     quantity_scrap = db.Column(db.Numeric(15, 2), default=0)
+    quantity_rework = db.Column(db.Numeric(15, 2), default=0)
+    setting_sticker = db.Column(db.Numeric(15, 2), default=0)
+    setting_packaging = db.Column(db.Numeric(15, 2), default=0)
     uom = db.Column(db.String(20), nullable=False)
     downtime_minutes = db.Column(db.Integer, default=0)
     notes = db.Column(db.Text, nullable=True)
@@ -385,6 +388,8 @@ class ShiftProduction(db.Model):
     good_quantity = db.Column(db.Numeric(15, 2), nullable=False)
     reject_quantity = db.Column(db.Numeric(15, 2), default=0)
     rework_quantity = db.Column(db.Numeric(15, 2), default=0)
+    setting_sticker = db.Column(db.Numeric(15, 2), default=0)
+    setting_packaging = db.Column(db.Numeric(15, 2), default=0)
     uom = db.Column(db.String(20), nullable=False)
     
     # Efficiency Metrics

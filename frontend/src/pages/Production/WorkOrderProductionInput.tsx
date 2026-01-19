@@ -348,8 +348,9 @@ export default function WorkOrderProductionInput() {
     quantity_good: '',      // Grade A - user input
     quantity_reject: '0',   // Grade C - user input
     quantity_rework: '0',   // Grade B - user input
-    quantity_setting: '0',  // User input (setting pack)
-    quantity_waste: '0',    // Auto-calculated: Grade C + Setting
+    setting_sticker: '0',   // Setting sticker (pack)
+    setting_packaging: '0', // Setting packaging (pack)
+    quantity_waste: '0',    // Auto-calculated: Grade C + Setting Sticker + Setting Packaging
     // Waste per material type (auto-calculated from waste pack)
     waste_kain_kg: '0',
     waste_ingredient_kg: '0',
@@ -357,8 +358,8 @@ export default function WorkOrderProductionInput() {
     waste_stiker_pcs: '0',
     operator_id: '',
     notes: '',
-    planned_runtime: '480', // Bisa diubah manual
-    machine_speed: '',      // Speed mesin (pcs/jam) untuk perhitungan efisiensi
+    average_time: '510',   // Average time manual input (default 510 menit)
+    machine_speed: '',      // Speed mesin (pcs/menit) untuk perhitungan runtime
     // Early Stop / Shift Interruption
     early_stop: false,
     early_stop_time: '',
@@ -482,7 +483,8 @@ export default function WorkOrderProductionInput() {
     quantity_good: '',
     quantity_reject: '0',
     quantity_rework: '0',
-    quantity_setting: '0',
+    setting_sticker: '0',
+    setting_packaging: '0',
     quantity_waste: '0',
     waste_kain_kg: '0',
     waste_ingredient_kg: '0',
@@ -490,7 +492,7 @@ export default function WorkOrderProductionInput() {
     waste_stiker_pcs: '0',
     operator_id: '',
     notes: '',
-    planned_runtime: '480',
+    average_time: '510',
     machine_speed: '',
   };
 
@@ -557,12 +559,12 @@ export default function WorkOrderProductionInput() {
 
   // Re-calculate waste when workOrder data is loaded
   useEffect(() => {
-    if (workOrder && (formData.quantity_good || formData.quantity_reject || formData.quantity_rework || formData.quantity_setting)) {
+    if (workOrder && (formData.quantity_good || formData.quantity_reject || formData.quantity_rework || formData.setting_sticker || formData.setting_packaging)) {
       // Trigger waste calculation with current values
-      const currentFields = ['quantity_good', 'quantity_reject', 'quantity_rework', 'quantity_setting'];
+      const currentFields = ['quantity_good', 'quantity_reject', 'quantity_rework', 'setting_sticker', 'setting_packaging'];
       currentFields.forEach(field => {
-        if (formData[field]) {
-          handleChange(field, formData[field]);
+        if (formData[field as keyof typeof formData]) {
+          handleChange(field, formData[field as keyof typeof formData]);
         }
       });
     }
@@ -728,27 +730,28 @@ export default function WorkOrderProductionInput() {
       const updated = { ...prev, [field]: value };
       
       // Auto-calculate when relevant fields change
-      // User inputs: qty_good (Grade A), qty_reject (Grade C), qty_rework (Grade B), qty_setting
+      // User inputs: qty_good (Grade A), qty_reject (Grade C), qty_rework (Grade B), setting_sticker, setting_packaging
       // Auto-calculated:
       //   qty_produced = Grade A + Grade B + Grade C (tanpa setting)
-      //   waste (pack) = Grade C + Setting
+      //   waste (pack) = Grade C + Setting Sticker + Setting Packaging
       //   waste_kain_kg = (berat_kering / pack_per_karton) × waste_pack
       //   waste_ingredient_kg = (ingredient / pack_per_karton) × waste_pack
-      //   waste_packaging_pcs = waste_pack
-      //   waste_stiker_pcs = waste_pack
-      if (field === 'quantity_good' || field === 'quantity_reject' || field === 'quantity_rework' || field === 'quantity_setting') {
+      //   waste_packaging_pcs = Grade C + Setting Packaging
+      //   waste_stiker_pcs = Grade C + Setting Sticker
+      if (field === 'quantity_good' || field === 'quantity_reject' || field === 'quantity_rework' || field === 'setting_sticker' || field === 'setting_packaging') {
         const strValue = typeof value === 'string' ? value : String(value);
         const gradeA = parseFloat(field === 'quantity_good' ? strValue : updated.quantity_good) || 0;
         const gradeC = parseFloat(field === 'quantity_reject' ? strValue : updated.quantity_reject) || 0;
         const gradeB = parseFloat(field === 'quantity_rework' ? strValue : updated.quantity_rework) || 0;
-        const setting = parseFloat(field === 'quantity_setting' ? strValue : updated.quantity_setting) || 0;
+        const settingSticker = parseFloat(field === 'setting_sticker' ? strValue : updated.setting_sticker) || 0;
+        const settingPackaging = parseFloat(field === 'setting_packaging' ? strValue : updated.setting_packaging) || 0;
         
         // qty_produced = Grade A + Grade B + Grade C (tanpa setting)
         const produced = gradeA + gradeB + gradeC;
         updated.quantity_produced = produced.toString();
         
-        // Waste (pack) = Grade C + Setting
-        const wastePack = gradeC + setting;
+        // Waste (pack) = Grade C + Setting Sticker + Setting Packaging
+        const wastePack = gradeC + settingSticker + settingPackaging;
         updated.quantity_waste = wastePack.toString();
         
         // Auto-calculate waste materials - ALWAYS run with fallback values
@@ -784,13 +787,16 @@ export default function WorkOrderProductionInput() {
           beratKering,
           ingredient,
           wastePack,
+          settingSticker,
+          settingPackaging,
           field,
           value,
           formData: {
             quantity_good: formData.quantity_good,
             quantity_reject: formData.quantity_reject,
             quantity_rework: formData.quantity_rework,
-            quantity_setting: formData.quantity_setting
+            setting_sticker: formData.setting_sticker,
+            setting_packaging: formData.setting_packaging
           }
         });
           
@@ -802,11 +808,11 @@ export default function WorkOrderProductionInput() {
           const wasteIngredientKg = ingredient * wastePack;
           updated.waste_ingredient_kg = wasteIngredientKg.toFixed(4);
           
-          // waste_packaging = waste_pack (1:1)
-          updated.waste_packaging_pcs = wastePack.toString();
+          // waste_packaging = Grade C + Setting Packaging
+          updated.waste_packaging_pcs = (gradeC + settingPackaging).toString();
           
-          // waste_stiker = waste_pack (1:1)
-          updated.waste_stiker_pcs = wastePack.toString();
+          // waste_stiker = Grade C + Setting Sticker
+          updated.waste_stiker_pcs = (gradeC + settingSticker).toString();
       }
       
       return updated;
@@ -870,9 +876,17 @@ export default function WorkOrderProductionInput() {
     return result;
   };
 
-  // Get planned runtime from form
-  const getPlannedRuntime = () => {
-    return parseInt(formData.planned_runtime) || DEFAULT_RUNTIME;
+  // Get average time from form (manual input, default 510)
+  const getAverageTime = () => {
+    return parseInt(formData.average_time) || 510;
+  };
+
+  // Calculate runtime = Grade A / speed mesin (in minutes)
+  const getRuntime = () => {
+    const gradeA = parseFloat(formData.quantity_good) || 0;
+    const speed = parseFloat(formData.machine_speed) || 0;
+    if (speed <= 0) return 0;
+    return Math.round(gradeA / speed);
   };
 
   // Calculate total downtime (duration × frequency for each entry)
@@ -884,15 +898,20 @@ export default function WorkOrderProductionInput() {
     }, 0);
   };
 
-  // Get actual runtime
-  const getActualRuntime = () => {
-    return Math.max(0, getPlannedRuntime() - getTotalDowntime());
+  // Get waktu tercatat = runtime + downtime
+  const getWaktuTercatat = () => {
+    return getRuntime() + getTotalDowntime();
   };
 
-  // Get downtime percentage for a category
+  // Get waktu tidak tercatat = average_time - waktu_tercatat
+  const getWaktuTidakTercatat = () => {
+    return Math.max(0, getAverageTime() - getWaktuTercatat());
+  };
+
+  // Get downtime percentage for a category (based on average time)
   const getDowntimePercentage = (minutes: number) => {
-    const runtime = getPlannedRuntime();
-    return runtime > 0 ? (minutes / runtime * 100) : 0;
+    const avgTime = getAverageTime();
+    return avgTime > 0 ? (minutes / avgTime * 100) : 0;
   };
 
   // Check if any category exceeds limit
@@ -916,11 +935,11 @@ export default function WorkOrderProductionInput() {
     return Object.values(status).some(s => s.overLimit);
   };
 
-  // Calculate efficiency: 100% - (total downtime / planned runtime * 100)
+  // Calculate efficiency: runtime / average_time * 100
   const getEfficiency = () => {
-    const totalDowntime = getTotalDowntime();
-    const runtime = getPlannedRuntime();
-    const efficiency = runtime > 0 ? 100 - (totalDowntime / runtime * 100) : 0;
+    const runtime = getRuntime();
+    const avgTime = getAverageTime();
+    const efficiency = avgTime > 0 ? (runtime / avgTime * 100) : 0;
     return Math.max(0, Math.min(100, efficiency));
   };
 
@@ -945,15 +964,18 @@ export default function WorkOrderProductionInput() {
         quantity_good: parseFloat(formData.quantity_good),          // Grade A - user input
         quantity_reject: parseFloat(formData.quantity_reject),      // Grade C
         quantity_rework: parseFloat(formData.quantity_rework),      // Grade B
-        quantity_setting: parseFloat(formData.quantity_setting),    // Setting pack
-        quantity_waste: parseFloat(formData.quantity_waste),        // Auto: C + Setting
+        setting_sticker: parseFloat(formData.setting_sticker),      // Setting sticker
+        setting_packaging: parseFloat(formData.setting_packaging),  // Setting packaging
+        quantity_waste: parseFloat(formData.quantity_waste),        // Auto: C + Setting Sticker + Setting Packaging
         // Waste materials (auto-calculated)
         waste_kain_kg: parseFloat(formData.waste_kain_kg) || 0,
         waste_ingredient_kg: parseFloat(formData.waste_ingredient_kg) || 0,
         waste_packaging_pcs: parseFloat(formData.waste_packaging_pcs) || 0,
         waste_stiker_pcs: parseFloat(formData.waste_stiker_pcs) || 0,
-        planned_runtime: getPlannedRuntime(),
-        actual_runtime: getActualRuntime(),
+        average_time: getAverageTime(),
+        runtime: getRuntime(),
+        waktu_tercatat: getWaktuTercatat(),
+        waktu_tidak_tercatat: getWaktuTidakTercatat(),
         downtime_minutes: getTotalDowntime(),
         machine_speed: parseInt(formData.machine_speed) || 0,
         // Downtime by category
@@ -1147,7 +1169,7 @@ export default function WorkOrderProductionInput() {
         )}
 
         {/* Date & Shift */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tanggal Produksi *
@@ -1212,15 +1234,29 @@ export default function WorkOrderProductionInput() {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Runtime (menit)
+              Average Time (menit)
             </label>
             <input
               type="number"
-              value={formData.planned_runtime}
-              onChange={(e) => handleChange('planned_runtime', e.target.value)}
+              value={formData.average_time}
+              onChange={(e) => handleChange('average_time', e.target.value)}
               onWheel={disableScrollOnNumberInput}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="480"
+              placeholder="510"
+              min="0"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Speed Mesin (pcs/menit)
+            </label>
+            <input
+              type="number"
+              value={formData.machine_speed}
+              onChange={(e) => handleChange('machine_speed', e.target.value)}
+              onWheel={disableScrollOnNumberInput}
+              className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-blue-50"
+              placeholder="0"
               min="0"
             />
           </div>
@@ -1229,7 +1265,7 @@ export default function WorkOrderProductionInput() {
         {/* Quantity Section */}
         <div className="border-t pt-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Hasil Produksi</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Grade A <span className="text-green-600">(Good)</span> *
@@ -1322,14 +1358,28 @@ export default function WorkOrderProductionInput() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Setting <span className="text-gray-500">(pack)</span>
+                Setting Sticker <span className="text-purple-500">(pack)</span>
               </label>
               <input
                 type="number"
-                value={formData.quantity_setting}
-                onChange={(e) => handleChange('quantity_setting', e.target.value)}
+                value={formData.setting_sticker}
+                onChange={(e) => handleChange('setting_sticker', e.target.value)}
                 onWheel={disableScrollOnNumberInput}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                className="w-full px-3 py-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Setting Packaging <span className="text-indigo-500">(pack)</span>
+              </label>
+              <input
+                type="number"
+                value={formData.setting_packaging}
+                onChange={(e) => handleChange('setting_packaging', e.target.value)}
+                onWheel={disableScrollOnNumberInput}
+                className="w-full px-3 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="0"
                 min="0"
               />
@@ -1420,7 +1470,7 @@ export default function WorkOrderProductionInput() {
                   readOnly
                   className="w-full px-3 py-2 bg-orange-50 border border-orange-300 rounded-lg text-orange-700 font-medium cursor-not-allowed"
                 />
-                <span className="text-xs text-gray-500 whitespace-nowrap">= C + Setting</span>
+                <span className="text-xs text-gray-500 whitespace-nowrap">= C + Sticker + Packaging</span>
               </div>
             </div>
           </div>
@@ -1497,36 +1547,49 @@ export default function WorkOrderProductionInput() {
                       <td className="px-3 py-2 text-right text-purple-600">{formData.quantity_reject || 0}</td>
                       <td className="px-3 py-2 text-right text-orange-600">{formData.quantity_reject || 0}</td>
                     </tr>
-                    {/* Setting/Waste */}
-                    <tr className="bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-700">Setting (Waste)</td>
-                      <td className="px-3 py-2 text-right">{formData.quantity_setting || 0}</td>
+                    {/* Setting Sticker */}
+                    <tr className="bg-purple-50">
+                      <td className="px-3 py-2 font-medium text-purple-700">Setting Sticker</td>
+                      <td className="px-3 py-2 text-right">{formData.setting_sticker || 0}</td>
                       <td className="px-3 py-2 text-right text-blue-600">
-                        {(parseFloat(formData.quantity_setting || '0') * (workOrder.consumption_data.berat_kering_per_pack || 0)).toFixed(4)}
+                        {(parseFloat(formData.setting_sticker || '0') * (workOrder.consumption_data.berat_kering_per_pack || 0)).toFixed(4)}
                       </td>
                       <td className="px-3 py-2 text-right text-green-600">
-                        {(parseFloat(formData.quantity_setting || '0') * (workOrder.consumption_data.volume_per_pack || 0)).toFixed(4)}
+                        {(parseFloat(formData.setting_sticker || '0') * (workOrder.consumption_data.volume_per_pack || 0)).toFixed(4)}
                       </td>
-                      <td className="px-3 py-2 text-right text-purple-600">{formData.quantity_setting || 0}</td>
-                      <td className="px-3 py-2 text-right text-orange-600">{formData.quantity_setting || 0}</td>
+                      <td className="px-3 py-2 text-right text-purple-600">{formData.setting_sticker || 0}</td>
+                      <td className="px-3 py-2 text-right text-orange-600">0</td>
+                    </tr>
+                    {/* Setting Packaging */}
+                    <tr className="bg-indigo-50">
+                      <td className="px-3 py-2 font-medium text-indigo-700">Setting Packaging</td>
+                      <td className="px-3 py-2 text-right">{formData.setting_packaging || 0}</td>
+                      <td className="px-3 py-2 text-right text-blue-600">
+                        {(parseFloat(formData.setting_packaging || '0') * (workOrder.consumption_data.berat_kering_per_pack || 0)).toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-green-600">
+                        {(parseFloat(formData.setting_packaging || '0') * (workOrder.consumption_data.volume_per_pack || 0)).toFixed(4)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-purple-600">0</td>
+                      <td className="px-3 py-2 text-right text-orange-600">{formData.setting_packaging || 0}</td>
                     </tr>
                     {/* Total */}
                     <tr className="bg-blue-100 font-bold">
                       <td className="px-3 py-2 text-blue-800">TOTAL</td>
                       <td className="px-3 py-2 text-right text-blue-800">
-                        {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')}
+                        {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_sticker || '0') + parseFloat(formData.setting_packaging || '0')}
                       </td>
                       <td className="px-3 py-2 text-right text-blue-700">
-                        {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')) * (workOrder.consumption_data.berat_kering_per_pack || 0)).toFixed(4)}
+                        {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_sticker || '0') + parseFloat(formData.setting_packaging || '0')) * (workOrder.consumption_data.berat_kering_per_pack || 0)).toFixed(4)}
                       </td>
                       <td className="px-3 py-2 text-right text-green-700">
-                        {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')) * (workOrder.consumption_data.volume_per_pack || 0)).toFixed(4)}
+                        {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_sticker || '0') + parseFloat(formData.setting_packaging || '0')) * (workOrder.consumption_data.volume_per_pack || 0)).toFixed(4)}
                       </td>
                       <td className="px-3 py-2 text-right text-purple-700">
-                        {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')}
+                        {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_sticker || '0')}
                       </td>
                       <td className="px-3 py-2 text-right text-orange-700">
-                        {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')}
+                        {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_packaging || '0')}
                       </td>
                     </tr>
                   </tbody>
@@ -1538,28 +1601,28 @@ export default function WorkOrderProductionInput() {
                 <div className="bg-white p-3 rounded-lg border border-blue-100">
                   <p className="text-xs text-gray-500 mb-1">Total Kain</p>
                   <p className="text-lg font-bold text-blue-700">
-                    {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')) * (workOrder.consumption_data.berat_kering_per_pack || 0)).toFixed(4)}
+                    {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_sticker || '0') + parseFloat(formData.setting_packaging || '0')) * (workOrder.consumption_data.berat_kering_per_pack || 0)).toFixed(4)}
                   </p>
                   <p className="text-xs text-gray-400">kg</p>
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-green-100">
                   <p className="text-xs text-gray-500 mb-1">Total Ingredient</p>
                   <p className="text-lg font-bold text-green-700">
-                    {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')) * (workOrder.consumption_data.volume_per_pack || 0)).toFixed(4)}
+                    {((parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_sticker || '0') + parseFloat(formData.setting_packaging || '0')) * (workOrder.consumption_data.volume_per_pack || 0)).toFixed(4)}
                   </p>
                   <p className="text-xs text-gray-400">kg</p>
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-purple-100">
                   <p className="text-xs text-gray-500 mb-1">Total Packaging</p>
                   <p className="text-lg font-bold text-purple-700">
-                    {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')}
+                    {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_packaging || '0')}
                   </p>
                   <p className="text-xs text-gray-400">pcs</p>
                 </div>
                 <div className="bg-white p-3 rounded-lg border border-orange-100">
                   <p className="text-xs text-gray-500 mb-1">Total Stiker</p>
                   <p className="text-lg font-bold text-orange-700">
-                    {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.quantity_setting || '0')}
+                    {parseFloat(formData.quantity_produced || '0') + parseFloat(formData.setting_sticker || '0')}
                   </p>
                   <p className="text-xs text-gray-400">pcs</p>
                 </div>
@@ -1588,41 +1651,14 @@ export default function WorkOrderProductionInput() {
                 </span>
               )}
             </h3>
-            <div className="flex items-center gap-3">
-              {/* Planned Runtime Input */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">Runtime:</label>
-                <input
-                  type="number"
-                  value={formData.planned_runtime}
-                  onChange={(e) => handleChange('planned_runtime', e.target.value)}
-                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
-                  min="1"
-                />
-                <span className="text-sm text-gray-500">menit</span>
-              </div>
-              {/* Machine Speed Input */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">Speed Mesin:</label>
-                <input
-                  type="number"
-                  value={formData.machine_speed}
-                  onChange={(e) => handleChange('machine_speed', e.target.value)}
-                  className="w-24 px-2 py-1 border border-blue-300 rounded text-sm text-center bg-blue-50"
-                  min="0"
-                  placeholder="0"
-                />
-                <span className="text-sm text-gray-500">pcs/menit</span>
-              </div>
-              <button
-                type="button"
-                onClick={addDowntimeEntry}
-                className="inline-flex items-center px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-sm font-medium"
-              >
-                <PlusIcon className="h-4 w-4 mr-1" />
-                Tambah Downtime
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={addDowntimeEntry}
+              className="inline-flex items-center px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 text-sm font-medium"
+            >
+              <PlusIcon className="h-4 w-4 mr-1" />
+              Tambah Downtime
+            </button>
           </div>
           
           {/* Downtime Entries */}
@@ -1797,7 +1833,7 @@ export default function WorkOrderProductionInput() {
             </div>
           )}
 
-          {/* Summary Box */}
+          {/* Summary Box - Time Calculations */}
           <div className={`rounded-lg p-4 ${hasOverLimit() ? 'bg-red-50 border-2 border-red-300' : 'bg-gray-100'}`}>
             {hasOverLimit() && (
               <div className="flex items-center gap-2 mb-4 text-red-700">
@@ -1805,52 +1841,58 @@ export default function WorkOrderProductionInput() {
                 <span className="font-medium">Perhatian: Ada kategori downtime yang melebihi limit!</span>
               </div>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+              {/* Average Time */}
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Average Time</p>
+                <p className="text-xl font-bold text-gray-700">{getAverageTime()} menit</p>
+                <p className="text-xs text-gray-400">(manual input)</p>
+              </div>
+              
+              {/* Runtime = Grade A / Speed */}
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Runtime</p>
+                <p className="text-xl font-bold text-blue-600">{getRuntime()} menit</p>
+                <p className="text-xs text-gray-400">= Grade A ÷ Speed</p>
+              </div>
+              
               {/* Total Downtime */}
               <div className="text-center">
                 <p className="text-sm text-gray-600">Total Downtime</p>
-                <p className="text-2xl font-bold text-orange-600">{getTotalDowntime()} menit</p>
-                <p className="text-xs text-gray-500">
-                  ({getDowntimePercentage(getTotalDowntime()).toFixed(1)}% dari {getPlannedRuntime()}m)
+                <p className="text-xl font-bold text-orange-600">{getTotalDowntime()} menit</p>
+                <p className="text-xs text-gray-400">(dari entries)</p>
+              </div>
+              
+              {/* Waktu Tercatat = Runtime + Downtime */}
+              <div className="text-center">
+                <p className="text-sm text-gray-600">Waktu Tercatat</p>
+                <p className={`text-xl font-bold ${getWaktuTercatat() > getAverageTime() ? 'text-red-600' : 'text-green-600'}`}>
+                  {getWaktuTercatat()} menit
                 </p>
-                {/* Downtime vs Runtime indicator */}
-                {getTotalDowntime() > 0 && (
-                  <p className={`text-xs font-medium mt-1 ${
-                    getTotalDowntime() > getPlannedRuntime() 
-                      ? 'text-red-600' 
-                      : 'text-green-600'
-                  }`}>
-                    {getTotalDowntime() > getPlannedRuntime() 
-                      ? `+${getTotalDowntime() - getPlannedRuntime()}m (melebihi runtime)` 
-                      : `-${getPlannedRuntime() - getTotalDowntime()}m (sisa runtime)`}
+                <p className="text-xs text-gray-400">= Runtime + Downtime</p>
+                {getWaktuTercatat() > getAverageTime() && (
+                  <p className="text-xs text-red-600 font-medium mt-1">
+                    ⚠ Melebihi {getWaktuTercatat() - getAverageTime()} menit
                   </p>
                 )}
               </div>
               
-              {/* Actual Runtime */}
+              {/* Waktu Tidak Tercatat = Average - Tercatat */}
               <div className="text-center">
-                <p className="text-sm text-gray-600">Actual Runtime</p>
-                <p className="text-2xl font-bold text-blue-600">{getActualRuntime()} menit</p>
+                <p className="text-sm text-gray-600">Waktu Tidak Tercatat</p>
+                <p className={`text-xl font-bold ${getWaktuTidakTercatat() === 0 && getWaktuTercatat() > getAverageTime() ? 'text-red-600' : 'text-red-600'}`}>
+                  {getWaktuTidakTercatat()} menit
+                </p>
+                <p className="text-xs text-gray-400">= Average - Tercatat</p>
               </div>
               
-              {/* Efficiency */}
+              {/* Efficiency = Runtime / Average Time */}
               <div className="text-center">
                 <p className="text-sm text-gray-600">Efisiensi</p>
-                <p className={`text-3xl font-bold ${getEfficiency() >= 60 ? 'text-green-600' : 'text-red-600'}`}>
+                <p className={`text-2xl font-bold ${getEfficiency() >= 60 ? 'text-green-600' : 'text-red-600'}`}>
                   {getEfficiency().toFixed(1)}%
                 </p>
-              </div>
-              
-              {/* Status */}
-              <div className="text-center">
-                <p className="text-sm text-gray-600">Status</p>
-                <span className={`inline-block mt-1 px-4 py-2 rounded-full text-sm font-bold ${
-                  getEfficiency() >= 60 
-                    ? 'bg-green-100 text-green-800 border-2 border-green-500' 
-                    : 'bg-red-100 text-red-800 border-2 border-red-500'
-                }`}>
-                  {getEfficiency() >= 60 ? '✓ BAIK' : '✗ PERLU PERBAIKAN'}
-                </span>
+                <p className="text-xs text-gray-400">= Runtime ÷ Average</p>
               </div>
             </div>
           </div>

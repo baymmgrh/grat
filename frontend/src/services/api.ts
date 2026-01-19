@@ -705,6 +705,10 @@ export const hrApi = api.injectEndpoints({
       query: () => '/hr/departments',
       providesTags: ['Departments'],
     }),
+    getPositions: builder.query({
+      query: () => '/hr/positions',
+      providesTags: ['Positions'],
+    }),
     createDepartment: builder.mutation({
       query: (data) => ({
         url: '/hr/departments',
@@ -1038,6 +1042,7 @@ export const {
   useUpdateEmployeeMutation,
   useDeleteEmployeeMutation,
   useGetDepartmentsQuery,
+  useGetPositionsQuery,
   useCreateDepartmentMutation,
   useGetShiftsQuery,
   useCreateShiftMutation,

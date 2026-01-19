@@ -45,6 +45,8 @@ interface Assignment {
   is_backup: boolean;
   status: string;
   notes?: string;
+  job_desc?: string;      // For Packing Manual - job description
+  machine_ref?: number;   // For Distribusi - which machine they're at
 }
 
 interface RoleDefinition {
@@ -82,13 +84,38 @@ const SHIFTS = [
 
 const ROLE_ICONS: { [key: string]: React.ElementType } = {
   operator: CogIcon,
-  qc: ClipboardDocumentCheckIcon,
-  maintenance: WrenchScrewdriverIcon,
-  packing_machine: CubeIcon,
-  packing_manual: CubeIcon,
-  timbang_box: ScaleIcon,
   helper: UserIcon,
+  checker: ClipboardDocumentCheckIcon,
+  infeeding: CubeIcon,
+  timbang_box: ScaleIcon,
+  qc_ipc: ClipboardDocumentCheckIcon,
+  qc_fg: ClipboardDocumentCheckIcon,
+  packing_line_1: CubeIcon,
+  packing_line_2: CubeIcon,
+  packing_line_3: CubeIcon,
+  packing_line_4: CubeIcon,
+  packing_line_5: CubeIcon,
+  distribusi: CubeIcon,
+  bag_maker: CogIcon,
+  inkjet: CogIcon,
+  fliptop: CogIcon,
 };
+
+// Machine-based roles order: Operator - Helper - Checker - Infeeding - Timbang Box
+const MACHINE_ROLES = ['operator', 'helper', 'checker', 'infeeding', 'timbang_box'];
+
+// Packing Lines (5 lines with product per line)
+const PACKING_LINES = ['packing_line_1', 'packing_line_2', 'packing_line_3', 'packing_line_4', 'packing_line_5'];
+
+// General roles (manual input) - excluding packing lines which have separate UI
+const GENERAL_ROLES = ['qc_ipc', 'qc_fg', 'distribusi'];
+
+// Special machines (Bag Maker, Inkjet, Fliptop) - these go in the machine table
+const SPECIAL_MACHINES: Machine[] = [
+  { id: -1, name: 'Mesin Bag Maker', code: 'BAG' },
+  { id: -2, name: 'Mesin Inkjet', code: 'INK' },
+  { id: -3, name: 'Mesin Fliptop', code: 'FLP' },
+];
 
 // Get week number from date
 function getWeekNumber(date: Date): { week: number; year: number } {
@@ -124,6 +151,7 @@ export default function WorkRosterWeekly() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [machineProducts, setMachineProducts] = useState<{ [machineId: number]: string }>({});
   
   // Form state for each shift
   const [leaderIds, setLeaderIds] = useState<{ shift_1: number | null; shift_2: number | null; shift_3: number | null }>({
@@ -141,6 +169,17 @@ export default function WorkRosterWeekly() {
     shift_3: {}
   });
   const [notes, setNotes] = useState('');
+  const [rosterName, setRosterName] = useState('');
+  const [manualRoster, setManualRoster] = useState<{ [key: string]: string }>({});
+  
+  // Packing line products (product name per line)
+  const [packingLineProducts, setPackingLineProducts] = useState<{ [line: string]: string }>({
+    packing_line_1: '',
+    packing_line_2: '',
+    packing_line_3: '',
+    packing_line_4: '',
+    packing_line_5: '',
+  });
   
   // Modal states
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
@@ -153,7 +192,7 @@ export default function WorkRosterWeekly() {
   const weekStart = getMonday(currentDate);
   const weekEnd = getSunday(currentDate);
 
-  // Fetch machines
+  // Fetch machines and weekly production schedule
   useEffect(() => {
     const fetchMachines = async () => {
       try {
@@ -167,6 +206,72 @@ export default function WorkRosterWeekly() {
     };
     fetchMachines();
   }, []);
+
+  // Update machine product (manual input)
+  const updateMachineProduct = (machineId: number, product: string) => {
+    setMachineProducts(prev => ({
+      ...prev,
+      [machineId]: product
+    }));
+  };
+
+  // Get all machines including special machines (Bag Maker, Inkjet, Fliptop)
+  const allMachines = [...machines, ...SPECIAL_MACHINES];
+  
+  // Get all used employee names across the current shift roster
+  const getAllUsedNames = (): Set<string> => {
+    const names = new Set<string>();
+    Object.entries(manualRoster).forEach(([key, value]) => {
+      if (!key.startsWith(selectedShift)) return;
+      if (!value) return;
+      
+      // Handle distribusi format (machineId:name)
+      if (key.includes('distribusi') && !key.includes('_machine')) {
+        value.split('\n').forEach(entry => {
+          const parts = entry.split(':');
+          if (parts.length >= 2 && parts[1]?.trim()) {
+            names.add(parts[1].trim().toLowerCase());
+          }
+        });
+      } else {
+        // Regular format (name per line)
+        value.split('\n').forEach(name => {
+          if (name.trim()) {
+            names.add(name.trim().toLowerCase());
+          }
+        });
+      }
+    });
+    return names;
+  };
+  
+  // Check if a name is duplicate (excluding current position)
+  const isNameDuplicate = (name: string, currentKey: string, currentIdx: number): boolean => {
+    if (!name.trim()) return false;
+    const nameLower = name.trim().toLowerCase();
+    
+    let count = 0;
+    Object.entries(manualRoster).forEach(([key, value]) => {
+      if (!key.startsWith(selectedShift)) return;
+      if (!value) return;
+      
+      if (key.includes('distribusi') && !key.includes('_machine')) {
+        value.split('\n').forEach((entry, idx) => {
+          const parts = entry.split(':');
+          if (parts.length >= 2 && parts[1]?.trim().toLowerCase() === nameLower) {
+            if (!(key === currentKey && idx === currentIdx)) count++;
+          }
+        });
+      } else {
+        value.split('\n').forEach((n, idx) => {
+          if (n.trim().toLowerCase() === nameLower) {
+            if (!(key === currentKey && idx === currentIdx)) count++;
+          }
+        });
+      }
+    });
+    return count > 0;
+  };
 
   // Fetch roster data
   const fetchRoster = useCallback(async () => {
@@ -277,6 +382,20 @@ export default function WorkRosterWeekly() {
     
     setShowEmployeeModal(false);
     toast.success(`${employee.full_name} ditambahkan ke ${roleDefinitions[currentRole]?.name || currentRole}`);
+  };
+
+  // Update assignment field (job_desc, machine_ref)
+  const updateAssignmentField = (role: string, index: number, field: 'job_desc' | 'machine_ref', value: string | number) => {
+    const shiftAssignments = { ...assignments[selectedShift as keyof typeof assignments] };
+    const roleAssignments = [...(shiftAssignments[role] || [])];
+    if (roleAssignments[index]) {
+      roleAssignments[index] = { ...roleAssignments[index], [field]: value };
+      shiftAssignments[role] = roleAssignments;
+      setAssignments(prev => ({
+        ...prev,
+        [selectedShift]: shiftAssignments
+      }));
+    }
   };
 
   // Remove assignment
@@ -454,6 +573,7 @@ export default function WorkRosterWeekly() {
             </span>
           )}
         </div>
+        
       </div>
 
       {/* Shift Tabs */}
@@ -516,136 +636,419 @@ export default function WorkRosterWeekly() {
               </select>
             </div>
 
-            {/* Machine-based Assignments */}
+            {/* Machine-based Assignments: Operator - Helper - Checker */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <CogIcon className="h-5 w-5 text-blue-600" />
-                Assignment per Mesin - {SHIFTS.find(s => s.value === selectedShift)?.shortLabel}
+                Assignment per Mesin Produksi - {SHIFTS.find(s => s.value === selectedShift)?.shortLabel}
               </h3>
               
               <div className="overflow-x-auto">
                 <table className="min-w-full border rounded-lg">
                   <thead>
                     <tr className="bg-gray-50">
-                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-40 border-r">Mesin</th>
-                      {Object.entries(roleDefinitions)
-                        .filter(([_, def]) => def.requires_machine)
-                        .map(([role, def]) => (
-                          <th key={role} className="px-4 py-3 text-left text-sm font-semibold border-r last:border-r-0" style={{ color: def.color }}>
-                            {def.name}
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700 w-48 border-r">
+                        Mesin
+                      </th>
+                      <th className="px-3 py-3 text-left text-sm font-semibold text-gray-700 w-40 border-r">
+                        Produk
+                      </th>
+                      {MACHINE_ROLES.map(role => {
+                        const def = roleDefinitions[role];
+                        return (
+                          <th key={role} className="px-4 py-3 text-center text-sm font-semibold border-r last:border-r-0" style={{ color: def?.color || '#333' }}>
+                            {def?.name || role}
                           </th>
-                        ))}
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {machines.map(machine => (
-                      <tr key={machine.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900 border-r bg-gray-50">
-                          {machine.name}
-                          <div className="text-xs text-gray-500">{machine.code}</div>
-                        </td>
-                        {Object.entries(roleDefinitions)
-                          .filter(([_, def]) => def.requires_machine)
-                          .map(([role, def]) => {
-                            const roleAssignments = getAssignmentsForMachine(role, machine.id);
-                            const RoleIcon = ROLE_ICONS[role] || UserIcon;
+                    {[...allMachines].sort((a, b) => {
+                      // Special machines go last (negative IDs)
+                      if (a.id < 0 && b.id >= 0) return 1;
+                      if (a.id >= 0 && b.id < 0) return -1;
+                      // Natural sort for regular machines
+                      const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+                      const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+                      return numA - numB;
+                    }).map(machine => {
+                      const productValue = machineProducts[machine.id] || '';
+                      return (
+                        <tr key={machine.id} className={`hover:bg-gray-50 ${machine.id < 0 ? 'bg-blue-50' : ''}`}>
+                          <td className="px-4 py-3 font-medium text-gray-900 border-r bg-gray-50">
+                            <div className="font-semibold">{machine.name}</div>
+                            <div className="text-xs text-gray-500">{machine.code}</div>
+                          </td>
+                          <td className="px-3 py-3 border-r">
+                            <input
+                              type="text"
+                              value={productValue}
+                              onChange={(e) => updateMachineProduct(machine.id, e.target.value)}
+                              placeholder="Input produk..."
+                              className="w-full text-sm border rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                            />
+                          </td>
+                          {MACHINE_ROLES.map(role => {
+                            const key = `${selectedShift}_${machine.id}_${role}`;
+                            const rawValue = manualRoster[key];
+                            const names = rawValue !== undefined ? rawValue.split('\n') : [];
+                            
+                            const addName = () => {
+                              setManualRoster(prev => {
+                                const current = prev[key];
+                                if (current === undefined || current === '') {
+                                  return { ...prev, [key]: '' };
+                                }
+                                return { ...prev, [key]: current + '\n' };
+                              });
+                            };
+                            
+                            const removeName = (idx: number) => {
+                              const newNames = names.filter((_, i) => i !== idx);
+                              setManualRoster(prev => ({ ...prev, [key]: newNames.length > 0 ? newNames.join('\n') : undefined }));
+                            };
+                            
+                            const updateName = (idx: number, value: string) => {
+                              const newNames = [...names];
+                              newNames[idx] = value;
+                              setManualRoster(prev => ({ ...prev, [key]: newNames.join('\n') }));
+                            };
                             
                             return (
-                              <td key={role} className="px-4 py-3 border-r last:border-r-0">
+                              <td key={role} className="px-1 py-1 border-r last:border-r-0 min-w-[100px] align-top">
                                 <div className="space-y-1">
-                                  {roleAssignments.map((assignment, idx) => (
-                                    <div 
-                                      key={idx}
-                                      className="flex items-center gap-2 bg-gray-100 px-2 py-1 rounded text-sm"
-                                    >
-                                      <RoleIcon className="h-4 w-4 flex-shrink-0" style={{ color: def.color }} />
-                                      <span className="flex-1 truncate text-xs">{assignment.employee_name}</span>
-                                      <button
-                                        onClick={() => {
-                                          const shiftAssigns = assignments[selectedShift as keyof typeof assignments] || {};
-                                          const allRoleAssignments = shiftAssigns[role] || [];
-                                          const actualIndex = allRoleAssignments.findIndex(
-                                            a => a.employee_id === assignment.employee_id && a.machine_id === machine.id
-                                          );
-                                          if (actualIndex >= 0) removeAssignment(role, actualIndex);
-                                        }}
-                                        className="text-red-500 hover:text-red-700 flex-shrink-0"
-                                      >
-                                        <TrashIcon className="h-3 w-3" />
-                                      </button>
-                                    </div>
-                                  ))}
-                                  <button
-                                    onClick={() => openEmployeeModal(role, machine.id)}
-                                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs"
-                                  >
-                                    <PlusIcon className="h-3 w-3" />
-                                    Tambah
-                                  </button>
+                                  {names.map((name, idx) => {
+                                    const isDup = isNameDuplicate(name, key, idx);
+                                    return (
+                                      <div key={idx} className="flex items-center gap-1">
+                                        <input
+                                          type="text"
+                                          value={name}
+                                          onChange={(e) => updateName(idx, e.target.value)}
+                                          placeholder="Nama..."
+                                          className={`flex-1 text-xs border rounded px-1 py-0.5 w-16 focus:ring-1 ${isDup ? 'border-red-500 bg-red-50 focus:ring-red-500' : 'focus:ring-blue-500'}`}
+                                          title={isDup ? 'Nama sudah digunakan!' : ''}
+                                        />
+                                        <span
+                                          onClick={() => removeName(idx)}
+                                          className="text-red-500 hover:text-red-700 text-xs cursor-pointer font-bold"
+                                        >×</span>
+                                      </div>
+                                    );
+                                  })}
+                                  <span 
+                                    onClick={addName}
+                                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer inline-block py-1"
+                                  >+ Tambah</span>
                                 </div>
                               </td>
                             );
                           })}
-                      </tr>
-                    ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
 
-            {/* General Assignments (Non-machine specific) */}
+            {/* Packing Lines Section */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Assignment Umum - {SHIFTS.find(s => s.value === selectedShift)?.shortLabel}
+                Packing Manual - {SHIFTS.find(s => s.value === selectedShift)?.shortLabel}
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {Object.entries(roleDefinitions)
-                  .filter(([_, def]) => !def.requires_machine)
-                  .map(([role, def]) => {
-                    const roleAssignments = getGeneralAssignments(role);
-                    const RoleIcon = ROLE_ICONS[role] || UserIcon;
-                    
-                    return (
-                      <div key={role} className="border rounded-lg p-4">
-                        <h4 className="font-semibold mb-3 flex items-center gap-2" style={{ color: def.color }}>
-                          <RoleIcon className="h-5 w-5" />
-                          {def.name}
-                        </h4>
-                        
-                        <div className="space-y-2">
-                          {roleAssignments.map((assignment, idx) => (
-                            <div 
-                              key={idx}
-                              className="flex items-center gap-2 bg-gray-100 px-3 py-2 rounded text-sm"
-                            >
-                              <span className="flex-1 truncate">{assignment.employee_name}</span>
-                              <button
-                                onClick={() => {
-                                  const shiftAssigns = assignments[selectedShift as keyof typeof assignments] || {};
-                                  const allRoleAssignments = shiftAssigns[role] || [];
-                                  const actualIndex = allRoleAssignments.findIndex(
-                                    a => a.employee_id === assignment.employee_id && !a.machine_id
-                                  );
-                                  if (actualIndex >= 0) removeAssignment(role, actualIndex);
-                                }}
-                                className="text-red-500 hover:text-red-700"
-                              >
-                                <TrashIcon className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ))}
-                          
-                          <button
-                            onClick={() => openEmployeeModal(role, null)}
-                            className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded px-3 py-2 text-gray-600 hover:border-blue-400 hover:text-blue-600 text-sm"
-                          >
-                            <PlusIcon className="h-4 w-4" />
-                            Tambah
-                          </button>
-                        </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {PACKING_LINES.map((line, lineIndex) => {
+                  const def = roleDefinitions[line];
+                  const lineAssignments = getGeneralAssignments(line);
+                  const RoleIcon = ROLE_ICONS[line] || CubeIcon;
+                  
+                  return (
+                    <div key={line} className="border rounded-lg p-4 bg-white shadow-sm">
+                      <h4 className="font-semibold mb-2 flex items-center gap-2" style={{ color: def?.color || '#EC4899' }}>
+                        <RoleIcon className="h-5 w-5" />
+                        Line {lineIndex + 1}
+                      </h4>
+                      
+                      {/* Product input per line */}
+                      <div className="mb-3">
+                        <input
+                          type="text"
+                          value={packingLineProducts[line] || ''}
+                          onChange={(e) => setPackingLineProducts(prev => ({ ...prev, [line]: e.target.value }))}
+                          placeholder="Produk: Indomaret, dll..."
+                          className="w-full text-sm border rounded px-2 py-1 focus:ring-1 focus:ring-pink-500 focus:border-pink-500"
+                        />
                       </div>
-                    );
-                  })}
+                      
+                      {/* Manual input for packing line workers */}
+                      <div className="mb-3">
+                        <label className="block text-xs text-gray-500 mb-1">Petugas</label>
+                        {(() => {
+                          const key = `${selectedShift}_${line}`;
+                          const rawValue = manualRoster[key];
+                          const names = rawValue !== undefined ? rawValue.split('\n') : [];
+                          
+                          const addName = () => {
+                            setManualRoster(prev => {
+                              const current = prev[key];
+                              if (current === undefined || current === '') {
+                                return { ...prev, [key]: '' };
+                              }
+                              return { ...prev, [key]: current + '\n' };
+                            });
+                          };
+                          
+                          return (
+                            <div className="space-y-1">
+                              {names.map((name, idx) => {
+                                const isDup = isNameDuplicate(name, key, idx);
+                                return (
+                                  <div key={idx} className="flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      value={name}
+                                      onChange={(e) => {
+                                        const newNames = [...names];
+                                        newNames[idx] = e.target.value;
+                                        setManualRoster(prev => ({ ...prev, [key]: newNames.join('\n') }));
+                                      }}
+                                      placeholder="Nama..."
+                                      className={`flex-1 text-xs border rounded px-2 py-1 ${isDup ? 'border-red-500 bg-red-50' : ''}`}
+                                      title={isDup ? 'Nama sudah digunakan!' : ''}
+                                    />
+                                    <span
+                                      onClick={() => {
+                                        const newNames = names.filter((_, i) => i !== idx);
+                                        setManualRoster(prev => ({ ...prev, [key]: newNames.length > 0 ? newNames.join('\n') : undefined }));
+                                      }}
+                                      className="text-red-500 hover:text-red-700 text-xs cursor-pointer font-bold"
+                                    >×</span>
+                                  </div>
+                                );
+                              })}
+                              <span
+                                onClick={addName}
+                                className="text-xs text-pink-600 hover:text-pink-800 hover:underline cursor-pointer inline-block py-1"
+                              >+ Tambah</span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      
+                      {/* Timbang Box */}
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Timbang Box</label>
+                        {(() => {
+                          const key = `${selectedShift}_${line}_timbang`;
+                          const rawValue = manualRoster[key];
+                          const names = rawValue !== undefined ? rawValue.split('\n') : [];
+                          
+                          const addName = () => {
+                            setManualRoster(prev => {
+                              const current = prev[key];
+                              if (current === undefined || current === '') {
+                                return { ...prev, [key]: '' };
+                              }
+                              return { ...prev, [key]: current + '\n' };
+                            });
+                          };
+                          
+                          return (
+                            <div className="space-y-1">
+                              {names.map((name, idx) => {
+                                const isDup = isNameDuplicate(name, key, idx);
+                                return (
+                                  <div key={idx} className="flex items-center gap-1">
+                                    <input
+                                      type="text"
+                                      value={name}
+                                      onChange={(e) => {
+                                        const newNames = [...names];
+                                        newNames[idx] = e.target.value;
+                                        setManualRoster(prev => ({ ...prev, [key]: newNames.join('\n') }));
+                                      }}
+                                      placeholder="Nama..."
+                                      className={`flex-1 text-xs border rounded px-2 py-1 ${isDup ? 'border-red-500 bg-red-50' : ''}`}
+                                      title={isDup ? 'Nama sudah digunakan!' : ''}
+                                    />
+                                    <span
+                                      onClick={() => {
+                                        const newNames = names.filter((_, i) => i !== idx);
+                                        setManualRoster(prev => ({ ...prev, [key]: newNames.length > 0 ? newNames.join('\n') : undefined }));
+                                      }}
+                                      className="text-red-500 hover:text-red-700 text-xs cursor-pointer font-bold"
+                                    >×</span>
+                                  </div>
+                                );
+                              })}
+                              <span
+                                onClick={addName}
+                                className="text-xs text-purple-600 hover:text-purple-800 hover:underline cursor-pointer inline-block py-1"
+                              >+ Tambah</span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* General Assignments: QC IPC, QC FG, Distribusi */}
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Assignment Lainnya - {SHIFTS.find(s => s.value === selectedShift)?.shortLabel}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {GENERAL_ROLES.map(role => {
+                  const def = roleDefinitions[role];
+                  if (!def) return null;
+                  const RoleIcon = ROLE_ICONS[role] || UserIcon;
+                    
+                  return (
+                    <div key={role} className="border rounded-lg p-4 bg-white shadow-sm">
+                      <h4 className="font-semibold mb-3 flex items-center gap-2" style={{ color: def.color }}>
+                        <RoleIcon className="h-5 w-5" />
+                        {def.name}
+                      </h4>
+                      
+                      {/* Distribusi - per mesin per employee */}
+                      {role === 'distribusi' ? (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Mesin & Petugas</label>
+                          {(() => {
+                            const key = `${selectedShift}_${role}`;
+                            const rawValue = manualRoster[key];
+                            // Format: "machineId:name" per line
+                            const entries = rawValue !== undefined ? rawValue.split('\n') : [];
+                            
+                            const addEntry = () => {
+                              setManualRoster(prev => {
+                                const current = prev[key];
+                                if (current === undefined || current === '') {
+                                  return { ...prev, [key]: ':' };
+                                }
+                                return { ...prev, [key]: current + '\n:' };
+                              });
+                            };
+                            
+                            const updateEntry = (idx: number, machineId: string, name: string) => {
+                              const newEntries = [...entries];
+                              newEntries[idx] = `${machineId}:${name}`;
+                              setManualRoster(prev => ({ ...prev, [key]: newEntries.join('\n') }));
+                            };
+                            
+                            const removeEntry = (idx: number) => {
+                              const newEntries = entries.filter((_, i) => i !== idx);
+                              setManualRoster(prev => ({ ...prev, [key]: newEntries.length > 0 ? newEntries.join('\n') : undefined }));
+                            };
+                            
+                            return (
+                              <div className="space-y-2">
+                                {entries.map((entry, idx) => {
+                                  const [machineId, name] = entry.split(':');
+                                  const isDup = isNameDuplicate(name || '', key, idx);
+                                  return (
+                                    <div key={idx} className="flex items-center gap-1">
+                                      <select
+                                        value={machineId || ''}
+                                        onChange={(e) => updateEntry(idx, e.target.value, name || '')}
+                                        className="w-24 text-xs border rounded px-1 py-1"
+                                      >
+                                        <option value="">Mesin</option>
+                                        {allMachines.filter(m => m.id > 0).sort((a, b) => {
+                                          const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+                                          const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+                                          return numA - numB;
+                                        }).map(m => (
+                                          <option key={m.id} value={m.id}>{m.name}</option>
+                                        ))}
+                                      </select>
+                                      <input
+                                        type="text"
+                                        value={name || ''}
+                                        onChange={(e) => updateEntry(idx, machineId || '', e.target.value)}
+                                        placeholder="Nama..."
+                                        className={`flex-1 text-sm border rounded px-2 py-1 ${isDup ? 'border-red-500 bg-red-50' : ''}`}
+                                        title={isDup ? 'Nama sudah digunakan!' : ''}
+                                      />
+                                      <span
+                                        onClick={() => removeEntry(idx)}
+                                        className="text-red-500 hover:text-red-700 text-sm cursor-pointer font-bold"
+                                      >×</span>
+                                    </div>
+                                  );
+                                })}
+                                <span
+                                  onClick={addEntry}
+                                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer inline-block py-1"
+                                >+ Tambah</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        /* Manual input for workers (QC IPC, QC FG) */
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Petugas</label>
+                          {(() => {
+                            const key = `${selectedShift}_${role}`;
+                            const rawValue = manualRoster[key];
+                            const names = rawValue !== undefined ? rawValue.split('\n') : [];
+                            
+                            const addName = () => {
+                              setManualRoster(prev => {
+                                const current = prev[key];
+                                if (current === undefined || current === '') {
+                                  return { ...prev, [key]: '' };
+                                }
+                                return { ...prev, [key]: current + '\n' };
+                              });
+                            };
+                            
+                            return (
+                              <div className="space-y-1">
+                                {names.map((name, idx) => {
+                                  const isDup = isNameDuplicate(name, key, idx);
+                                  return (
+                                    <div key={idx} className="flex items-center gap-1">
+                                      <input
+                                        type="text"
+                                        value={name}
+                                        onChange={(e) => {
+                                          const newNames = [...names];
+                                          newNames[idx] = e.target.value;
+                                          setManualRoster(prev => ({ ...prev, [key]: newNames.join('\n') }));
+                                        }}
+                                        placeholder="Nama..."
+                                        className={`flex-1 text-sm border rounded px-2 py-1 ${isDup ? 'border-red-500 bg-red-50' : ''}`}
+                                        title={isDup ? 'Nama sudah digunakan!' : ''}
+                                      />
+                                      <span
+                                        onClick={() => {
+                                          const newNames = names.filter((_, i) => i !== idx);
+                                          setManualRoster(prev => ({ ...prev, [key]: newNames.length > 0 ? newNames.join('\n') : undefined }));
+                                        }}
+                                        className="text-red-500 hover:text-red-700 text-sm cursor-pointer font-bold"
+                                      >×</span>
+                                    </div>
+                                  );
+                                })}
+                                <span
+                                  onClick={addName}
+                                  className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer inline-block py-1"
+                                >+ Tambah</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

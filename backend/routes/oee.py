@@ -1326,11 +1326,16 @@ def get_daily_controller():
                     'total_grade_c': 0,
                     'total_machine_speed': 0,
                     'total_target': 0,
+                    'total_average_time': 0,
                     'products': [],
                     'top_3_downtime': [],
                     'efficiency': 0,
                     'machine_efficiency': 0,
-                    'quality': 0
+                    'quality': 0,
+                    'average_time': 0,
+                    'runtime': 0,
+                    'waktu_tercatat': 0,
+                    'waktu_tidak_tercatat': 0
                 }
             
             # Parse downtime from issues - IDLE is SEPARATE from downtime
@@ -1360,7 +1365,7 @@ def get_daily_controller():
                         downtime_breakdown.append({'reason': reason, 'duration_minutes': duration})
             
             # Fallback for downtime (only if parsing yielded 0)
-            if shift_downtime == 0 and shift_idle == 0:
+            if shift_downtime == 0:
                 if sp.downtime_minutes:
                     shift_downtime = int(sp.downtime_minutes)
                 else:
@@ -1371,6 +1376,11 @@ def get_daily_controller():
                         (int(sp.downtime_design) if sp.downtime_design else 0) +
                         (int(sp.downtime_others) if sp.downtime_others else 0)
                     )
+            
+            # Use idle_time from database field if available (parsed idle is additional)
+            # Idle time is DIFFERENT from Waktu Tidak Tercatat
+            if shift_idle == 0 and sp.idle_time:
+                shift_idle = int(sp.idle_time)
             
             # Extract shift number
             shift_num = 1
@@ -1415,6 +1425,8 @@ def get_daily_controller():
                 'grade_a_carton': math.floor(grade_a / pack_per_carton) if pack_per_carton > 0 else 0,
                 'grade_b': int(sp.rework_quantity) if sp.rework_quantity else 0,
                 'grade_c': int(sp.reject_quantity) if sp.reject_quantity else 0,
+                'setting_sticker': int(sp.setting_sticker) if hasattr(sp, 'setting_sticker') and sp.setting_sticker else 0,
+                'setting_packaging': int(sp.setting_packaging) if hasattr(sp, 'setting_packaging') and sp.setting_packaging else 0,
                 'total': int(sp.actual_quantity) if sp.actual_quantity else 0,
                 'product_name': product_name,
                 'pack_per_carton': pack_per_carton,
@@ -1459,7 +1471,7 @@ def get_daily_controller():
                 else:
                     machines_data[machine_id]['top_3_downtime'].append(dt.copy())
         
-        # Keywords to exclude from Top 3 Downtime (biological/personal breaks + idle time)
+        # Keywords to exclude from Top 3 Downtime (biological/personal breaks + idle time + design change + operator setting)
         excluded_keywords = [
             # Biological/personal breaks
             'istirahat', 'sholat', 'solat', 'makan', 'minum', 'toilet', 
@@ -1476,23 +1488,56 @@ def get_daily_controller():
             'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
             'bahan habis', 'material habis', 'ingredient habis', 'obat habis',
             'waiting for', 'standby', 'idle', 'menganggur', 'no order',
-            # Repack - exclude from Top 3 (design change category)
-            'repack', 'repacking'
+            # DESIGN CHANGE - exclude from Top 3 (treated as separate category)
+            'design change', 'design baru', 'ganti design', 'ubah design',
+            'repack', 'repacking', 're-pack', 're packing',
+            # OPERATOR SETTING - exclude from Top 3 (not actual repair)
+            'setting', 'seting', 'setel', 'adjust', 'adjustment', 'kalibrasi',
+            'calibration', 'setup', 'set up', 'konfigurasi', 'konfigurasi ulang',
+            'setting mesin', 'setting parameter', 'setting awal'
+        ]
+        
+        # Only include MACHINE and OPERATOR REPAIR in Top 3
+        machine_keywords = [
+            'mesin', 'machine', 'rusak', 'error', 'breakdown', 'maintenance',
+            'perbaikan', 'repair', 'overhaul', 'service', 'ganti sparepart',
+            'spare part', 'komponen', 'sensor', 'motor', 'pneumatic',
+            'hydraulic', 'electrical', 'mekanik', 'tooling', 'mould', 'die',
+            # Common machine issues
+            'conveyor', 'vanbelt', 'belt', 'inkjet', 'printer', 'nozzle',
+            'putus', 'patah', 'bocor', 'macet', 'mampet', 'stuck',
+            'tidak keluar', 'tidak jalan', 'tidak nyala', 'mati',
+            'kain', 'roll', 'roller', 'bearing', 'gear', 'rantai', 'chain',
+            'pompa', 'pump', 'valve', 'seal', 'packing', 'gasket',
+            'cutter', 'blade', 'pisau', 'heater', 'pemanas', 'cooler',
+            'menggulung', 'slip', 'geser', 'longgar', 'kendor', 'aus'
+        ]
+        
+        operator_repair_keywords = [
+            'perbaikan', 'operator repair', 'service',
+            'ganti part', 'maintenance'
         ]
         
         # Sort top 3 downtime and calculate efficiency for each machine
         for machine_id in machines_data:
-            # Filter out biological/personal breaks from top downtime
-            filtered_downtime = [
-                dt for dt in machines_data[machine_id]['top_3_downtime']
-                if not any(kw in dt['reason'].lower() for kw in excluded_keywords)
-            ]
+            # Filter to only include MACHINE and OPERATOR REPAIR issues
+            filtered_downtime = []
+            for dt in machines_data[machine_id]['top_3_downtime']:
+                reason_lower = dt['reason'].lower()
+                # First check if it's in excluded list
+                if any(kw in reason_lower for kw in excluded_keywords):
+                    continue
+                # Then check if it's machine or operator repair
+                if (any(kw in reason_lower for kw in machine_keywords) or
+                    any(kw in reason_lower for kw in operator_repair_keywords)):
+                    filtered_downtime.append(dt)
+            
             filtered_downtime.sort(key=lambda x: x['duration_minutes'], reverse=True)
             machines_data[machine_id]['top_3_downtime'] = filtered_downtime[:3]
             # Sort shifts by shift number
             machines_data[machine_id]['shifts'].sort(key=lambda x: x['shift'])
             
-            # Calculate MRT (Machine Run Time) = Grade A / machine speed
+            # Calculate Runtime = Grade A / machine speed
             total_grade_a = machines_data[machine_id]['total_grade_a']
             total_downtime = machines_data[machine_id]['total_downtime']
             total_idle = machines_data[machine_id]['total_idle']
@@ -1503,21 +1548,32 @@ def get_daily_controller():
             shift_count = len(machines_data[machine_id]['shifts'])
             machine_speed_per_minute = machine_speed_total / shift_count if shift_count > 0 else 0
             
-            mrt = 0
+            # Runtime = Grade A / Speed (in minutes)
+            runtime = 0
             if machine_speed_per_minute > 0:
-                mrt = total_grade_a / machine_speed_per_minute  # MRT in minutes
+                runtime = int(round(total_grade_a / machine_speed_per_minute))
             
-            # Total Waktu = Runtime + Downtime + Idle (actual shift time)
-            total_runtime = machines_data[machine_id]['total_runtime']
-            actual_total_time = total_runtime + total_downtime + total_idle
-            machines_data[machine_id]['total_time'] = actual_total_time
+            # Average Time = default 510 minutes (can be overridden from shift data)
+            # For daily controller, use 510 as default per shift
+            average_time = 510 * shift_count if shift_count > 0 else 510
             
-            # MRT = Runtime (so MRT + Downtime + Idle = Total exactly)
-            machines_data[machine_id]['mrt'] = total_runtime
+            # Waktu Tercatat = Runtime + Downtime + Idle (Idle IS recorded time, just different category)
+            waktu_tercatat = runtime + total_downtime + total_idle
             
-            # Efficiency = Runtime / Total Time * 100
-            if actual_total_time > 0:
-                machines_data[machine_id]['efficiency'] = round((total_runtime / actual_total_time) * 100, 1)
+            # Waktu Tidak Tercatat = Average Time - Waktu Tercatat (truly unaccounted time)
+            waktu_tidak_tercatat = max(0, average_time - waktu_tercatat)
+            
+            # Store calculated values
+            machines_data[machine_id]['runtime'] = runtime
+            machines_data[machine_id]['average_time'] = average_time
+            machines_data[machine_id]['waktu_tercatat'] = waktu_tercatat
+            machines_data[machine_id]['waktu_tidak_tercatat'] = waktu_tidak_tercatat
+            machines_data[machine_id]['mrt'] = runtime  # For backward compatibility
+            machines_data[machine_id]['total_time'] = average_time
+            
+            # Efficiency = Runtime / Average Time * 100
+            if average_time > 0:
+                machines_data[machine_id]['efficiency'] = round((runtime / average_time) * 100, 1)
             machines_data[machine_id]['machine_speed'] = int(round(machine_speed_per_minute))  # pcs/menit
             
             # Calculate Quality = (Grade A / Total Output) * 100

@@ -499,3 +499,241 @@ def get_profile():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ==================== PASSWORD RESET ====================
+
+@auth_bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """Request password reset email"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+        
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        
+        user = User.query.filter_by(email=email).first()
+        
+        # Always return success to prevent email enumeration
+        if user:
+            try:
+                from utils.email_service import get_email_service
+                import secrets
+                from datetime import timedelta
+                
+                # Generate reset token
+                reset_token = secrets.token_urlsafe(32)
+                user.reset_token = reset_token
+                user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+                db.session.commit()
+                
+                # Send reset email
+                email_service = get_email_service()
+                if email_service.is_configured():
+                    email_service.send_password_reset(
+                        to=user.email,
+                        reset_token=reset_token,
+                        full_name=user.full_name
+                    )
+            except Exception as e:
+                print(f"Failed to send reset email: {e}")
+        
+        return jsonify({
+            'message': 'If an account with that email exists, a password reset link has been sent.'
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    """Reset password using token"""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+        new_password = data.get('password')
+        
+        if not token or not new_password:
+            return jsonify({'error': 'Token and password are required'}), 400
+        
+        user = User.query.filter_by(reset_token=token).first()
+        
+        if not user or not user.reset_token_expires:
+            return jsonify({'error': 'Invalid or expired reset token'}), 400
+        
+        if user.reset_token_expires < datetime.utcnow():
+            return jsonify({'error': 'Reset token has expired'}), 400
+        
+        # Update password
+        user.set_password(new_password)
+        user.reset_token = None
+        user.reset_token_expires = None
+        db.session.commit()
+        
+        return jsonify({'message': 'Password reset successfully'}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== GOOGLE OAUTH ====================
+
+@auth_bp.route('/google/url', methods=['GET'])
+def get_google_auth_url():
+    """Get Google OAuth URL"""
+    try:
+        client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+        redirect_uri = current_app.config.get('GOOGLE_REDIRECT_URI')
+        
+        if not client_id:
+            return jsonify({'error': 'Google OAuth not configured'}), 500
+        
+        # Build OAuth URL
+        params = {
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
+            'response_type': 'code',
+            'scope': 'openid email profile',
+            'access_type': 'offline',
+            'prompt': 'consent'
+        }
+        
+        from urllib.parse import urlencode
+        auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+        
+        return jsonify({'url': auth_url}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@auth_bp.route('/google/callback', methods=['POST'])
+def google_callback():
+    """Handle Google OAuth callback"""
+    try:
+        import requests
+        
+        data = request.get_json()
+        code = data.get('code')
+        
+        if not code:
+            return jsonify({'error': 'Authorization code is required'}), 400
+        
+        client_id = current_app.config.get('GOOGLE_CLIENT_ID')
+        client_secret = current_app.config.get('GOOGLE_CLIENT_SECRET')
+        redirect_uri = current_app.config.get('GOOGLE_REDIRECT_URI')
+        
+        if not client_id or not client_secret:
+            return jsonify({'error': 'Google OAuth not configured'}), 500
+        
+        # Exchange code for tokens
+        token_response = requests.post(
+            'https://oauth2.googleapis.com/token',
+            data={
+                'code': code,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri,
+                'grant_type': 'authorization_code'
+            }
+        )
+        
+        if token_response.status_code != 200:
+            return jsonify({'error': 'Failed to exchange authorization code'}), 400
+        
+        tokens = token_response.json()
+        access_token = tokens.get('access_token')
+        
+        # Get user info from Google
+        userinfo_response = requests.get(
+            'https://www.googleapis.com/oauth2/v2/userinfo',
+            headers={'Authorization': f'Bearer {access_token}'}
+        )
+        
+        if userinfo_response.status_code != 200:
+            return jsonify({'error': 'Failed to get user info from Google'}), 400
+        
+        google_user = userinfo_response.json()
+        email = google_user.get('email')
+        name = google_user.get('name', '')
+        google_id = google_user.get('id')
+        
+        if not email:
+            return jsonify({'error': 'Email not provided by Google'}), 400
+        
+        # Find or create user
+        user = User.query.filter_by(email=email).first()
+        
+        if not user:
+            # Create new user from Google account
+            username = email.split('@')[0]
+            # Ensure unique username
+            base_username = username
+            counter = 1
+            while User.query.filter_by(username=username).first():
+                username = f"{base_username}{counter}"
+                counter += 1
+            
+            user = User(
+                username=username,
+                email=email,
+                password_hash='',  # No password for OAuth users
+                full_name=name,
+                is_active=True,
+                is_admin=False,
+                google_id=google_id
+            )
+            db.session.add(user)
+            db.session.commit()
+            
+            # Assign default "Viewer" role to new Google OAuth users
+            from models.user import Role, UserRole
+            viewer_role = Role.query.filter_by(name='Viewer').first()
+            if viewer_role:
+                user_role = UserRole(user_id=user.id, role_id=viewer_role.id)
+                db.session.add(user_role)
+                db.session.commit()
+        else:
+            # Update Google ID if not set
+            if not user.google_id:
+                user.google_id = google_id
+                db.session.commit()
+        
+        if not user.is_active:
+            return jsonify({'error': 'Account is inactive'}), 403
+        
+        # Update last login
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+        
+        # Get user roles
+        user_roles = []
+        try:
+            user_roles = [ur.role.name for ur in user.roles if ur.role]
+        except:
+            pass
+        
+        # Create JWT tokens
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
+        
+        return jsonify({
+            'message': 'Login successful',
+            'access_token': access_token,
+            'refresh_token': refresh_token,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'full_name': user.full_name,
+                'is_admin': user.is_admin,
+                'is_super_admin': getattr(user, 'is_super_admin', False),
+                'roles': user_roles
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"Google OAuth error: {e}")
+        return jsonify({'error': str(e)}), 500
