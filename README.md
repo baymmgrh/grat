@@ -903,6 +903,7 @@ AI Assistant adalah fitur chatbot terintegrasi yang memungkinkan user untuk quer
 - 📧 Email: baymngrh@gmail.com
 - 🐙 GitHub: [@baymngrh](https://github.com/baymngrh)
 - 💼 LinkedIn: [Bayu Adhie](https://linkedin.com/in/bayu-adhie)
+- Open for consultation on Custom ERP Development for Manufacturing Industry
 
 For technical support, feature requests, or bug reports, please email us at baymngrh@gmail.com
 
