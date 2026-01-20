@@ -46,9 +46,11 @@ def create_app(config_class=Config):
     allowed_origins = [
         'https://erp.graterp.my.id',
         'https://api.graterp.my.id',
+        'http://erp.graterp.my.id',   # HTTP fallback for production
+        'http://api.graterp.my.id',   # HTTP fallback for production
         'http://localhost:3000',
         'http://127.0.0.1:3000',
-        'http://192.168.0.62:3000',  # LAN access
+        'http://192.168.0.62:3000',   # LAN access
     ]
     
     CORS(app, 
@@ -100,6 +102,8 @@ def create_app(config_class=Config):
     from routes.maintenance_extended import maintenance_extended_bp
     from routes.rd import rd_bp
     from routes.rd_extended import rd_extended_bp
+    from routes.rd_integration import rd_integration_bp
+    from routes.rnd import rnd_bp
     from routes.waste import waste_bp
     from routes.oee import oee_bp
     from routes.import_data import import_bp
@@ -170,6 +174,8 @@ def create_app(config_class=Config):
     app.register_blueprint(maintenance_extended_bp, url_prefix='/api/maintenance')
     app.register_blueprint(rd_bp, url_prefix='/api/rd')
     app.register_blueprint(rd_extended_bp, url_prefix='/api/rd')
+    app.register_blueprint(rd_integration_bp, url_prefix='/api/rd/integration')  # R&D integration with other modules
+    app.register_blueprint(rnd_bp)  # New RND module with /api/rnd prefix
     app.register_blueprint(waste_bp, url_prefix='/api/waste')
     app.register_blueprint(oee_bp, url_prefix='/api/oee')
     app.register_blueprint(returns_bp, url_prefix='/api/returns')
@@ -277,6 +283,10 @@ def create_app(config_class=Config):
     # Import and register Custom BOM blueprint
     from routes.custom_bom import custom_bom_bp
     app.register_blueprint(custom_bom_bp, url_prefix='/api/production')
+    
+    # Import and register Packing List blueprint (new separate module)
+    from routes.packing_list import packing_list_bp
+    app.register_blueprint(packing_list_bp, url_prefix='/api/packing-list')
     
     # Serve uploaded files
     from flask import send_from_directory

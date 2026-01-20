@@ -208,6 +208,7 @@ import MaterialList from './pages/RD/MaterialList'
 import MaterialForm from './pages/RD/MaterialForm'
 import ProductDevelopmentList from './pages/RD/ProductDevelopmentList'
 import ProductDevelopmentForm from './pages/RD/ProductDevelopmentForm'
+import { RNDDashboard, RNDProjectList, RNDProjectDetail, RNDProjectForm, RNDApprovals } from './pages/RND'
 import WasteRecordList from './pages/Waste/WasteRecordList'
 import WasteRecordForm from './pages/Waste/WasteRecordForm'
 import ReturnsDashboard from './pages/Returns/ReturnsDashboard'
@@ -230,6 +231,9 @@ import MaterialIssueForm from './pages/Production/MaterialIssueForm'
 import WIPDashboard from './pages/Production/WIPDashboard'
 import WIPBatchList from './pages/Production/WIPBatchList'
 import RemainingStock from './pages/Production/RemainingStock'
+import PackingListNew from './pages/Production/PackingListNew'
+import PackingListDetail from './pages/Production/PackingListDetail'
+import WIPStock from './pages/Production/WIPStock'
 import Reports from './pages/Reports/ReportsFixed'
 import AdvancedReportBuilder from './pages/Reports/AdvancedReportBuilder'
 import ScheduledReports from './pages/Reports/ScheduledReports'
@@ -825,6 +829,15 @@ function App() {
         <Route path="rd/products/:id/edit" element={<ProductDevelopmentForm />} />
         <Route path="rd/reports" element={<ResearchReportsForm />} />
         
+        {/* RND (New R&D Module) */}
+        <Route path="rnd" element={<RNDDashboard />} />
+        <Route path="rnd/dashboard" element={<RNDDashboard />} />
+        <Route path="rnd/projects" element={<RNDProjectList />} />
+        <Route path="rnd/projects/new" element={<RNDProjectForm />} />
+        <Route path="rnd/projects/:id" element={<RNDProjectDetail />} />
+        <Route path="rnd/projects/:id/edit" element={<RNDProjectForm />} />
+        <Route path="rnd/approvals" element={<RNDApprovals />} />
+        
         {/* Waste */}
         <Route path="waste" element={<WasteRecordList />} />
         <Route path="waste/new" element={<WasteRecordForm />} />
@@ -857,6 +870,11 @@ function App() {
         <Route path="production/wip-batches/new" element={<WIPBatchForm />} />
         <Route path="production/wip-batches/:id" element={<WIPBatchList />} />
         <Route path="production/job-costs" element={<WIPBatchList />} />
+        
+        {/* Packing List (New - Separate from WO) */}
+        <Route path="production/packing-list" element={<PackingListNew />} />
+        <Route path="production/packing-list/:id" element={<PackingListDetail />} />
+        <Route path="production/wip-stock" element={<WIPStock />} />
         
         {/* Production Approval */}
         <Route path="production/approvals" element={<ProductionApprovalList />} />

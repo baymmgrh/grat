@@ -49,7 +49,8 @@ import {
   LightBulbIcon,
   ScaleIcon,
   CheckBadgeIcon,
-  CameraIcon
+  CameraIcon,
+  CheckCircleIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import axiosInstance from '../../utils/axiosConfig'
@@ -135,6 +136,10 @@ function SidebarContent() {
             ]},
             { name: 'Work Roster', href: '/app/hr/roster', icon: UserGroupIcon },
             { name: 'Sisa Order', href: '/app/production/remaining-stock', icon: ArchiveBoxIcon },
+            { name: 'Packing List', icon: ArchiveBoxIcon, isSubMenu: true, subChildren: [
+              { name: 'Daftar Packing', href: '/app/production/packing-list' },
+              { name: 'WIP Stock', href: '/app/production/wip-stock' },
+            ]},
             { name: 'Changeover', href: '/app/production/changeovers', icon: ArrowsRightLeftIcon },
             { name: 'Approval', href: '/app/production/approvals', icon: ClipboardDocumentCheckIcon },
             { name: 'Quality Objective', href: '/app/quality/objective/production', icon: ChartBarIcon },
@@ -280,8 +285,19 @@ function SidebarContent() {
         },
         { 
           name: 'R&D', 
-          href: '/app/rd', 
+          href: '/app/rnd', 
           icon: LightBulbIcon,
+          permission: 'rd',
+          children: [
+            { name: 'Dashboard', href: '/app/rnd', icon: PresentationChartLineIcon },
+            { name: 'Proyek', href: '/app/rnd/projects', icon: ClipboardDocumentListIcon },
+            { name: 'Approvals', href: '/app/rnd/approvals', icon: CheckCircleIcon },
+          ]
+        },
+        { 
+          name: 'R&D Legacy', 
+          href: '/app/rd', 
+          icon: BeakerIcon,
           permission: 'rd',
           children: [
             { name: 'Dashboard', href: '/app/rd', icon: PresentationChartLineIcon },
