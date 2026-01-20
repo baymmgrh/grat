@@ -149,15 +149,15 @@
 - Forecasting Penjualan
 - Price List & Diskon
 - Proses Return Customer
+- Invoice & Payment Tracking
 
 **API Endpoints:**
-```
-GET    /api/sales/customers
-POST   /api/sales/customers
-GET    /api/sales/orders
-POST   /api/sales/orders
-GET    /api/sales/forecasts
-POST   /api/sales/quotations
+```bash
+GET/POST   /api/sales/customers
+GET/POST   /api/sales/orders
+GET/POST   /api/sales/quotations
+GET        /api/sales/forecasts
+GET/POST   /api/returns
 ```
 
 ---
@@ -166,12 +166,15 @@ POST   /api/sales/quotations
 
 **Fitur:**
 - Manajemen Work Order
-- Scheduling Produksi
+- Scheduling Produksi (Schedule Grid)
 - Input Produksi Per Shift (Manual)
 - Recording & Analisa Downtime
 - Kalkulasi OEE (Availability × Performance × Quality)
 - Manajemen Mesin
 - Manajemen Buffer Produksi
+- Weekly Production Planning
+- Work Order Monitoring Real-time
+- Daily Controller Dashboard
 
 **Input Produksi Per Shift:**
 - Entry data per shift (Shift 1, 2, 3)
@@ -180,6 +183,7 @@ POST   /api/sales/quotations
 - Runtime dan downtime (menit)
 - Assignment operator dan supervisor
 - Kalkulasi OEE otomatis
+- Konsumsi material otomatis
 
 **Kategori Downtime:**
 - Planned: Maintenance, Setup, Changeover
@@ -189,17 +193,47 @@ POST   /api/sales/quotations
 
 **API Endpoints:**
 ```bash
-# Production
-GET    /api/production/work-orders
-POST   /api/production/work-orders
-GET    /api/production/machines
-GET    /api/production/daily-controller
-POST   /api/production/work-order-records
+GET/POST   /api/production/work-orders
+GET        /api/production/machines
+GET        /api/production/daily-controller
+POST       /api/production/work-order-records
+GET/POST   /api/schedule-grid
+GET/POST   /api/weekly-production-plan
+GET        /api/work-order-monitoring
 ```
 
 ---
 
-### 3️⃣ **Modul Quality Control**
+### 3️⃣ **Modul WIP Stock & Packing List** 🆕
+
+**Fitur:**
+- **WIP Stock Management** - Tracking stok Work In Progress per produk
+- **WIP Stock Movement** - History pergerakan stok WIP (in/out/adjustment)
+- **Packing List Terpisah** - Packing list independen dari Work Order
+- **Carton Weighing** - Input berat dan tanggal timbang per karton
+- **Batch Mixing** - Pencampuran batch produksi
+- **Pack Per Carton** - Otomatis dari data products_new
+
+**Workflow:**
+```
+Work Order Production → WIP Stock (per product) → 
+Packing List (per order) → Carton Weighing → Shipping
+```
+
+**API Endpoints:**
+```bash
+GET        /api/packing-list/wip-stock
+POST       /api/packing-list/wip-stock/adjustment
+GET        /api/packing-list/wip-stock/:id/movements
+GET/POST   /api/packing-list
+GET/PUT    /api/packing-list/:id
+POST       /api/packing-list/:id/weigh-carton
+POST       /api/packing-list/:id/cancel
+```
+
+---
+
+### 4️⃣ **Modul Quality Control**
 
 **Fitur:**
 - Quality Inspection (Incoming, In-process, Final)
@@ -232,6 +266,7 @@ GET    /api/quality/incoming
 GET    /api/quality/in-process
 GET    /api/quality/finish-good
 POST   /api/quality/inspections
+GET/POST /api/quality/enhanced
 ```
 
 **Workflow Quality:**
@@ -243,7 +278,7 @@ Update Metrik Quality
 
 ---
 
-### 4️⃣ **Modul Warehouse & Inventory**
+### 5️⃣ **Modul Warehouse & Inventory**
 
 **Fitur:**
 - Tracking Inventory Real-time
@@ -251,12 +286,26 @@ Update Metrik Quality
 - Manajemen Lokasi Gudang
 - Alert Stock (Level Min/Max)
 - Valuasi Inventory (FIFO, LIFO, Average)
-- Cycle Counting
+- Cycle Counting & Stock Opname
 - Support Barcode/QR Code
+- Material Issue untuk Produksi
+- Goods Receipt Note (GRN)
+- Stock Adjustment dengan Approval
+
+**API Endpoints:**
+```bash
+GET/POST   /api/warehouse
+GET/POST   /api/warehouse/stock
+GET/POST   /api/warehouse/transfers
+GET/POST   /api/material-issue
+GET/POST   /api/stock-opname
+GET/POST   /api/stock-input
+GET        /api/material-stock
+```
 
 ---
 
-### 5️⃣ **Modul Purchasing**
+### 6️⃣ **Modul Purchasing**
 
 **Fitur:**
 - Manajemen Supplier
@@ -267,9 +316,17 @@ Update Metrik Quality
 - Perbandingan Harga
 - Evaluasi Vendor
 
+**API Endpoints:**
+```bash
+GET/POST   /api/purchasing/suppliers
+GET/POST   /api/purchasing/purchase-orders
+GET/POST   /api/purchasing/goods-receipts
+GET        /api/purchasing/reports
+```
+
 ---
 
-### 6️⃣ **Modul Finance & Accounting**
+### 7️⃣ **Modul Finance & Accounting**
 
 **Fitur:**
 - General Ledger (GL)
@@ -282,16 +339,27 @@ Update Metrik Quality
 - Report Keuangan (P&L, Balance Sheet, Cash Flow)
 - Cost Accounting (WIP, COGM, COGS)
 
-**WIP Accounting:**
+**WIP Accounting & Job Costing:**
 - WIP Ledger per Work Order
 - Tracking cost Material, Labor, Overhead
 - Analisa Variance (Material, Labor, Overhead, Yield)
 - Auto-posting ke GL
 - Flow COGM → Finished Goods → COGS
+- Job Costing per Work Order
+
+**API Endpoints:**
+```bash
+GET/POST   /api/finance/accounts
+GET/POST   /api/finance/journals
+GET/POST   /api/finance/transactions
+GET        /api/finance/reports
+GET/POST   /api/wip-accounting
+GET/POST   /api/wip-job-costing
+```
 
 ---
 
-### 7️⃣ **Modul HR & Payroll**
+### 8️⃣ **Modul HR & Payroll**
 
 **Fitur:**
 - Manajemen Karyawan
@@ -301,6 +369,7 @@ Update Metrik Quality
 - Training & Development
 - Manajemen Roster Shift
 - Portal Self-Service Karyawan
+- Public Attendance (QR Code)
 
 **Integrasi Roster:**
 - Data karyawan dari modul HR
@@ -309,9 +378,20 @@ Update Metrik Quality
 - Interface drag & drop
 - View roster mingguan
 
+**API Endpoints:**
+```bash
+GET/POST   /api/hr/employees
+GET/POST   /api/hr/attendance
+GET/POST   /api/hr/leaves
+GET/POST   /api/hr-payroll
+GET/POST   /api/hr-appraisal
+GET/POST   /api/hr-training
+GET/POST   /api/work-roster
+```
+
 ---
 
-### 8️⃣ **Modul Maintenance**
+### 9️⃣ **Modul Maintenance**
 
 **Fitur:**
 - Scheduling Preventive Maintenance
@@ -321,9 +401,16 @@ Update Metrik Quality
 - History Equipment
 - Tracking Cost Maintenance
 
+**API Endpoints:**
+```bash
+GET/POST   /api/maintenance
+GET/POST   /api/maintenance/schedules
+GET/POST   /api/maintenance/work-orders
+```
+
 ---
 
-### 9️⃣ **Modul MRP (Material Requirements Planning)**
+### 🔟 **Modul MRP (Material Requirements Planning)**
 
 **Fitur:**
 - Forecasting Demand
@@ -340,9 +427,17 @@ Cek Stock → Shortage Teridentifikasi →
 Purchase Order / Work Order Dibuat
 ```
 
+**API Endpoints:**
+```bash
+GET/POST   /api/mrp
+GET        /api/mrp/requirements
+GET        /api/mrp/analysis
+POST       /api/mrp/run
+```
+
 ---
 
-### 🔟 **Modul R&D**
+### 1️⃣1️⃣ **Modul R&D (Research & Development)**
 
 **Fitur:**
 - Manajemen Project R&D
@@ -351,19 +446,79 @@ Purchase Order / Work Order Dibuat
 - Pengembangan Produk
 - Manajemen Formulasi
 - Analisa Hasil Test
+- R&D Reports & Analytics
+- Approval Workflow untuk R&D
+
+**API Endpoints:**
+```bash
+GET/POST   /api/rd/projects
+GET/POST   /api/rd/experiments
+GET/POST   /api/rd/materials
+GET/POST   /api/rd/products
+GET/POST   /api/rd/reports
+GET/POST   /api/rnd
+```
 
 ---
 
-### Modul Tambahan
+### 1️⃣2️⃣ **Modul Shipping & Logistics**
 
-- **Shipping & Logistics** - Manajemen delivery, tracking, carriers
-- **Waste Management** - Tracking waste, analytics, compliance
-- **Manajemen BOM** - Multi-level BOM, versioning, kalkulasi cost
-- **Dashboard & Analytics** - KPI real-time, custom reports
-- **Tracking OEE** - Monitoring efektivitas equipment
-- **Notifikasi** - Alert dan notifikasi real-time
-- **Settings** - Konfigurasi sistem, preferensi
-- **Backup & Restore** - Backup dan recovery data
+**Fitur:**
+- Manajemen Delivery Order
+- Tracking Pengiriman
+- Manajemen Carrier/Transporter
+- Shipping Schedule
+- Delivery Confirmation
+- Proof of Delivery
+
+**API Endpoints:**
+```bash
+GET/POST   /api/shipping
+GET/POST   /api/shipping/deliveries
+GET/POST   /api/shipping/carriers
+```
+
+---
+
+### 1️⃣3️⃣ **Modul Waste Management**
+
+**Fitur:**
+- Tracking Waste Produksi
+- Kategorisasi Waste
+- Waste Analytics & Reports
+- Compliance Tracking
+- Disposal Management
+
+**API Endpoints:**
+```bash
+GET/POST   /api/waste
+GET        /api/waste/analytics
+GET        /api/waste/reports
+```
+
+---
+
+### Modul Pendukung
+
+| Modul | Fitur Utama | API Prefix |
+|-------|-------------|------------|
+| **BOM Management** | Multi-level BOM, versioning, cost calculation | `/api/bom` |
+| **Dashboard & Analytics** | KPI real-time, Executive Dashboard, custom reports | `/api/dashboard`, `/api/executive-dashboard` |
+| **OEE Tracking** | Availability, Performance, Quality metrics | `/api/oee` |
+| **Notifications** | Real-time alerts, email notifications | `/api/notifications` |
+| **Document Management** | File upload, document tracking | `/api/documents` |
+| **Approval Workflow** | Multi-level approval, delegation | `/api/approval-workflow` |
+| **AI Assistant** | Natural language query, smart navigation | `/api/ai-assistant` |
+| **TV Display** | Production monitoring display | `/api/tv-display` |
+| **Reports** | Custom reports, export PDF/Excel | `/api/reports` |
+| **Settings** | System configuration, preferences | `/api/settings` |
+| **Backup & Restore** | Data backup and recovery | `/api/backup` |
+| **System Monitor** | Server health, performance metrics | `/api/system-monitor` |
+| **Group Chat** | Internal team communication | `/api/group-chat` |
+| **User Manual** | In-app documentation | `/api/user-manual` |
+| **OAuth** | Google OAuth integration | `/api/oauth` |
+| **KPI Targets** | Target setting and tracking | `/api/kpi-targets` |
+| **Product Changeover** | Machine changeover tracking | `/api/product-changeover` |
 
 ---
 
@@ -690,9 +845,16 @@ AI Assistant adalah fitur chatbot terintegrasi yang memungkinkan user untuk quer
 
 ---
 
-## 📈 Recent Updates (v2.0)
+## 📈 Recent Updates (v2.1)
 
-### ✨ New Features
+### ✨ New Features (January 2026)
+- **WIP Stock Module** 🆕 - Tracking stok Work In Progress per produk
+- **Packing List Terpisah** 🆕 - Packing list independen dari Work Order
+- **Carton Weighing** 🆕 - Input berat dan tanggal timbang per karton
+- **R&D Module Enhanced** - Project tracking, experiments, approvals
+- **Public Attendance** - QR Code based attendance for employees
+
+### ✨ Previous Features (v2.0)
 - **Quality Objective Module** - Target manual per mesin, tracking achievement
 - **Downtime Analysis** - Top 3 downtime, root cause analysis, category charts
 - **Early Stop Tracking** - Monitor shift berakhir lebih awal
@@ -700,16 +862,17 @@ AI Assistant adalah fitur chatbot terintegrasi yang memungkinkan user untuk quer
 - **Enhanced QC Workflows** - Incoming, In-Process, Finish Good QC
 
 ### 🔧 Improvements
-- Exclude design change dari Top 3 Downtime
-- Parsing downtime format: "15 menit - Sanitasi kecil [design]"
-- Manual monthly targets untuk mesin aktif
-- Root Cause CRUD dengan corrective & preventive actions
+- Pack per carton sekarang diambil dari products_new table
+- WIP Stock otomatis terupdate saat production input
+- AI Assistant support grafik produksi, sales, OEE
+- Timezone handling untuk attendance
 
 ### 📊 New API Endpoints
+- `/api/packing-list/wip-stock` - WIP Stock management
+- `/api/packing-list` - Packing list CRUD
+- `/api/rnd` - R&D projects and experiments
 - `/api/oee/machine-monthly-targets` - CRUD target bulanan
 - `/api/oee/machine-downtime-analysis` - Analisa downtime per mesin
-- `/api/oee/downtime-root-causes` - Manajemen root cause
-- `/api/oee/quality-objectives/production` - Quality objectives report
 
 ---
 
@@ -752,25 +915,28 @@ For technical support, feature requests, or bug reports, please email us at baym
 ## 🎯 Roadmap
 
 ### Selesai ✅
-- Implementasi modul core (15+ modul)
-- Authentication & authorization
-- Otomasi workflow (10+ trigger otomatis)
-- AI Assistant terintegrasi
-- Executive Dashboard
+- Implementasi modul core (20+ modul)
+- Authentication & authorization (JWT + OAuth)
+- Otomasi workflow (15+ trigger otomatis)
+- AI Assistant terintegrasi dengan grafik
+- Executive Dashboard dengan KPI real-time
 - Machine Detail dengan OEE Analytics
-- R&D Module lengkap
-- **Quality Objective Module** - Target manual & downtime analysis
+- R&D Module lengkap dengan approval workflow
+- Quality Objective Module - Target manual & downtime analysis
+- **WIP Stock Module** 🆕 - Tracking stok per produk
+- **Packing List Terpisah** 🆕 - Independen dari Work Order
+- **Public Attendance** 🆕 - QR Code based
 
 ### Sedang Dikerjakan 🚧
 - Mobile responsive optimization
-- Advanced reporting
-- **Enhanced Analytics** - Predictive maintenance & quality forecasting
+- Advanced reporting dengan export
+- Enhanced Analytics - Predictive maintenance
 
 ### Direncanakan 📋
 - AI/ML predictive analytics
-- Integrasi IoT
+- Integrasi IoT untuk mesin produksi
 - Mobile app (React Native)
-- **Multi-plant Support** - Manajemen multi lokasi pabrik
+- Multi-plant Support - Manajemen multi lokasi pabrik
 
 ---
 
@@ -778,11 +944,13 @@ For technical support, feature requests, or bug reports, please email us at baym
 
 ## 🏆 Achievements
 
-- ✅ **15+ Business Modules** Fully Integrated
-- ✅ **10+ Automated Workflows** End-to-End
-- ✅ **AI Assistant** Natural Language Query
-- ✅ **Real-time Dashboard** 20+ KPIs
+- ✅ **20+ Business Modules** Fully Integrated
+- ✅ **15+ Automated Workflows** End-to-End
+- ✅ **AI Assistant** Natural Language Query + Charts
+- ✅ **Real-time Dashboard** 30+ KPIs
 - ✅ **Quality Objectives** Complete Implementation
+- ✅ **WIP Stock & Packing List** Separated Module
+- ✅ **80+ API Endpoints** RESTful Design
 
 ⭐ Star repository ini kalau bermanfaat!
 
