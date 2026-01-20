@@ -9,6 +9,7 @@ from models.notification import Notification
 from models.user import User
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
+from utils.timezone import get_local_now, get_local_today, utc_to_local
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_, or_
 from io import BytesIO
@@ -280,8 +281,8 @@ def get_machine_efficiency(id):
         if not machine:
             return jsonify(error_response('api.error', error_code=404)), 404
             
-        start_date = request.args.get('start_date', (datetime.now() - timedelta(days=30)).isoformat())
-        end_date = request.args.get('end_date', datetime.now().isoformat())
+        start_date = request.args.get('start_date', (get_local_now() - timedelta(days=30)).isoformat())
+        end_date = request.args.get('end_date', get_local_now().isoformat())
         
         start_dt = datetime.fromisoformat(start_date)
         end_dt = datetime.fromisoformat(end_date)
@@ -441,9 +442,9 @@ def get_work_orders_status_tracking():
                 'input_status': input_status,
                 'progress_percent': round(progress_percent, 1),
                 'total_shifts': total_shifts,
-                'last_input_date': last_input.created_at.isoformat() if last_input else None,
+                'last_input_date': utc_to_local(last_input.created_at).isoformat() if last_input and last_input.created_at else None,
                 'last_input_by': last_input.created_by_user.full_name if last_input and last_input.created_by_user else None,
-                'created_at': wo.created_at.isoformat() if wo.created_at else None,
+                'created_at': utc_to_local(wo.created_at).isoformat() if wo.created_at else None,
                 'start_date': wo.scheduled_start_date.isoformat() if wo.scheduled_start_date else None,
                 'end_date': wo.scheduled_end_date.isoformat() if wo.scheduled_end_date else None,
                 'approval_status': None  # Can be extended for approval tracking
@@ -1347,6 +1348,82 @@ def create_work_order_production_record(id):
         if wo.status == 'completed':
             wip_batch.status = 'completed'
             wip_batch.completed_at = datetime.utcnow()
+        
+        # ============= WIP STOCK FOR PACKING LIST =============
+        # Add good quantity to WIP Stock (for packing list module)
+        from models.production import WIPStock, WIPStockMovement
+        
+        good_qty_produced = float(data.get('quantity_good', 0))
+        if good_qty_produced > 0:
+            # Get pack_per_carton from products_new table (same as WorkOrder detail)
+            pack_per_carton = 1
+            product_code = wo.product.code if wo.product else None
+            product_name = wo.product.name if wo.product else None
+            
+            if product_code:
+                product_new_data = db.session.execute(
+                    db.text('SELECT pack_per_karton FROM products_new WHERE kode_produk = :code'),
+                    {'code': product_code}
+                ).fetchone()
+                if product_new_data and product_new_data[0]:
+                    pack_per_carton = int(product_new_data[0])
+            
+            # Fallback: try by product name
+            if pack_per_carton == 1 and product_name:
+                search_name = product_name
+                if search_name.upper().startswith('WIP '):
+                    search_name = search_name[4:]
+                product_new_data = db.session.execute(
+                    db.text('SELECT pack_per_karton FROM products_new WHERE nama_produk LIKE :name LIMIT 1'),
+                    {'name': f'%{search_name}%'}
+                ).fetchone()
+                if product_new_data and product_new_data[0]:
+                    pack_per_carton = int(product_new_data[0])
+            
+            # Calculate cartons (full cartons only for WIP tracking)
+            carton_qty = int(good_qty_produced / pack_per_carton) if pack_per_carton > 0 else 0
+            pcs_qty = int(good_qty_produced)
+            
+            if carton_qty > 0 or pcs_qty > 0:
+                # Get or create WIP stock for this product
+                wip_stock = WIPStock.query.filter_by(product_id=wo.product_id).first()
+                
+                if not wip_stock:
+                    wip_stock = WIPStock(
+                        product_id=wo.product_id,
+                        quantity_pcs=0,
+                        quantity_carton=0,
+                        pack_per_carton=pack_per_carton,
+                        last_wo_number=wo.wo_number
+                    )
+                    db.session.add(wip_stock)
+                    db.session.flush()
+                
+                # Update WIP stock quantities
+                old_balance_pcs = wip_stock.quantity_pcs
+                old_balance_carton = wip_stock.quantity_carton
+                
+                wip_stock.quantity_pcs += pcs_qty
+                wip_stock.quantity_carton += carton_qty
+                wip_stock.last_wo_number = wo.wo_number
+                wip_stock.last_updated_at = datetime.utcnow()
+                
+                # Create movement record
+                wip_movement = WIPStockMovement(
+                    wip_stock_id=wip_stock.id,
+                    product_id=wo.product_id,
+                    movement_type='in',
+                    quantity_pcs=pcs_qty,
+                    quantity_carton=carton_qty,
+                    balance_pcs=wip_stock.quantity_pcs,
+                    balance_carton=wip_stock.quantity_carton,
+                    reference_type='work_order',
+                    reference_id=wo.id,
+                    reference_number=wo.wo_number,
+                    notes=f'Hasil produksi shift {data.get("shift", "1")} - {production_date}',
+                    created_by=user_id
+                )
+                db.session.add(wip_movement)
         
         db.session.commit()
         
@@ -2535,7 +2612,7 @@ def export_remaining_stocks_excel():
         
         # Date
         ws.merge_cells('A2:D2')
-        ws['A2'] = f'Tanggal: {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+        ws['A2'] = f'Tanggal: {get_local_now().strftime("%d/%m/%Y %H:%M")}'
         ws['A2'].alignment = Alignment(horizontal="center")
         
         # Headers
@@ -2586,7 +2663,7 @@ def export_remaining_stocks_excel():
         wb.save(output)
         output.seek(0)
         
-        filename = f"Sisa_Order_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        filename = f"Sisa_Order_{get_local_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         
         return send_file(
             output,
