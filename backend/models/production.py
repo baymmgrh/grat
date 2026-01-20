@@ -941,3 +941,238 @@ class PackingListItem(db.Model):
             'is_batch_start': self.is_batch_start,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+# ===========================================
+# WIP STOCK - Work In Progress per Product
+# ===========================================
+
+class WIPStock(db.Model):
+    """WIP Stock - Track Work In Progress inventory per product from completed Work Orders"""
+    __tablename__ = 'wip_stocks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False, unique=True)
+    
+    # Total WIP quantity (in pcs/units)
+    quantity_pcs = db.Column(db.Integer, default=0)
+    
+    # Total WIP in cartons
+    quantity_carton = db.Column(db.Integer, default=0)
+    
+    # Pack per carton (from BOM)
+    pack_per_carton = db.Column(db.Integer, default=1)
+    
+    # Last updated
+    last_wo_number = db.Column(db.String(100), nullable=True)
+    last_updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    product = db.relationship('Product', backref='wip_stock')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
+            'product_code': self.product.code if self.product else None,
+            'quantity_pcs': self.quantity_pcs,
+            'quantity_carton': self.quantity_carton,
+            'pack_per_carton': self.pack_per_carton,
+            'last_wo_number': self.last_wo_number,
+            'last_updated_at': self.last_updated_at.isoformat() if self.last_updated_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class WIPStockMovement(db.Model):
+    """Track all movements in/out of WIP Stock"""
+    __tablename__ = 'wip_stock_movements'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    wip_stock_id = db.Column(db.Integer, db.ForeignKey('wip_stocks.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    
+    # Movement type: 'in' (from WO), 'out' (to packing), 'adjustment'
+    movement_type = db.Column(db.String(20), nullable=False)
+    
+    # Quantity moved
+    quantity_pcs = db.Column(db.Integer, default=0)
+    quantity_carton = db.Column(db.Integer, default=0)
+    
+    # Reference
+    reference_type = db.Column(db.String(50), nullable=True)  # 'work_order', 'packing_list', 'adjustment'
+    reference_id = db.Column(db.Integer, nullable=True)
+    reference_number = db.Column(db.String(100), nullable=True)
+    
+    # Balance after movement
+    balance_pcs = db.Column(db.Integer, default=0)
+    balance_carton = db.Column(db.Integer, default=0)
+    
+    notes = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    wip_stock = db.relationship('WIPStock', backref='movements')
+    product = db.relationship('Product')
+    user = db.relationship('User')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'wip_stock_id': self.wip_stock_id,
+            'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
+            'movement_type': self.movement_type,
+            'quantity_pcs': self.quantity_pcs,
+            'quantity_carton': self.quantity_carton,
+            'reference_type': self.reference_type,
+            'reference_id': self.reference_id,
+            'reference_number': self.reference_number,
+            'balance_pcs': self.balance_pcs,
+            'balance_carton': self.balance_carton,
+            'notes': self.notes,
+            'created_by': self.user.username if self.user else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+# ===========================================
+# NEW PACKING LIST - Separate from Work Order
+# ===========================================
+
+class PackingListNew(db.Model):
+    """New Packing List - Separate from Work Order, based on Sales Order"""
+    __tablename__ = 'packing_lists_new'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    packing_number = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    
+    # Link to Sales Order (optional)
+    sales_order_id = db.Column(db.Integer, db.ForeignKey('sales_orders.id'), nullable=True)
+    
+    # Product being packed
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=False)
+    
+    # Customer info (can be from SO or manual)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'), nullable=True)
+    customer_name = db.Column(db.String(200), nullable=True)
+    
+    # Packing details
+    pack_per_carton = db.Column(db.Integer, default=1)
+    total_carton = db.Column(db.Integer, default=0)
+    total_pcs = db.Column(db.Integer, default=0)
+    
+    # Carton numbering
+    start_carton_number = db.Column(db.Integer, default=1)
+    end_carton_number = db.Column(db.Integer, default=0)
+    
+    # Current batch mixing
+    current_batch_mixing = db.Column(db.String(100), nullable=True)
+    
+    # Status: draft, in_progress, completed, cancelled
+    status = db.Column(db.String(50), default='draft')
+    
+    # Dates
+    packing_date = db.Column(db.Date, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    
+    notes = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    sales_order = db.relationship('SalesOrder', backref='packing_lists')
+    product = db.relationship('Product', backref='packing_lists_new')
+    customer = db.relationship('Customer', backref='packing_lists')
+    items = db.relationship('PackingListNewItem', backref='packing_list', lazy='dynamic', cascade='all, delete-orphan')
+    creator = db.relationship('User', foreign_keys=[created_by])
+    
+    def to_dict(self, include_items=False):
+        result = {
+            'id': self.id,
+            'packing_number': self.packing_number,
+            'sales_order_id': self.sales_order_id,
+            'so_number': self.sales_order.so_number if self.sales_order else None,
+            'product_id': self.product_id,
+            'product_name': self.product.name if self.product else None,
+            'product_code': self.product.code if self.product else None,
+            'customer_id': self.customer_id,
+            'customer_name': self.customer_name or (self.customer.name if self.customer else None),
+            'pack_per_carton': self.pack_per_carton,
+            'total_carton': self.total_carton,
+            'total_pcs': self.total_pcs,
+            'start_carton_number': self.start_carton_number,
+            'end_carton_number': self.end_carton_number,
+            'current_batch_mixing': self.current_batch_mixing,
+            'status': self.status,
+            'packing_date': self.packing_date.isoformat() if self.packing_date else None,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'notes': self.notes,
+            'created_by': self.creator.username if self.creator else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'items_count': self.items.count(),
+            'weighed_count': self.items.filter(PackingListNewItem.weight_kg.isnot(None)).count()
+        }
+        if include_items:
+            result['items'] = [item.to_dict() for item in self.items.order_by(PackingListNewItem.carton_number).all()]
+        return result
+
+
+class PackingListNewItem(db.Model):
+    """Item dalam Packing List - Detail per karton dengan tanggal timbang"""
+    __tablename__ = 'packing_list_new_items'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    packing_list_id = db.Column(db.Integer, db.ForeignKey('packing_lists_new.id', ondelete='CASCADE'), nullable=False)
+    
+    # Nomor karton
+    carton_number = db.Column(db.Integer, nullable=False)
+    
+    # Berat karton dalam kg
+    weight_kg = db.Column(db.Numeric(10, 3), nullable=True)
+    
+    # Tanggal timbang (weighing date) - IMPORTANT NEW FIELD
+    weigh_date = db.Column(db.Date, nullable=True)
+    weigh_time = db.Column(db.Time, nullable=True)
+    
+    # Batch mixing
+    batch_mixing = db.Column(db.String(100), nullable=True)
+    
+    # Flag untuk menandai awal batch mixing baru
+    is_batch_start = db.Column(db.Boolean, default=False)
+    
+    # QC status
+    qc_status = db.Column(db.String(50), nullable=True)  # passed, failed, pending
+    qc_notes = db.Column(db.Text, nullable=True)
+    
+    # Who weighed
+    weighed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    weigher = db.relationship('User', foreign_keys=[weighed_by])
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'packing_list_id': self.packing_list_id,
+            'carton_number': self.carton_number,
+            'weight_kg': float(self.weight_kg) if self.weight_kg else None,
+            'weigh_date': self.weigh_date.isoformat() if self.weigh_date else None,
+            'weigh_time': self.weigh_time.isoformat() if self.weigh_time else None,
+            'batch_mixing': self.batch_mixing,
+            'is_batch_start': self.is_batch_start,
+            'qc_status': self.qc_status,
+            'qc_notes': self.qc_notes,
+            'weighed_by': self.weigher.username if self.weigher else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
