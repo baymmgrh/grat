@@ -26,13 +26,10 @@ export default defineConfig({
   server: {
     port: 3000,
     host: '0.0.0.0',  // Allow LAN access
-    allowedHosts: [
-      'localhost',
-      '127.0.0.1',
-      'erp.graterp.my.id',
-      'api.graterp.my.id',
-      '.graterp.my.id',  // Allow all subdomains
-    ],
+    allowedHosts: true,  // Allow all hosts for dev server
+    cors: true,  // Enable CORS for dev server
+    origin: 'http://erp.graterp.my.id:3000',  // Set proper origin
+    hmr: true,  // Enable HMR
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
