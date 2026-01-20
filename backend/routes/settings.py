@@ -8,6 +8,7 @@ import os
 import tempfile
 import zipfile
 from utils import generate_number
+from utils.timezone import get_local_now, get_local_today
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -62,7 +63,7 @@ def update_system_settings():
                         setting.setting_value = str(value)
                     
                     setting.updated_by = user_id
-                    setting.updated_at = datetime.utcnow()
+                    setting.updated_at = get_local_now()
                     updated_count += 1
                 elif not setting:
                     # Create new setting if it doesn't exist
@@ -173,7 +174,7 @@ def update_company_profile():
                 setattr(profile, db_field, value)
         
         profile.updated_by = user_id
-        profile.updated_at = datetime.utcnow()
+        profile.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -393,7 +394,7 @@ def update_user(user_id):
         if 'password' in data and data['password']:
             user.set_password(data['password'])
         
-        user.updated_at = datetime.utcnow()
+        user.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({
@@ -431,7 +432,7 @@ def delete_user(user_id):
         
         # Soft delete by setting is_active to False
         user.is_active = False
-        user.updated_at = datetime.utcnow()
+        user.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -498,14 +499,14 @@ def create_backup():
         
         # Create temporary directory for backup
         backup_dir = tempfile.mkdtemp()
-        backup_file = f"gms_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        backup_file = f"gms_backup_{get_local_now().strftime('%Y%m%d_%H%M%S')}.zip"
         backup_path = os.path.join(backup_dir, backup_file)
         
         # Create zip file with database export
         with zipfile.ZipFile(backup_path, 'w') as zipf:
             # Add database schema info
             schema_info = {
-                'created_at': datetime.utcnow().isoformat(),
+                'created_at': get_local_now().isoformat(),
                 'created_by': user_id,
                 'version': '1.0.0',
                 'tables': []
@@ -532,7 +533,7 @@ def create_backup():
             'message': 'Backup created successfully',
             'backup_file': backup_file,
             'size': os.path.getsize(backup_path),
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': get_local_now().isoformat()
         }), 200
         
     except Exception as e:
@@ -564,7 +565,7 @@ def export_data():
         export_data = {
             'export_info': {
                 'type': export_type,
-                'created_at': datetime.utcnow().isoformat(),
+                'created_at': get_local_now().isoformat(),
                 'created_by': int(get_jwt_identity())  # Convert string to int
             }
         }
@@ -618,7 +619,7 @@ def update_session_timeout():
         else:
             setting.setting_value = str(timeout_minutes)
             setting.updated_by = int(get_jwt_identity())  # Convert string to int
-            setting.updated_at = datetime.utcnow()
+            setting.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -797,7 +798,7 @@ def update_role(role_id):
                 )
                 db.session.add(role_perm)
         
-        role.updated_at = datetime.utcnow()
+        role.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({
@@ -837,7 +838,7 @@ def delete_role(role_id):
         
         # Soft delete
         role.is_active = False
-        role.updated_at = datetime.utcnow()
+        role.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({'message': 'Role deleted successfully'}), 200

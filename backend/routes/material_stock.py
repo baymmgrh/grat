@@ -8,6 +8,7 @@ from models import db, Material, Inventory, WarehouseLocation, InventoryMovement
 from utils import generate_number
 from datetime import datetime
 from sqlalchemy import func, or_
+from utils.timezone import get_local_now, get_local_today
 
 material_stock_bp = Blueprint('material_stock', __name__)
 
@@ -187,7 +188,7 @@ def add_material_stock():
             old_quantity = float(inventory.quantity_on_hand)
             inventory.quantity_on_hand = old_quantity + quantity
             inventory.quantity_available = float(inventory.quantity_available or 0) + quantity
-            inventory.updated_at = datetime.utcnow()
+            inventory.updated_at = get_local_now()
             
             movement_type = 'stock_in'
             reference = f'Stock Addition - {data.get("reference", "Manual Entry")}'
@@ -206,7 +207,7 @@ def add_material_stock():
                 serial_number=data.get('serial_number'),
                 production_date=datetime.fromisoformat(data['production_date']) if data.get('production_date') else None,
                 expiry_date=datetime.fromisoformat(data['expiry_date']) if data.get('expiry_date') else None,
-                last_stock_check=datetime.utcnow(),
+                last_stock_check=get_local_now(),
                 created_by=user_id,
                 is_active=True
             )
@@ -228,7 +229,7 @@ def add_material_stock():
             reference_number=data.get('reference', 'MANUAL'),
             notes=data.get('notes'),
             created_by=user_id,
-            movement_date=datetime.utcnow()
+            movement_date=get_local_now()
         )
         db.session.add(movement)
         
@@ -291,8 +292,8 @@ def adjust_material_stock():
         else:
             return jsonify({'error': 'Invalid adjustment type. Use "increase" or "decrease"'}), 400
         
-        inventory.updated_at = datetime.utcnow()
-        inventory.last_stock_check = datetime.utcnow()
+        inventory.updated_at = get_local_now()
+        inventory.last_stock_check = get_local_now()
         
         # Create inventory movement record
         movement = InventoryMovement(
@@ -305,7 +306,7 @@ def adjust_material_stock():
             reference_number=data.get('reference', 'ADJ'),
             notes=data.get('reason'),
             created_by=user_id,
-            movement_date=datetime.utcnow()
+            movement_date=get_local_now()
         )
         db.session.add(movement)
         
@@ -440,7 +441,7 @@ def initialize_material_inventory():
                 quantity_reserved=0,
                 min_stock_level=material.min_stock_level or 0,
                 max_stock_level=material.max_stock_level or 0,
-                last_stock_check=datetime.utcnow(),
+                last_stock_check=get_local_now(),
                 created_by=user_id,
                 is_active=True
             )

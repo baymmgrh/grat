@@ -8,6 +8,7 @@ from datetime import datetime
 from models import db
 from models.production import WorkOrder, ProductChangeover, Machine, ShiftProduction
 from utils.helpers import generate_number
+from utils.timezone import get_local_now, get_local_today
 
 product_changeover_bp = Blueprint('product_changeover', __name__)
 
@@ -43,7 +44,7 @@ def get_changeovers():
                 'in_progress': ProductChangeover.query.filter_by(status='in_progress').count(),
                 'completed_today': ProductChangeover.query.filter(
                     ProductChangeover.status == 'completed',
-                    db.func.date(ProductChangeover.changeover_end) == datetime.utcnow().date()
+                    db.func.date(ProductChangeover.changeover_end) == get_local_now().date()
                 ).count()
             }
         }), 200
@@ -127,7 +128,7 @@ def initiate_changeover(wo_id):
             from_wo_status=from_wo.status,
             from_wo_progress=current_progress,
             from_wo_target=target_qty,
-            changeover_start=datetime.utcnow(),
+            changeover_start=get_local_now(),
             status='in_progress',
             initiated_by=user_id,
             notes=data.get('notes')
@@ -135,7 +136,7 @@ def initiate_changeover(wo_id):
         
         # Pause current work order
         from_wo.status = 'paused'
-        from_wo.updated_at = datetime.utcnow()
+        from_wo.updated_at = get_local_now()
         
         # Note: DowntimeRecord requires shift_production_id which may not exist yet
         # Store changeover downtime info in the changeover record itself
@@ -211,12 +212,12 @@ def complete_changeover(id):
         setup_time = data.get('setup_time_minutes', 0)
         if not setup_time:
             # Auto calculate from changeover duration
-            duration = datetime.utcnow() - changeover.changeover_start
+            duration = get_local_now() - changeover.changeover_start
             setup_time = int(duration.total_seconds() / 60)
         
         # Update changeover
         changeover.to_work_order_id = to_work_order_id
-        changeover.changeover_end = datetime.utcnow()
+        changeover.changeover_end = get_local_now()
         changeover.setup_time_minutes = setup_time
         changeover.status = 'completed'
         changeover.completed_by = user_id
@@ -227,15 +228,15 @@ def complete_changeover(id):
         to_wo.status = 'in_progress'
         to_wo.machine_id = changeover.machine_id  # Assign same machine
         if not to_wo.actual_start_date:
-            to_wo.actual_start_date = datetime.utcnow()
-        to_wo.updated_at = datetime.utcnow()
+            to_wo.actual_start_date = get_local_now()
+        to_wo.updated_at = get_local_now()
         
         # Record changeover downtime to the PREVIOUS WO's ShiftProduction
         from_wo = WorkOrder.query.get(changeover.from_work_order_id)
         if from_wo:
             # Find or create ShiftProduction for the previous WO on today's date
-            today = datetime.utcnow().date()
-            current_hour = datetime.utcnow().hour
+            today = get_local_now().date()
+            current_hour = get_local_now().hour
             # Determine shift based on current time (shift 1: 06-14, shift 2: 14-22, shift 3: 22-06)
             if 6 <= current_hour < 14:
                 shift = '1'
@@ -312,10 +313,10 @@ def cancel_changeover(id):
         from_wo = changeover.from_work_order
         if from_wo:
             from_wo.status = 'in_progress'
-            from_wo.updated_at = datetime.utcnow()
+            from_wo.updated_at = get_local_now()
         
         # Calculate cancelled changeover duration
-        cancel_time = datetime.utcnow()
+        cancel_time = get_local_now()
         duration = cancel_time - changeover.changeover_start
         setup_time = int(duration.total_seconds() / 60)
         
@@ -328,8 +329,8 @@ def cancel_changeover(id):
         
         # Record cancelled changeover downtime to the WO's ShiftProduction
         if from_wo and setup_time > 0:
-            today = datetime.utcnow().date()
-            current_hour = datetime.utcnow().hour
+            today = get_local_now().date()
+            current_hour = get_local_now().hour
             # Determine shift based on current time
             if 6 <= current_hour < 14:
                 shift = '1'

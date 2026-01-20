@@ -10,6 +10,7 @@ import pandas as pd
 import io
 import tempfile
 import os
+from utils.timezone import get_local_now, get_local_today
 
 products_new_extended_bp = Blueprint('products_new_extended', __name__, url_prefix='/api/products-new')
 
@@ -106,7 +107,7 @@ def export_products():
         return send_file(
             tmp_file_path,
             as_attachment=True,
-            download_name=f'products_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+            download_name=f'products_export_{get_local_now().strftime("%Y%m%d_%H%M%S")}.xlsx',
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
         
@@ -319,11 +320,11 @@ def get_product_analytics():
         
         # Calculate date range
         if time_range == '7d':
-            start_date = datetime.utcnow() - timedelta(days=7)
+            start_date = get_local_now() - timedelta(days=7)
         elif time_range == '30d':
-            start_date = datetime.utcnow() - timedelta(days=30)
+            start_date = get_local_now() - timedelta(days=30)
         elif time_range == '90d':
-            start_date = datetime.utcnow() - timedelta(days=90)
+            start_date = get_local_now() - timedelta(days=90)
         else:
             start_date = None
         
@@ -395,13 +396,13 @@ def get_dashboard_extended():
         
         # Filter by time range if specified
         if time_range == '7d':
-            start_date = datetime.utcnow() - timedelta(days=7)
+            start_date = get_local_now() - timedelta(days=7)
             query = query.filter(ProductNew.created_at >= start_date)
         elif time_range == '30d':
-            start_date = datetime.utcnow() - timedelta(days=30)
+            start_date = get_local_now() - timedelta(days=30)
             query = query.filter(ProductNew.created_at >= start_date)
         elif time_range == '90d':
-            start_date = datetime.utcnow() - timedelta(days=90)
+            start_date = get_local_now() - timedelta(days=90)
             query = query.filter(ProductNew.created_at >= start_date)
         
         total_products = ProductNew.query.count()

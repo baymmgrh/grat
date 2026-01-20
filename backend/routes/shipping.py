@@ -4,6 +4,7 @@ from models import db, ShippingOrder, ShippingItem, DeliveryTracking, LogisticsP
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 shipping_bp = Blueprint('shipping', __name__)
 
@@ -235,7 +236,7 @@ def create_provider():
         data = request.get_json()
         
         # Generate provider code
-        code = f"LP{datetime.now().strftime('%Y%m%d')}{LogisticsProvider.query.count() + 1:03d}"
+        code = f"LP{get_local_now().strftime('%Y%m%d')}{LogisticsProvider.query.count() + 1:03d}"
         
         provider = LogisticsProvider(
             code=code,
@@ -396,7 +397,7 @@ def update_shipping_order(order_id):
         if 'notes' in data:
             order.notes = data['notes']
         
-        order.updated_at = datetime.utcnow()
+        order.updated_at = get_local_now()
         
         db.session.commit()
         return jsonify(success_response('api.success')), 200
@@ -446,7 +447,7 @@ def update_tracking_status(tracking_number):
             tracking_number=tracking_number,
             status=data['status'],
             location=data.get('location'),
-            timestamp=datetime.fromisoformat(data['timestamp']) if data.get('timestamp') else datetime.utcnow(),
+            timestamp=datetime.fromisoformat(data['timestamp']) if data.get('timestamp') else get_local_now(),
             notes=data.get('notes'),
             updated_by=get_jwt_identity()
         )
@@ -461,7 +462,7 @@ def update_tracking_status(tracking_number):
         if data['status'] == 'delivered' and not order.actual_delivery_date:
             order.actual_delivery_date = tracking.timestamp
         
-        order.updated_at = datetime.utcnow()
+        order.updated_at = get_local_now()
         
         db.session.commit()
         return jsonify(success_response('api.success')), 200
@@ -652,7 +653,7 @@ def create_shipping_from_qc():
             qc_inspection_id=qc_inspection_id,
             sales_order_id=work_order.sales_order_id,
             customer_id=customer_id,
-            shipping_date=datetime.fromisoformat(data['shipping_date']) if data.get('shipping_date') else datetime.utcnow().date(),
+            shipping_date=datetime.fromisoformat(data['shipping_date']) if data.get('shipping_date') else get_local_now().date(),
             expected_delivery_date=datetime.fromisoformat(data['expected_delivery_date']) if data.get('expected_delivery_date') else None,
             status='preparing',
             delivery_method=delivery_method,

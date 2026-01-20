@@ -201,6 +201,7 @@ const DowntimeInput: React.FC = () => {
       { value: 'tool_change', label: 'Tool Change' },
       { value: 'bak_packaging', label: 'Bak Packaging' },
       { value: 'stiker', label: 'Stiker' },
+      { value: 'stiker_putus', label: 'Stiker Putus' },
       { value: 'cartridge', label: 'Cartridge' }
     ]
   };

@@ -17,6 +17,7 @@ from utils.product_calculations import (
     calculate_kebutuhan_material,
     calculate_all_product_metrics
 )
+from utils.timezone import get_local_now, get_local_today
 
 products_new_bp = Blueprint('products_new', __name__, url_prefix='/api/products-new')
 
@@ -184,7 +185,7 @@ def update_product(product_id):
             
             db.session.add(version)
         
-        product.updated_at = datetime.utcnow()
+        product.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({
@@ -202,7 +203,7 @@ def delete_product(product_id):
     try:
         product = ProductNew.query.get_or_404(product_id)
         product.is_active = False
-        product.updated_at = datetime.utcnow()
+        product.updated_at = get_local_now()
         
         db.session.commit()
         

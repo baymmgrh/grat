@@ -17,6 +17,7 @@ from models.oee import OEERecord
 from models.user import User
 from models.kpi_target import KPITarget
 import json
+from utils.timezone import get_local_now, get_local_today
 
 executive_dashboard_bp = Blueprint('executive_dashboard', __name__)
 
@@ -28,8 +29,8 @@ def get_executive_overview():
     """
     try:
         # Get date range (default: current month)
-        end_date = datetime.now().date()
-        start_date = (datetime.now() - timedelta(days=30)).date()
+        end_date = get_local_now().date()
+        start_date = (get_local_now() - timedelta(days=30)).date()
         
         # Previous period for comparison
         prev_end_date = start_date - timedelta(days=1)
@@ -257,8 +258,8 @@ def get_trends():
     """
     try:
         # Get last 12 months
-        end_date = datetime.now().date()
-        start_date = (datetime.now() - timedelta(days=365)).date()
+        end_date = get_local_now().date()
+        start_date = (get_local_now() - timedelta(days=365)).date()
         
         # Revenue trend (monthly)
         revenue_trend = db.session.query(
@@ -370,8 +371,8 @@ def get_performance_scorecard():
     Get comprehensive performance scorecard with targets from database
     """
     try:
-        end_date = datetime.now().date()
-        start_date = (datetime.now() - timedelta(days=30)).date()
+        end_date = get_local_now().date()
+        start_date = (get_local_now() - timedelta(days=30)).date()
         
         # Helper function to get target from database
         def get_target(kpi_code, default_value):
@@ -612,8 +613,8 @@ def get_top_performers():
     Get top performers across different categories
     """
     try:
-        end_date = datetime.now().date()
-        start_date = (datetime.now() - timedelta(days=30)).date()
+        end_date = get_local_now().date()
+        start_date = (get_local_now() - timedelta(days=30)).date()
         
         # Top customers by revenue
         top_customers = db.session.query(
@@ -712,7 +713,7 @@ def get_alerts():  # executive_alerts():
         overdue_invoices = db.session.query(func.count(Invoice.id))\
             .filter(
                 Invoice.status.in_(['pending', 'partial']),
-                Invoice.due_date < datetime.now().date()
+                Invoice.due_date < get_local_now().date()
             ).scalar() or 0
         
         if overdue_invoices > 0:
@@ -730,7 +731,7 @@ def get_alerts():  # executive_alerts():
             ShiftProduction.machine_id,
             func.avg(func.coalesce(ShiftProduction.oee_score, ShiftProduction.efficiency_rate, 0)).label('avg_oee')
         ).filter(
-            ShiftProduction.production_date >= (datetime.now() - timedelta(days=30)).date()
+            ShiftProduction.production_date >= (get_local_now() - timedelta(days=30)).date()
         ).group_by(ShiftProduction.machine_id)\
         .having(func.avg(func.coalesce(ShiftProduction.oee_score, ShiftProduction.efficiency_rate, 0)) < 75)\
         .all()
@@ -772,7 +773,7 @@ def get_active_users():
     try:
         users = db.session.query(User).filter(User.is_active == True).all()
         
-        now = datetime.utcnow()
+        now = get_local_now()
         online_threshold = now - timedelta(minutes=15)
         recent_threshold = now - timedelta(hours=24)
         
@@ -848,8 +849,8 @@ def get_production_executive_dashboard():
         from models.production import ProductionRecord
         
         # Get parameters
-        year = request.args.get('year', datetime.now().year, type=int)
-        month = request.args.get('month', datetime.now().month, type=int)
+        year = request.args.get('year', get_local_now().year, type=int)
+        month = request.args.get('month', get_local_now().month, type=int)
         
         # Calculate date range for the month
         start_date = datetime(year, month, 1).date()
@@ -1146,7 +1147,7 @@ def get_production_output_details():
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
             end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
         else:
-            end_date = datetime.now().date()
+            end_date = get_local_now().date()
             start_date = end_date - timedelta(days=days)
         
         # Get all shift productions in date range

@@ -4,6 +4,7 @@ from models import db
 from models.production import WorkOrder, WorkOrderStatusHistory, ShiftProduction, Machine
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_, or_
+from utils.timezone import get_local_now, get_local_today
 
 wo_monitoring_bp = Blueprint('work_order_monitoring', __name__)
 
@@ -47,7 +48,7 @@ def get_work_orders_monitoring():
                 speed_per_min = wo.machine.default_speed
                 estimated_minutes = remaining_qty / speed_per_min if speed_per_min > 0 else 0
                 if wo.actual_start_date:
-                    estimated_completion = datetime.now() + timedelta(minutes=estimated_minutes)
+                    estimated_completion = get_local_now() + timedelta(minutes=estimated_minutes)
                 elif wo.scheduled_start_date:
                     estimated_completion = wo.scheduled_start_date + timedelta(minutes=estimated_minutes)
             
@@ -56,9 +57,9 @@ def get_work_orders_monitoring():
             delay_hours = 0
             if wo.required_date and wo.status not in ['completed', 'cancelled']:
                 required_datetime = datetime.combine(wo.required_date, datetime.min.time())
-                if datetime.now() > required_datetime:
+                if get_local_now() > required_datetime:
                     is_delayed = True
-                    delay_hours = round((datetime.now() - required_datetime).total_seconds() / 3600, 1)
+                    delay_hours = round((get_local_now() - required_datetime).total_seconds() / 3600, 1)
             
             # Get total downtime from production records
             total_downtime = 0
@@ -233,9 +234,9 @@ def get_breakdown_summary():
         date_to = request.args.get('date_to')
         
         if not date_from:
-            date_from = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+            date_from = (get_local_now() - timedelta(days=30)).strftime('%Y-%m-%d')
         if not date_to:
-            date_to = datetime.now().strftime('%Y-%m-%d')
+            date_to = get_local_now().strftime('%Y-%m-%d')
         
         # Get all active/in-progress work orders
         work_orders = WorkOrder.query.filter(

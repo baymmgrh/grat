@@ -11,6 +11,7 @@ from models.product import Product, Material
 from utils import generate_number
 from datetime import datetime
 import json
+from utils.timezone import get_local_now, get_local_today
 
 stock_opname_bp = Blueprint('stock_opname', __name__)
 
@@ -203,7 +204,7 @@ def start_opname(id):
             return jsonify({'error': 'Opname sudah dimulai atau selesai'}), 400
         
         order.status = 'in_progress'
-        order.start_date = datetime.utcnow()
+        order.start_date = get_local_now()
         
         db.session.commit()
         
@@ -277,7 +278,7 @@ def count_item(order_id, item_id):
         
         item.status = 'counted'
         item.counted_by = user_id
-        item.counted_at = datetime.utcnow()
+        item.counted_at = get_local_now()
         item.notes = data.get('notes')
         
         # Update order progress
@@ -329,7 +330,7 @@ def complete_opname(id):
                     total_variance_value += float(item.variance_value)
         
         order.status = 'completed'
-        order.end_date = datetime.utcnow()
+        order.end_date = get_local_now()
         order.counted_items = len(items)
         order.variance_items = variance_items
         order.total_variance_value = total_variance_value
@@ -380,7 +381,7 @@ def approve_opname(id):
                         old_qty = inventory.quantity_on_hand
                         inventory.quantity_on_hand = item.counted_qty
                         inventory.quantity_available = item.counted_qty - inventory.quantity_reserved
-                        inventory.last_stock_check = datetime.utcnow()
+                        inventory.last_stock_check = get_local_now()
                         
                         # Create movement record
                         movement = InventoryMovement(
@@ -389,7 +390,7 @@ def approve_opname(id):
                             material_id=inventory.material_id,
                             location_id=inventory.location_id,
                             movement_type='adjust',
-                            movement_date=datetime.utcnow().date(),
+                            movement_date=get_local_now().date(),
                             quantity=float(item.variance_qty),
                             reference_number=order.opname_number,
                             reference_type='stock_opname',
@@ -401,7 +402,7 @@ def approve_opname(id):
                         db.session.add(movement)
         
         order.approved_by = user_id
-        order.approved_at = datetime.utcnow()
+        order.approved_at = get_local_now()
         
         db.session.commit()
         

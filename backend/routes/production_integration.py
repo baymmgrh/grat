@@ -18,6 +18,7 @@ from models.work_order_bom import WorkOrderBOMItem
 from datetime import datetime
 from sqlalchemy import func
 import json
+from utils.timezone import get_local_now, get_local_today
 
 production_integration_bp = Blueprint('production_integration', __name__)
 
@@ -77,14 +78,14 @@ def auto_deduct_materials(work_order_id, user_id=None):
                     reference_id=work_order_id,
                     notes=f'Auto-deduction for WO {wo.wo_number}',
                     created_by=user_id,
-                    created_at=datetime.utcnow()
+                    created_at=get_local_now()
                 )
                 db.session.add(movement)
                 
                 # Update inventory quantity
                 inventory.quantity_on_hand = float(inventory.quantity_on_hand) - required_qty
                 inventory.quantity_available = float(inventory.quantity_available) - required_qty
-                inventory.updated_at = datetime.utcnow()
+                inventory.updated_at = get_local_now()
                 
                 mat_name = bom_item.item_name if bom_item.item_name else (bom_item.material.name if bom_item.material else 'Unknown')
                 transactions.append({
@@ -121,14 +122,14 @@ def auto_deduct_materials(work_order_id, user_id=None):
                     reference_id=work_order_id,
                     notes=f'Auto-deduction for WO {wo.wo_number}',
                     created_by=user_id,
-                    created_at=datetime.utcnow()
+                    created_at=get_local_now()
                 )
                 db.session.add(movement)
                 
                 # Update inventory quantity
                 inventory.quantity_on_hand = float(inventory.quantity_on_hand) - required_qty
                 inventory.quantity_available = float(inventory.quantity_available) - required_qty
-                inventory.updated_at = datetime.utcnow()
+                inventory.updated_at = get_local_now()
                 
                 prod_name = bom_item.item_name if bom_item.item_name else (bom_item.product.name if bom_item.product else 'Unknown')
                 transactions.append({
@@ -176,7 +177,7 @@ def auto_receive_finished_goods(work_order_id, quantity_produced, user_id=None):
         wo_id, wo_number, product_id, wo_start_date, wo_end_date = wo_row
         
         # Use WO end date if available, otherwise start date, otherwise today
-        movement_date = wo_end_date or wo_start_date or datetime.utcnow().date()
+        movement_date = wo_end_date or wo_start_date or get_local_now().date()
         if hasattr(movement_date, 'date'):
             movement_date = movement_date.date()
         if hasattr(movement_date, 'isoformat'):

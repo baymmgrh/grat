@@ -15,6 +15,7 @@ from models.group_chat import (
     ChatServerRoleMember, ChatUserStatus, ChatUnreadMessage,
     server_members, channel_members
 )
+from utils.timezone import get_local_now, get_local_today
 
 chat_bp = Blueprint('chat', __name__)
 
@@ -724,7 +725,7 @@ def get_channel(channel_id):
     
     if unread:
         unread.unread_count = 0
-        unread.last_read_at = datetime.utcnow()
+        unread.last_read_at = get_local_now()
         if messages.items:
             unread.last_read_message_id = messages.items[0].id
         db.session.commit()
@@ -899,7 +900,7 @@ def send_message(channel_id):
     db.session.add(message)
     
     # Update channel last message time
-    channel.last_message_at = datetime.utcnow()
+    channel.last_message_at = get_local_now()
     
     # Process mentions
     if '@everyone' in data['content']:
@@ -989,7 +990,7 @@ def upload_file_message():
     # Generate unique filename
     original_filename = secure_filename(file.filename)
     ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-    unique_filename = f"{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{current_user_id}_{secrets.token_hex(8)}.{ext}"
+    unique_filename = f"{get_local_now().strftime('%Y%m%d%H%M%S')}_{current_user_id}_{secrets.token_hex(8)}.{ext}"
     
     file_path = os.path.join(upload_folder, unique_filename)
     file.save(file_path)
@@ -1023,7 +1024,7 @@ def upload_file_message():
     db.session.add(attachment)
     
     # Update channel last message time
-    channel.last_message_at = datetime.utcnow()
+    channel.last_message_at = get_local_now()
     
     # Update unread counts for other members
     for member in channel.server.members:
@@ -1071,7 +1072,7 @@ def edit_message(message_id):
     
     message.content = data['content']
     message.is_edited = True
-    message.edited_at = datetime.utcnow()
+    message.edited_at = get_local_now()
     
     db.session.commit()
     
@@ -1095,7 +1096,7 @@ def delete_message(message_id):
             return jsonify({'error': 'Permission denied'}), 403
     
     message.is_deleted = True
-    message.deleted_at = datetime.utcnow()
+    message.deleted_at = get_local_now()
     
     db.session.commit()
     
@@ -1459,7 +1460,7 @@ def update_status():
     if 'custom_status' in data:
         status.custom_status = data['custom_status']
     
-    status.last_seen = datetime.utcnow()
+    status.last_seen = get_local_now()
     
     db.session.commit()
     
@@ -1521,7 +1522,7 @@ def mark_as_read(channel_id):
     
     if unread:
         unread.unread_count = 0
-        unread.last_read_at = datetime.utcnow()
+        unread.last_read_at = get_local_now()
         
         # Get latest message
         latest_msg = ChatMessage.query.filter_by(channel_id=channel_id).order_by(
@@ -1603,7 +1604,7 @@ def heartbeat():
     # Don't change manually set status (dnd, idle, offline)
     # Only update last_seen timestamp
     
-    status.last_seen = datetime.utcnow()
+    status.last_seen = get_local_now()
     db.session.commit()
     
     return jsonify({
@@ -1622,7 +1623,7 @@ def get_online_members(server_id):
     server = ChatServer.query.get_or_404(server_id)
     
     # Consider user active if last_seen within 30 seconds
-    active_threshold = datetime.utcnow() - timedelta(seconds=30)
+    active_threshold = get_local_now() - timedelta(seconds=30)
     
     online_members = []
     idle_members = []

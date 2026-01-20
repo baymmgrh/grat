@@ -13,6 +13,7 @@ from datetime import datetime, date
 from sqlalchemy import or_, func, and_
 from sqlalchemy.orm import joinedload, selectinload
 import json
+from utils.timezone import get_local_now, get_local_today
 
 sales_bp = Blueprint('sales', __name__)
 
@@ -537,7 +538,7 @@ def create_order():
             # Auto submit for review
             workflow.status = 'pending_review'
             workflow.current_step = 'review'
-            workflow.submitted_at = datetime.utcnow()
+            workflow.submitted_at = get_local_now()
             
             db.session.commit()
             
@@ -672,7 +673,7 @@ def confirm_order(id):
         
         order.status = 'confirmed'
         order.approved_by = user_id
-        order.approved_at = datetime.utcnow()
+        order.approved_at = get_local_now()
         
         db.session.commit()
         
@@ -980,7 +981,7 @@ def convert_lead(lead_id):
         # Update lead status
         lead.lead_status = 'converted'
         lead.converted_to_customer_id = customer.id
-        lead.converted_at = datetime.utcnow()
+        lead.converted_at = get_local_now()
         
         db.session.commit()
         
@@ -1385,7 +1386,7 @@ def get_sales_dashboard():
         ).count()
         overdue_activities = SalesActivity.query.filter(
             and_(
-                SalesActivity.due_date < datetime.now(),
+                SalesActivity.due_date < get_local_now(),
                 SalesActivity.status != 'completed'
             )
         ).count()

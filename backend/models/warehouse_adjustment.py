@@ -1,5 +1,6 @@
 from datetime import datetime
 from . import db
+from utils.timezone import get_local_now
 
 class InventoryAdjustment(db.Model):
     """Inventory adjustment for stock corrections"""
@@ -120,5 +121,5 @@ class InventoryTransfer(db.Model):
     @property
     def is_overdue(self):
         if self.expected_date and self.status not in ['completed', 'cancelled']:
-            return datetime.utcnow() > self.expected_date
+            return get_local_now() > self.expected_date
         return False

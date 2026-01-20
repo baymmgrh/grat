@@ -11,6 +11,7 @@ from utils.helpers import generate_number
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, desc, and_, or_
 import json
+from utils.timezone import get_local_now, get_local_today
 
 quality_enhanced_bp = Blueprint('quality_enhanced', __name__)
 
@@ -20,7 +21,7 @@ def get_quality_dashboard():
     """Enhanced quality dashboard with comprehensive metrics"""
     try:
         # Date ranges
-        today = date.today()
+        today = get_local_today()
         week_start = today - timedelta(days=7)
         month_start = today.replace(day=1)
         
@@ -135,7 +136,7 @@ def get_quality_dashboard():
                 'pass_rate': pass_rate_trend
             },
             'machine_performance': machine_performance,
-            'last_updated': datetime.now().isoformat()
+            'last_updated': get_local_now().isoformat()
         }), 200
         
     except Exception as e:
@@ -201,7 +202,7 @@ def acknowledge_alert(alert_id):
         
         alert.status = 'acknowledged'
         alert.acknowledged_by = current_user_id
-        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledged_at = get_local_now()
         
         db.session.commit()
         
@@ -226,7 +227,7 @@ def resolve_alert(alert_id):
         
         alert.status = 'resolved'
         alert.resolved_by = current_user_id
-        alert.resolved_at = datetime.utcnow()
+        alert.resolved_at = get_local_now()
         alert.resolution_notes = data.get('resolution_notes', '')
         
         db.session.commit()
@@ -249,7 +250,7 @@ def get_quality_analytics():
         product_id = request.args.get('product_id', type=int)
         
         # Date range based on period
-        today = date.today()
+        today = get_local_today()
         if period == 'daily':
             start_date = today - timedelta(days=30)
         elif period == 'weekly':
@@ -442,7 +443,7 @@ def get_quality_competency():
         query = query.filter(
             or_(
                 QualityCompetency.valid_until.is_(None),
-                QualityCompetency.valid_until >= date.today()
+                QualityCompetency.valid_until >= get_local_today()
             )
         )
         

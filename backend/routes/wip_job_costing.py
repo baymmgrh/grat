@@ -9,6 +9,7 @@ from utils.i18n import success_response, error_response
 from utils import generate_number
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, or_
+from utils.timezone import get_local_now, get_local_today
 
 wip_job_costing_bp = Blueprint('wip_job_costing', __name__)
 
@@ -462,7 +463,7 @@ def get_wip_dashboard():
         dashboard_data = WIPWorkflowIntegration.get_wip_dashboard_data(date_from_dt, date_to_dt)
         
         # Additional analytics
-        today = date.today()
+        today = get_local_today()
         
         # WIP Trend (last 7 days)
         wip_trend = []

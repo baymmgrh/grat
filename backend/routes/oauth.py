@@ -19,6 +19,7 @@ from flask_jwt_extended import create_access_token, create_refresh_token
 from authlib.integrations.flask_client import OAuth
 from models import db, User, Role, UserRole
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 oauth_bp = Blueprint('oauth', __name__)
 
@@ -52,7 +53,7 @@ def get_or_create_user_from_google(google_user_info: dict) -> tuple[User, bool]:
     
     if user:
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = get_local_now()
         db.session.commit()
         return user, False
     
@@ -75,7 +76,7 @@ def get_or_create_user_from_google(google_user_info: dict) -> tuple[User, bool]:
         full_name=google_user_info.get('name', email),
         is_active=True,
         is_admin=False,
-        last_login=datetime.utcnow()
+        last_login=get_local_now()
     )
     # Set a random password (user won't need it for Google login)
     new_user.set_password(secrets.token_urlsafe(32))

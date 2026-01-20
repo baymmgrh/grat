@@ -7,6 +7,7 @@ from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime
 from sqlalchemy import func, desc
+from utils.timezone import get_local_now, get_local_today
 
 maintenance_bp = Blueprint('maintenance', __name__)
 
@@ -159,7 +160,7 @@ def create_record():
             record_number=record_number,
             machine_id=data['machine_id'],
             maintenance_type=data['maintenance_type'],
-            maintenance_date=datetime.utcnow(),
+            maintenance_date=get_local_now(),
             start_time=datetime.fromisoformat(data['start_time']) if data.get('start_time') else None,
             end_time=datetime.fromisoformat(data['end_time']) if data.get('end_time') else None,
             problem_description=data.get('problem_description'),
@@ -189,7 +190,7 @@ def update_maintenance_record(record_id):
             
             # Auto-update timestamps based on status
             if data['status'] == 'in_progress' and not record.start_time:
-                record.start_time = datetime.utcnow()
+                record.start_time = get_local_now()
                 
                 # ============= PRODUCTION INTEGRATION =============
                 # When maintenance starts, pause active work orders on this machine
@@ -215,7 +216,7 @@ def update_maintenance_record(record_id):
                     downtime = DowntimeRecord(
                         shift_production_id=shift_prod.id if shift_prod else None,
                         machine_id=record.machine_id,
-                        start_time=datetime.utcnow(),
+                        start_time=get_local_now(),
                         downtime_type='unplanned',
                         downtime_category='maintenance',
                         downtime_reason=f'Maintenance: {record.maintenance_type} - {record.problem_description or "Scheduled maintenance"}',
@@ -226,7 +227,7 @@ def update_maintenance_record(record_id):
                     db.session.add(downtime)
                     
             elif data['status'] == 'completed' and not record.end_time:
-                record.end_time = datetime.utcnow()
+                record.end_time = get_local_now()
                 if record.start_time:
                     duration = record.end_time - record.start_time
                     record.duration_hours = duration.total_seconds() / 3600
@@ -248,7 +249,7 @@ def update_maintenance_record(record_id):
                 ).all()
                 
                 for dt in open_downtimes:
-                    dt.end_time = datetime.utcnow()
+                    dt.end_time = get_local_now()
                     dt.status = 'resolved'
                     if dt.start_time:
                         duration_mins = (dt.end_time - dt.start_time).total_seconds() / 60
@@ -264,7 +265,7 @@ def update_maintenance_record(record_id):
         if 'notes' in data:
             record.notes = data['notes']
         
-        record.updated_at = datetime.utcnow()
+        record.updated_at = get_local_now()
         
         db.session.commit()
         return jsonify(success_response('api.success')), 200
@@ -317,7 +318,7 @@ def get_maintenance_stats():
         # Get overdue count (scheduled items past due date)
         overdue = MaintenanceRecord.query.filter(
             MaintenanceRecord.status == 'scheduled',
-            MaintenanceRecord.maintenance_date < datetime.utcnow()
+            MaintenanceRecord.maintenance_date < get_local_now()
         ).count()
         
         # Calculate total cost
@@ -410,7 +411,7 @@ def get_maintenance_kpis():
         machine_filter = request.args.get('machine', 'all')
         
         # Calculate date range
-        end_date = datetime.utcnow()
+        end_date = get_local_now()
         start_date = end_date - timedelta(days=period)
         
         # Base query
@@ -440,7 +441,7 @@ def get_maintenance_kpis():
         
         # Overdue - records still pending past their maintenance_date
         overdue_work_orders = MaintenanceRecord.query.filter(
-            MaintenanceRecord.maintenance_date < datetime.utcnow(),
+            MaintenanceRecord.maintenance_date < get_local_now(),
             MaintenanceRecord.status.in_(['scheduled', 'in_progress'])
         ).count()
         
@@ -553,7 +554,7 @@ def get_maintenance_trends():
         period = int(request.args.get('period', 30))
         
         # Calculate date range
-        end_date = datetime.utcnow()
+        end_date = get_local_now()
         start_date = end_date - timedelta(days=period)
         
         # Get all maintenance records in period
@@ -624,7 +625,7 @@ def get_equipment_performance():
                 mttr = 0
                 mtbf = 168
                 maintenance_cost = 0
-                last_maintenance = datetime.utcnow().isoformat()
+                last_maintenance = get_local_now().isoformat()
             
             equipment_performance.append({
                 'machine_name': machine.name,

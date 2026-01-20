@@ -38,9 +38,11 @@ const { data, isLoading } = useGetWasteRecordsQuery({})
   const records = data?.records || []
 
   // Calculate statistics
-  const totalWeight = records.reduce((sum: number, r: any) => sum + (r.weight_kg || r.quantity || 0), 0)
+  const totalWeight = records.reduce((sum: number, r: any) => sum + (r.weight_kg || 0), 0)
+  const totalQuantity = records.reduce((sum: number, r: any) => sum + (r.quantity || 0), 0)
   const totalValue = records.reduce((sum: number, r: any) => sum + (r.estimated_value || 0), 0)
   const highHazardCount = records.filter((r: any) => r.hazard_level === 'high').length
+  const productionRejectCount = records.filter((r: any) => r.source === 'production').length
 
   return (
     <div className="p-6 space-y-6">
@@ -73,8 +75,8 @@ const { data, isLoading } = useGetWasteRecordsQuery({})
         <div className="card p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-2xl font-bold text-blue-600">{totalWeight.toLocaleString()} kg</div>
-              <div className="text-sm text-gray-500">Total Weight</div>
+              <div className="text-2xl font-bold text-blue-600">{totalQuantity.toLocaleString()}</div>
+              <div className="text-sm text-gray-500">Total Quantity</div>
             </div>
             <TrashIcon className="h-8 w-8 text-blue-400" />
           </div>
@@ -83,10 +85,10 @@ const { data, isLoading } = useGetWasteRecordsQuery({})
         <div className="card p-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-2xl font-bold text-green-600">Rp {(totalValue / 1000).toFixed(0)}K</div>
-              <div className="text-sm text-gray-500">Estimated Value</div>
+              <div className="text-2xl font-bold text-orange-600">{productionRejectCount}</div>
+              <div className="text-sm text-gray-500">Production Rejects</div>
             </div>
-            <div className="text-green-400">💰</div>
+            <div className="text-orange-400">🏭</div>
           </div>
         </div>
 
@@ -158,30 +160,57 @@ const { data, isLoading } = useGetWasteRecordsQuery({})
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {records.map((record: any) => (
-                  <tr key={record.id}>
-                    <td className="font-medium">{record.record_number}</td>
-                    <td>{record.category_name}</td>
+                  <tr key={record.id} className={record.source === 'production' ? 'bg-orange-50' : ''}>
+                    <td className="font-medium">
+                      {record.record_number}
+                      {record.source === 'production' && (
+                        <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded">
+                          Production
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {record.category_name}
+                      {record.product_name && (
+                        <div className="text-xs text-gray-500">{record.product_name}</div>
+                      )}
+                    </td>
                     <td>{format(new Date(record.waste_date), 'dd MMM yyyy')}</td>
-                    <td>{record.source_department || '-'}</td>
-                    <td>{record.quantity} {record.uom}</td>
+                    <td>
+                      {record.source_department || '-'}
+                      {record.machine_name && (
+                        <div className="text-xs text-gray-500">{record.machine_name}</div>
+                      )}
+                    </td>
+                    <td>
+                      {record.quantity?.toLocaleString()} {record.uom}
+                      {record.reject_quantity !== undefined && (
+                        <div className="text-xs text-red-500">
+                          Reject: {record.reject_quantity} | Rework: {record.rework_quantity}
+                        </div>
+                      )}
+                    </td>
                     <td>{record.weight_kg ? record.weight_kg.toLocaleString() : '-'}</td>
                     <td>
                       <span className={`badge ${getHazardBadge(record.hazard_level)}`}>
                         {record.hazard_level}
                       </span>
                     </td>
-                    <td>Rp {record.estimated_value.toLocaleString()}</td>
+                    <td>Rp {(record.estimated_value || 0).toLocaleString()}</td>
                     <td>
                       <span className={`badge ${getStatusBadge(record.status)}`}>
                         {record.status}
                       </span>
                     </td>
                     <td>
-                      <button 
-                        onClick={() => alert(`View details for ${record.record_number}`)}
-                        className="text-primary-600 hover:text-primary-800 text-sm"
-                      >
-                      </button>
+                      {record.source !== 'production' && (
+                        <Link 
+                          to={`/app/waste/${record.id}`}
+                          className="text-primary-600 hover:text-primary-800 text-sm"
+                        >
+                          View
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}

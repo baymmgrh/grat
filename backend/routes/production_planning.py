@@ -16,6 +16,7 @@ from models.product import Product
 from models.user import User
 from utils.i18n import success_response, error_response
 from utils import generate_number
+from utils.timezone import get_local_now, get_local_today
 
 planning_bp = Blueprint('production_planning', __name__)
 
@@ -215,7 +216,7 @@ def update_production_plan(plan_id):
         plan.based_on = data.get('based_on', plan.based_on)
         plan.sales_forecast_id = data.get('sales_forecast_id', plan.sales_forecast_id)
         plan.notes = data.get('notes', plan.notes)
-        plan.updated_at = datetime.utcnow()
+        plan.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -257,7 +258,7 @@ def approve_production_plan(plan_id):
         
         plan.status = 'approved'
         plan.approved_by = user_id
-        plan.approved_at = datetime.utcnow()
+        plan.approved_at = get_local_now()
         
         db.session.commit()
         
@@ -418,8 +419,8 @@ def get_planning_dashboard():
     """Get production planning dashboard data"""
     try:
         # Get date range
-        start_date = request.args.get('start_date', date.today().isoformat())
-        end_date = request.args.get('end_date', (date.today() + timedelta(days=30)).isoformat())
+        start_date = request.args.get('start_date', get_local_today().isoformat())
+        end_date = request.args.get('end_date', (get_local_today() + timedelta(days=30)).isoformat())
         
         start = datetime.fromisoformat(start_date).date()
         end = datetime.fromisoformat(end_date).date()
@@ -460,7 +461,7 @@ def get_planning_dashboard():
         # Upcoming plans
         upcoming_plans = ProductionPlan.query.filter(
             and_(
-                ProductionPlan.period_start >= date.today(),
+                ProductionPlan.period_start >= get_local_today(),
                 ProductionPlan.status.in_(['approved', 'released'])
             )
         ).order_by(ProductionPlan.period_start).limit(10).all()

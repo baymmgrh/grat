@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import func, and_, or_
 from decimal import Decimal
+from utils.timezone import get_local_now, get_local_today
 
 hr_training_bp = Blueprint('hr_training', __name__)
 
@@ -409,7 +410,7 @@ def enroll_employees(session_id):
                 enrollment = TrainingEnrollment(
                     session_id=session_id,
                     employee_id=employee_id,
-                    enrollment_date=date.today(),
+                    enrollment_date=get_local_today(),
                     enrolled_by=int(user_id)
                 )
                 db.session.add(enrollment)
@@ -481,7 +482,7 @@ def issue_certificate(enrollment_id):
         
         enrollment.certificate_issued = True
         enrollment.certificate_number = certificate_number
-        enrollment.certificate_date = date.today()
+        enrollment.certificate_date = get_local_today()
         enrollment.certificate_valid_until = datetime.fromisoformat(data['valid_until']).date() if data.get('valid_until') else None
         
         db.session.commit()
@@ -604,7 +605,7 @@ def approve_training_request(request_id):
         
         training_request.status = 'approved'
         training_request.approved_by = int(user_id)
-        training_request.approved_at = datetime.utcnow()
+        training_request.approved_at = get_local_now()
         
         db.session.commit()
         
@@ -627,7 +628,7 @@ def reject_training_request(request_id):
         
         training_request.status = 'rejected'
         training_request.approved_by = int(user_id)
-        training_request.approved_at = datetime.utcnow()
+        training_request.approved_at = get_local_now()
         training_request.rejection_reason = data.get('rejection_reason')
         
         db.session.commit()

@@ -7,6 +7,7 @@ from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime
 from sqlalchemy import and_, or_
+from utils.timezone import get_local_now, get_local_today
 
 quality_bp = Blueprint('quality', __name__)
 
@@ -283,7 +284,7 @@ def create_qc_test_for_work_order(wo_id):
             batch_number=work_order.batch_number or work_order.wo_number,
             reference_type='work_order',
             reference_id=wo_id,
-            test_date=datetime.utcnow(),
+            test_date=get_local_now(),
             tested_by=user_id,
             notes=data.get('notes'),
             result=data.get('result', 'pending')
@@ -349,7 +350,7 @@ def update_qc_test_result(test_id):
         # If result is final (passed/failed), set approved
         if data.get('result') in ['passed', 'failed', 'conditional']:
             test.approved_by = user_id
-            test.approved_at = datetime.utcnow()
+            test.approved_at = get_local_now()
         
         db.session.commit()
         
@@ -402,7 +403,7 @@ def set_qc_disposition(inspection_id):
         else:
             inspection.disposition = inspection.calculate_disposition()
         
-        inspection.disposition_date = datetime.utcnow()
+        inspection.disposition_date = get_local_now()
         inspection.disposition_by = user_id
         inspection.disposition_notes = data.get('disposition_notes')
         
@@ -426,7 +427,7 @@ def set_qc_disposition(inspection_id):
                 waste_record = WasteRecord(
                     record_number=generate_number('WR', WasteRecord, 'record_number'),
                     category_id=waste_category.id,
-                    waste_date=datetime.utcnow(),
+                    waste_date=get_local_now(),
                     source_department='Quality Control',
                     work_order_id=inspection.work_order_id,
                     quantity=float(inspection.quantity_failed),
@@ -515,7 +516,7 @@ def transfer_qc_to_warehouse(inspection_id):
         if existing_inventory:
             existing_inventory.quantity_on_hand += quantity
             existing_inventory.quantity_available += quantity
-            existing_inventory.updated_at = datetime.utcnow()
+            existing_inventory.updated_at = get_local_now()
             inventory = existing_inventory
         else:
             inventory = Inventory(
@@ -524,11 +525,11 @@ def transfer_qc_to_warehouse(inspection_id):
                 quantity_on_hand=quantity,
                 quantity_available=quantity,
                 batch_number=inspection.batch_number,
-                production_date=work_order.actual_end.date() if work_order and work_order.actual_end else datetime.utcnow().date(),
+                production_date=work_order.actual_end.date() if work_order and work_order.actual_end else get_local_now().date(),
                 stock_status=inspection.disposition,  # released or quarantine
                 qc_inspection_id=inspection.id,
                 work_order_id=inspection.work_order_id,
-                qc_date=datetime.utcnow(),
+                qc_date=get_local_now(),
                 qc_notes=inspection.disposition_notes,
                 created_by=user_id
             )
@@ -542,7 +543,7 @@ def transfer_qc_to_warehouse(inspection_id):
             product_id=inspection.product_id,
             location_id=location_id,
             movement_type='stock_in',
-            movement_date=datetime.utcnow().date(),
+            movement_date=get_local_now().date(),
             quantity=quantity,
             reference_type='qc_inspection',
             reference_id=inspection.id,
@@ -555,7 +556,7 @@ def transfer_qc_to_warehouse(inspection_id):
         
         # Update inspection
         inspection.transferred_to_warehouse = True
-        inspection.warehouse_transfer_date = datetime.utcnow()
+        inspection.warehouse_transfer_date = get_local_now()
         inspection.warehouse_location_id = location_id
         
         # Update location occupied
@@ -782,7 +783,7 @@ def inspect_incoming_material(item_id):
         inspection = QualityInspection(
             inspection_number=inspection_number,
             inspection_type='incoming',
-            inspection_date=datetime.utcnow(),
+            inspection_date=get_local_now(),
             reference_type='goods_receipt_item',
             reference_id=item_id,
             product_id=gr_item.material_id,
@@ -942,7 +943,7 @@ def create_ipqc_inspection(wo_id):
         inspection = QualityInspection(
             inspection_number=inspection_number,
             inspection_type='in_process',
-            inspection_date=datetime.utcnow(),
+            inspection_date=get_local_now(),
             reference_type='work_order_ipqc',
             reference_id=wo_id,
             product_id=work_order.product_id,

@@ -13,6 +13,7 @@ from models.notification import Notification
 from utils.helpers import generate_number
 from utils.i18n import success_response, error_response
 from sqlalchemy import or_
+from utils.timezone import get_local_now, get_local_today
 
 production_approval_bp = Blueprint('production_approval', __name__)
 
@@ -527,7 +528,7 @@ def create_production_approval():
             original_total_cost=total_cost,
             status='pending',
             submitted_by=user_id,
-            submitted_at=datetime.utcnow()
+            submitted_at=get_local_now()
         )
         
         db.session.add(approval)
@@ -594,7 +595,7 @@ def update_production_approval(id):
         if changes_made and 'adjustment_reason' in data:
             approval.adjustment_reason = data['adjustment_reason']
         
-        approval.updated_at = datetime.utcnow()
+        approval.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -625,7 +626,7 @@ def approve_production(id):
         
         approval.status = 'approved'
         approval.reviewed_by = user_id
-        approval.reviewed_at = datetime.utcnow()
+        approval.reviewed_at = get_local_now()
         approval.manager_notes = data.get('notes', approval.manager_notes)
         
         db.session.commit()
@@ -678,7 +679,7 @@ def reject_production(id):
         
         approval.status = 'rejected'
         approval.reviewed_by = user_id
-        approval.reviewed_at = datetime.utcnow()
+        approval.reviewed_at = get_local_now()
         approval.manager_notes = data.get('reason')
         
         db.session.commit()
@@ -744,8 +745,8 @@ def forward_to_finance(id):
             customer_id=None,  # Internal cost, no customer
             work_order_id=wo.id,
             production_approval_id=approval.id,
-            invoice_date=datetime.utcnow().date(),
-            due_date=datetime.utcnow().date(),
+            invoice_date=get_local_now().date(),
+            due_date=get_local_now().date(),
             subtotal=approval.total_cost,
             tax_amount=0,
             total_amount=approval.total_cost,
@@ -794,7 +795,7 @@ def forward_to_finance(id):
         
         # Update approval
         approval.forwarded_to_finance = True
-        approval.forwarded_at = datetime.utcnow()
+        approval.forwarded_at = get_local_now()
         approval.invoice_id = invoice.id
         
         db.session.commit()
@@ -865,7 +866,7 @@ def submit_wo_for_approval(wo_id):
             original_total_cost=total_cost,
             status='pending',
             submitted_by=user_id,
-            submitted_at=datetime.utcnow()
+            submitted_at=get_local_now()
         )
         
         db.session.add(approval)

@@ -10,6 +10,7 @@ from models.user import User
 from models.finance import AccountingEntry
 from datetime import datetime
 from sqlalchemy import or_, and_
+from utils.timezone import get_local_now, get_local_today
 
 approval_bp = Blueprint('approval', __name__, url_prefix='/api/approval')
 
@@ -214,7 +215,7 @@ def submit_for_review(workflow_id):
         old_status = workflow.status
         workflow.status = 'pending_review'
         workflow.current_step = 'review'
-        workflow.submitted_at = datetime.utcnow()
+        workflow.submitted_at = get_local_now()
         
         # Create history
         history = ApprovalHistory(
@@ -258,7 +259,7 @@ def review_workflow(workflow_id):
         # Update workflow
         old_status = workflow.status
         workflow.reviewer_id = current_user_id
-        workflow.reviewed_at = datetime.utcnow()
+        workflow.reviewed_at = get_local_now()
         workflow.review_notes = data.get('notes')
         workflow.review_changes = data.get('changes')  # Track what was edited
         workflow.status = 'pending_approval'
@@ -319,7 +320,7 @@ def approve_workflow(workflow_id):
         # Update workflow
         old_status = workflow.status
         workflow.approver_id = current_user_id
-        workflow.approved_at = datetime.utcnow()
+        workflow.approved_at = get_local_now()
         workflow.approval_notes = data.get('notes')
         workflow.status = 'approved'
         workflow.current_step = 'completed'
@@ -335,7 +336,7 @@ def approve_workflow(workflow_id):
                 status='posted',
                 created_by=current_user_id,
                 approved_by=current_user_id,
-                approved_at=datetime.utcnow()
+                approved_at=get_local_now()
             )
             db.session.add(journal_entry)
             db.session.flush()
@@ -389,7 +390,7 @@ def reject_workflow(workflow_id):
         # Update workflow
         old_status = workflow.status
         workflow.rejected_by = current_user_id
-        workflow.rejected_at = datetime.utcnow()
+        workflow.rejected_at = get_local_now()
         workflow.rejection_reason = data.get('reason')
         workflow.status = 'rejected'
         

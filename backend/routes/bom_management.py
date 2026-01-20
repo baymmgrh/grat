@@ -10,6 +10,7 @@ from utils import generate_number
 from utils.i18n import success_response, error_response
 from datetime import datetime, date
 from sqlalchemy import or_, desc
+from utils.timezone import get_local_now, get_local_today
 
 bom_management_bp = Blueprint('bom_management', __name__)
 
@@ -182,13 +183,13 @@ def create_bom():
             product_id=data['product_id'],
             version=data.get('version', '1.0'),
             is_active=data.get('is_active', True),
-            effective_date=datetime.fromisoformat(data['effective_date']) if data.get('effective_date') else date.today(),
+            effective_date=datetime.fromisoformat(data['effective_date']) if data.get('effective_date') else get_local_today(),
             batch_size=data.get('batch_size', 1),
             batch_uom=data.get('batch_uom', product.primary_uom),
             pack_per_carton=data.get('pack_per_carton', 1),
             notes=data.get('notes'),
             created_by=user_id,
-            created_at=datetime.utcnow()
+            created_at=get_local_now()
         )
         db.session.add(bom)
         db.session.flush()
@@ -209,7 +210,7 @@ def create_bom():
                     supplier_id=item_data.get('supplier_id'),
                     lead_time_days=item_data.get('lead_time_days', 0),
                     notes=item_data.get('notes'),
-                    created_at=datetime.utcnow()
+                    created_at=get_local_now()
                 )
                 db.session.add(bom_item)
         
@@ -220,7 +221,7 @@ def create_bom():
             change_type='created',
             change_description='BOM created',
             changed_by=user_id,
-            changed_at=datetime.utcnow()
+            changed_at=get_local_now()
         )
         db.session.add(history)
         
@@ -251,7 +252,7 @@ def update_bom(bom_id):
         
         # Deactivate old BOM
         old_bom.is_active = False
-        old_bom.expiry_date = date.today()
+        old_bom.expiry_date = get_local_today()
         
         # Create history for old BOM
         old_history = BOMHistory(
@@ -260,7 +261,7 @@ def update_bom(bom_id):
             change_type='deactivated',
             change_description='Deactivated due to update',
             changed_by=user_id,
-            changed_at=datetime.utcnow(),
+            changed_at=get_local_now(),
             snapshot_data={
                 'bom_number': old_bom.bom_number,
                 'version': old_bom.version,
@@ -285,13 +286,13 @@ def update_bom(bom_id):
             product_id=old_bom.product_id,
             version=new_version,
             is_active=True,
-            effective_date=date.today(),
+            effective_date=get_local_today(),
             batch_size=data.get('batch_size', old_bom.batch_size),
             batch_uom=data.get('batch_uom', old_bom.batch_uom),
             pack_per_carton=data.get('pack_per_carton', old_bom.pack_per_carton),
             notes=data.get('notes', old_bom.notes),
             created_by=user_id,
-            created_at=datetime.utcnow()
+            created_at=get_local_now()
         )
         db.session.add(new_bom)
         db.session.flush()
@@ -312,7 +313,7 @@ def update_bom(bom_id):
                     supplier_id=item_data.get('supplier_id'),
                     lead_time_days=item_data.get('lead_time_days', 0),
                     notes=item_data.get('notes'),
-                    created_at=datetime.utcnow()
+                    created_at=get_local_now()
                 )
                 db.session.add(bom_item)
         
@@ -323,7 +324,7 @@ def update_bom(bom_id):
             change_type='updated',
             change_description=data.get('change_description', 'BOM updated'),
             changed_by=user_id,
-            changed_at=datetime.utcnow()
+            changed_at=get_local_now()
         )
         db.session.add(new_history)
         
@@ -354,7 +355,7 @@ def delete_bom(bom_id):
         
         # Soft delete - deactivate
         bom.is_active = False
-        bom.expiry_date = date.today()
+        bom.expiry_date = get_local_today()
         
         # Create history record
         history = BOMHistory(
@@ -363,7 +364,7 @@ def delete_bom(bom_id):
             change_type='deleted',
             change_description='BOM deleted (deactivated)',
             changed_by=user_id,
-            changed_at=datetime.utcnow()
+            changed_at=get_local_now()
         )
         db.session.add(history)
         
@@ -402,7 +403,7 @@ def delete_bom_item(bom_id, item_id):
             change_type='item_deleted',
             change_description=f'Deleted item: {item.material.name if item.material else item.product.name}',
             changed_by=user_id,
-            changed_at=datetime.utcnow()
+            changed_at=get_local_now()
         )
         db.session.add(history)
         

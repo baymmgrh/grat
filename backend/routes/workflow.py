@@ -14,6 +14,7 @@ from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime, date
 import json
+from utils.timezone import get_local_now, get_local_today
 
 workflow_bp = Blueprint('workflow', __name__)
 
@@ -134,7 +135,7 @@ def analyze_mrp_requirement(requirement_id):
             requirement.needs_purchase = False  # Will be determined by BOM analysis
         
         requirement.status = 'analyzed'
-        requirement.analyzed_at = datetime.utcnow()
+        requirement.analyzed_at = get_local_now()
         requirement.analyzed_by = get_jwt_identity()
         
         db.session.commit()
@@ -216,7 +217,7 @@ def move_buffer_to_warehouse(buffer_id):
             quantity_in=buffer.excess_quantity,
             reference_type='production_buffer',
             reference_id=buffer.id,
-            movement_date=datetime.utcnow(),
+            movement_date=get_local_now(),
             performed_by=get_jwt_identity(),
             notes=f"Buffer stock from {buffer.buffer_number}"
         )
@@ -224,7 +225,7 @@ def move_buffer_to_warehouse(buffer_id):
         
         # Update buffer status
         buffer.status = 'moved_to_warehouse'
-        buffer.moved_to_warehouse_at = datetime.utcnow()
+        buffer.moved_to_warehouse_at = get_local_now()
         buffer.warehouse_location_id = warehouse_location_id
         
         db.session.commit()
@@ -446,7 +447,7 @@ def manual_trigger_quality_inspection():
             reference_type='shift_production',
             reference_id=shift_production_id,
             status='pending',
-            inspection_date=datetime.utcnow().date()
+            inspection_date=get_local_now().date()
         )
         db.session.add(inspection)
         db.session.commit()

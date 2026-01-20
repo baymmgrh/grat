@@ -11,8 +11,8 @@ import {
 
 interface Project {
   id: number;
-  project_code: string;
-  title: string;
+  project_number: string;
+  project_name: string;
 }
 
 const ProductDevelopmentForm: React.FC = () => {
@@ -184,7 +184,7 @@ const ProductDevelopmentForm: React.FC = () => {
               <select name="project_id" value={formData.project_id} onChange={handleChange}
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white">
                 <option value="">Select Project (Optional)</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.project_code || p.id} - {p.title || 'Untitled'}</option>)}
+                {projects.map(p => <option key={p.id} value={p.id}>{p.project_number || p.id} - {p.project_name || 'Untitled'}</option>)}
               </select>
             </div>
 

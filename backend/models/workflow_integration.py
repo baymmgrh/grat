@@ -10,6 +10,7 @@ from .shipping import ShippingOrder
 from .finance import Invoice, InvoiceItem
 from .returns import CustomerReturn
 from .maintenance import MaintenanceRecord
+from utils.timezone import get_local_now
 
 # ===============================
 # WORKFLOW INTEGRATION MODELS
@@ -180,7 +181,7 @@ class WorkflowAutomation:
                 req.needs_purchase = False  # Will be determined by BOM analysis
             
             req.status = 'analyzed'
-            req.analyzed_at = datetime.utcnow()
+            req.analyzed_at = get_local_now()
         
         try:
             db.session.commit()
@@ -230,7 +231,7 @@ class WorkflowAutomation:
         
         if workflow_step:
             workflow_step.status = 'completed'
-            workflow_step.completed_at = datetime.utcnow()
+            workflow_step.completed_at = get_local_now()
         
         # Create next workflow step
         next_step = WorkflowStep(
@@ -307,7 +308,7 @@ class WorkflowAutomation:
             quantity=shift_production.actual_quantity,
             reference_type='shift_production',
             reference_id=shift_production_id,
-            movement_date=datetime.utcnow().date(),
+            movement_date=get_local_now().date(),
             created_by=shift_production.operator_id or 1,  # Default to system user
             notes=f"Production completion from {shift_production.work_order.wo_number}"
         )
@@ -335,7 +336,7 @@ class WorkflowAutomation:
             reference_type='shift_production',
             reference_id=shift_production_id,
             status='pending',
-            inspection_date=datetime.utcnow().date()
+            inspection_date=get_local_now().date()
         )
         db.session.add(inspection)
         

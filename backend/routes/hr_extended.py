@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, or_
 from decimal import Decimal
+from utils.timezone import get_local_now, get_local_today
 
 hr_extended_bp = Blueprint('hr_extended', __name__)
 
@@ -108,7 +109,7 @@ def update_employee(employee_id):
         if 'status' in data:
             employee.status = data['status']
         
-        employee.updated_at = datetime.utcnow()
+        employee.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success'))
@@ -192,7 +193,7 @@ def clock_in():
         if not employee_id:
             return jsonify(error_response('api.error', error_code=400)), 400
         
-        today = date.today()
+        today = get_local_today()
         
         # Check if already clocked in today
         existing = Attendance.query.filter_by(
@@ -211,7 +212,7 @@ def clock_in():
         
         if existing:
             # Update existing record
-            existing.clock_in = datetime.utcnow()
+            existing.clock_in = get_local_now()
             existing.shift_id = roster.shift_id if roster else None
             existing.status = 'present'
         else:
@@ -220,7 +221,7 @@ def clock_in():
                 employee_id=employee_id,
                 attendance_date=today,
                 shift_id=roster.shift_id if roster else None,
-                clock_in=datetime.utcnow(),
+                clock_in=get_local_now(),
                 status='present'
             )
             db.session.add(attendance)
@@ -243,7 +244,7 @@ def clock_out():
         if not employee_id:
             return jsonify(error_response('api.error', error_code=400)), 400
         
-        today = date.today()
+        today = get_local_today()
         
         # Find today's attendance record
         attendance = Attendance.query.filter_by(
@@ -258,7 +259,7 @@ def clock_out():
             return jsonify(error_response('api.error', error_code=400)), 400
         
         # Clock out
-        attendance.clock_out = datetime.utcnow()
+        attendance.clock_out = get_local_now()
         
         # Calculate worked hours
         worked_time = attendance.clock_out - attendance.clock_in
@@ -436,7 +437,7 @@ def approve_leave(leave_id):
         
         leave.status = 'approved'
         leave.approved_by = int(user_id)
-        leave.approved_at = datetime.utcnow()
+        leave.approved_at = get_local_now()
         
         db.session.commit()
         
@@ -459,7 +460,7 @@ def reject_leave(leave_id):
         
         leave.status = 'rejected'
         leave.approved_by = int(user_id)
-        leave.approved_at = datetime.utcnow()
+        leave.approved_at = get_local_now()
         leave.notes = data.get('rejection_reason')
         
         db.session.commit()
@@ -550,7 +551,7 @@ def create_roster():
                 existing.machine_id = entry.get('machine_id')
                 existing.is_off_day = entry.get('is_off_day', False)
                 existing.notes = entry.get('notes')
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = get_local_now()
             else:
                 # Create new
                 roster = EmployeeRoster(

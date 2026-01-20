@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import func, and_
 from decimal import Decimal
+from utils.timezone import get_local_now, get_local_today
 
 hr_appraisal_bp = Blueprint('hr_appraisal', __name__)
 
@@ -401,7 +402,7 @@ def submit_self_review(appraisal_id):
         
         # Update appraisal
         appraisal.self_review_status = 'completed'
-        appraisal.self_review_date = datetime.utcnow()
+        appraisal.self_review_date = get_local_now()
         appraisal.self_overall_score = Decimal(str(data.get('self_overall_score', 0)))
         appraisal.self_comments = data.get('self_comments')
         appraisal.overall_status = 'manager_review'
@@ -453,7 +454,7 @@ def submit_manager_review(appraisal_id):
         
         # Update appraisal
         appraisal.manager_review_status = 'completed'
-        appraisal.manager_review_date = datetime.utcnow()
+        appraisal.manager_review_date = get_local_now()
         appraisal.manager_overall_score = Decimal(str(data.get('manager_overall_score', 0)))
         appraisal.manager_comments = data.get('manager_comments')
         appraisal.final_score = final_score
@@ -461,7 +462,7 @@ def submit_manager_review(appraisal_id):
         appraisal.goals_next_period = data.get('goals_next_period')
         appraisal.development_plan = data.get('development_plan')
         appraisal.overall_status = 'completed'
-        appraisal.completed_at = datetime.utcnow()
+        appraisal.completed_at = get_local_now()
         
         db.session.commit()
         

@@ -45,7 +45,7 @@ interface ReportData {
   };
   projects: Array<{
     project_number: string;
-    title: string;
+    project_name: string;
     type: string;
     status: string;
     start_date: string;
@@ -295,7 +295,7 @@ const ResearchReportsForm: React.FC = () => {
             >
               <option value="">All Projects</option>
               {projects.map(project => (
-                <option key={project.id} value={project.id}>{project.title}</option>
+                <option key={project.id} value={project.id}>{project.project_name}</option>
               ))}
             </select>
           </div>
@@ -585,7 +585,7 @@ const ResearchReportsForm: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
                             <div className="text-sm font-medium text-gray-900">{project.project_number}</div>
-                            <div className="text-sm text-gray-500">{project.title}</div>
+                            <div className="text-sm text-gray-500">{project.project_name}</div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

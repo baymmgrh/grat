@@ -7,6 +7,7 @@ from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime
 from sqlalchemy import func, desc
+from utils.timezone import get_local_now, get_local_today
 
 maintenance_extended_bp = Blueprint('maintenance_extended', __name__)
 
@@ -143,7 +144,7 @@ def update_work_order(work_order_id):
         if 'status' in data:
             work_order.status = data['status']
             if data['status'] == 'completed':
-                work_order.completion_date = datetime.utcnow()
+                work_order.completion_date = get_local_now()
         
         db.session.commit()
         return jsonify({'message': 'Work order updated successfully'}), 200
@@ -200,7 +201,7 @@ def get_parts_request(request_id):
                 'request_number': f'PR-{request_id:06d}',
                 'machine_id': 1,
                 'requested_by': 1,
-                'request_date': datetime.utcnow().isoformat(),
+                'request_date': get_local_now().isoformat(),
                 'urgency': 'medium',
                 'work_order_id': None,
                 'parts': [],

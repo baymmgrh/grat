@@ -3,6 +3,7 @@ from models import db
 from models.product_excel_schema import ProductNew, ProductVersion
 from datetime import datetime
 import json
+from utils.timezone import get_local_now, get_local_today
 
 products_new_excel_bp = Blueprint('products_new_excel', __name__)
 
@@ -189,7 +190,7 @@ def update_product(kode_produk):
         else:
             change_reason = "Product information updated"
         
-        product.updated_at = datetime.utcnow()
+        product.updated_at = get_local_now()
         
         # Create version record
         new_values = product.to_dict()
@@ -226,7 +227,7 @@ def delete_product(kode_produk):
         
         # Soft delete
         product.is_active = False
-        product.updated_at = datetime.utcnow()
+        product.updated_at = get_local_now()
         
         # Create version record
         new_values = product.to_dict()

@@ -7,6 +7,9 @@ load_dotenv()
 class Config:
     """Application configuration"""
     
+    # Timezone - Indonesia (UTC+7)
+    TIMEZONE = os.getenv('TIMEZONE', 'Asia/Jakarta')
+    
     # Flask
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
     FLASK_APP = os.getenv('FLASK_APP', 'app.py')

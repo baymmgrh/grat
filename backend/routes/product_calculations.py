@@ -17,6 +17,7 @@ from utils.product_calculations import (
     calculate_kebutuhan_material,
     calculate_all_product_metrics
 )
+from utils.timezone import get_local_now, get_local_today
 
 product_calc_bp = Blueprint('product_calculations', __name__, url_prefix='/api/products')
 
@@ -162,7 +163,7 @@ def recalculate_product(kode_produk):
         product.kebutuhan_rayon_kg = str(calculated['kebutuhan_rayon_kg'])
         product.kebutuhan_polyester_kg = str(calculated['kebutuhan_polyester_kg'])
         product.kebutuhan_es_kg = str(calculated['kebutuhan_es_kg'])
-        product.updated_at = datetime.utcnow()
+        product.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -215,7 +216,7 @@ def recalculate_all_products():
                 product.kebutuhan_rayon_kg = str(calculated['kebutuhan_rayon_kg'])
                 product.kebutuhan_polyester_kg = str(calculated['kebutuhan_polyester_kg'])
                 product.kebutuhan_es_kg = str(calculated['kebutuhan_es_kg'])
-                product.updated_at = datetime.utcnow()
+                product.updated_at = get_local_now()
                 
                 success_count += 1
                 

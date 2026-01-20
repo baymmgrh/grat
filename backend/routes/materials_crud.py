@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Material, Inventory, InventoryMovement
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 materials_crud_bp = Blueprint('materials_crud', __name__)
 
@@ -92,7 +93,7 @@ def update_material(material_id):
         if 'supplier_id' in data:
             material.supplier_id = data['supplier_id']
         
-        material.updated_at = datetime.utcnow()
+        material.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({

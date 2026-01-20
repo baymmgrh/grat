@@ -10,7 +10,12 @@ from .product_excel_schema import ProductNew, ProductVersion
 from .warehouse import WarehouseZone, WarehouseLocation, Inventory, InventoryMovement
 from .sales import Customer, SalesOrder, SalesOrderItem, SalesForecast
 from .purchasing import Supplier, PurchaseOrder, PurchaseOrderItem, GoodsReceivedNote, GRNItem
-from .production import Machine, WorkOrder, ProductionRecord, BillOfMaterials, BOMItem, ProductionSchedule, ShiftProduction, DowntimeRecord, WeeklyProductionPlan, WeeklyProductionPlanItem, ProductChangeover
+from .production import (
+    Machine, WorkOrder, ProductionRecord, BillOfMaterials, BOMItem, 
+    ProductionSchedule, ShiftProduction, DowntimeRecord, WeeklyProductionPlan, 
+    WeeklyProductionPlanItem, ProductChangeover, PackingList, PackingListItem,
+    WIPStock, WIPStockMovement, PackingListNew, PackingListNewItem
+)
 from .quality import QualityTest, QualityInspection, CAPA, QualityStandard
 from .shipping import ShippingOrder, ShippingItem, DeliveryTracking, LogisticsProvider
 from .returns import CustomerReturn, ReturnItem, ReturnQCRecord, ReturnDisposition
@@ -24,6 +29,11 @@ from .hr_extended import (
 )
 from .maintenance import MaintenanceSchedule, MaintenanceRecord, MaintenanceTask, EquipmentHistory
 from .rd import ResearchProject, Experiment, ProductDevelopment, RDMaterial, ResearchReport, Prototype, ProductTestResult
+from .rnd import (
+    RNDProject, RNDFormula, RNDFormulaItem, RNDExperiment, 
+    RNDApprovalLog, RNDConversionRecord,
+    RNDProjectStage, RNDApprovalStatus, RNDExperimentStatus
+)
 from .waste import WasteRecord, WasteCategory, WasteTarget, WasteDisposal
 from .oee import OEERecord, OEEDowntimeRecord, QualityDefect, MachinePerformance
 from .quality_enhanced import (
@@ -80,6 +90,7 @@ __all__ = [
     'Supplier', 'PurchaseOrder', 'PurchaseOrderItem', 'GoodsReceivedNote', 'GRNItem',
     # Production models
     'Machine', 'WorkOrder', 'ProductionRecord', 'BillOfMaterials', 'BOMItem', 'ProductionSchedule', 'ShiftProduction', 'DowntimeRecord', 'WeeklyProductionPlan', 'WeeklyProductionPlanItem', 'ProductChangeover',
+    'PackingList', 'PackingListItem', 'WIPStock', 'WIPStockMovement', 'PackingListNew', 'PackingListNewItem',
     # Quality models
     'QualityTest', 'QualityInspection', 'CAPA', 'QualityStandard',
     # Shipping models
@@ -97,8 +108,11 @@ __all__ = [
     'WorkRoster', 'WorkRosterAssignment', 'EmployeeSkill', 'RosterTemplate',
     # Maintenance models
     'MaintenanceSchedule', 'MaintenanceRecord', 'MaintenanceTask', 'EquipmentHistory',
-    # R&D models
+    # R&D models (legacy)
     'ResearchProject', 'Experiment', 'ProductDevelopment', 'RDMaterial', 'ResearchReport', 'Prototype', 'ProductTestResult',
+    # RND models (new)
+    'RNDProject', 'RNDFormula', 'RNDFormulaItem', 'RNDExperiment', 'RNDApprovalLog', 'RNDConversionRecord',
+    'RNDProjectStage', 'RNDApprovalStatus', 'RNDExperimentStatus',
     # Waste models
     'WasteRecord', 'WasteCategory', 'WasteTarget', 'WasteDisposal',
     # OEE models

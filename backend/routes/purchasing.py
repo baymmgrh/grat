@@ -12,6 +12,7 @@ from utils import generate_number
 from utils.business_rules import BusinessRules, ValidationError, PURCHASE_ORDER_TRANSITIONS
 from datetime import datetime, date, timedelta
 from sqlalchemy import and_, or_, desc, asc, func
+from utils.timezone import get_local_now, get_local_today
 
 purchasing_bp = Blueprint('purchasing', __name__)
 
@@ -94,7 +95,7 @@ def create_supplier():
             supplier_type=data.get('supplier_type'),
             is_active=data.get('is_active', True),
             notes=data.get('notes'),
-            created_at=datetime.utcnow()
+            created_at=get_local_now()
         )
         db.session.add(supplier)
         db.session.commit()
@@ -177,7 +178,7 @@ def update_supplier(id):
         if 'notes' in data:
             supplier.notes = data['notes']
         
-        supplier.updated_at = datetime.utcnow()
+        supplier.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -200,7 +201,7 @@ def delete_supplier(id):
         
         # Soft delete by setting is_active to False
         supplier.is_active = False
-        supplier.updated_at = datetime.utcnow()
+        supplier.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -372,7 +373,7 @@ def create_grn():
             grn_number=grn_number,
             po_id=data['po_id'],
             supplier_id=data['supplier_id'],
-            receipt_date=datetime.utcnow(),
+            receipt_date=get_local_now(),
             delivery_note_number=data.get('delivery_note_number'),
             vehicle_number=data.get('vehicle_number'),
             driver_name=data.get('driver_name'),
@@ -451,7 +452,7 @@ def approve_purchase_order(po_id):
         
         approval.status = data.get('status', 'approved')  # approved or rejected
         approval.comments = data.get('comments')
-        approval.approved_at = datetime.utcnow()
+        approval.approved_at = get_local_now()
         
         # Update PO status if all approvals are complete
         po = PurchaseOrder.query.get(po_id)
@@ -465,7 +466,7 @@ def approve_purchase_order(po_id):
             if pending_approvals == 1:  # This is the last approval
                 po.status = 'approved'
                 po.approved_by = user_id
-                po.approved_at = datetime.utcnow()
+                po.approved_at = get_local_now()
         else:
             po.status = 'rejected'
         
@@ -750,7 +751,7 @@ def compare_prices():
             return jsonify(error_response('api.error', error_code=400)), 400
         
         # Get quotes from last 6 months
-        six_months_ago = datetime.now() - timedelta(days=180)
+        six_months_ago = get_local_now() - timedelta(days=180)
         quote_items = query.filter(
             SupplierQuote.quote_date >= six_months_ago,
             SupplierQuote.status.in_(['submitted', 'accepted'])
@@ -964,7 +965,7 @@ def activate_contract(id):
         user_id = get_jwt_identity()
         contract.status = 'active'
         contract.approved_by = user_id
-        contract.approved_at = datetime.utcnow()
+        contract.approved_at = get_local_now()
         
         db.session.commit()
         

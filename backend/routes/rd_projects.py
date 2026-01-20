@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import or_
 import json
+from utils.timezone import get_local_now, get_local_today
 
 rd_projects_bp = Blueprint('rd_projects', __name__)
 
@@ -225,9 +226,9 @@ def update_project(id):
         if project.progress_percentage == 100 and project.status != 'completed':
             project.status = 'completed'
             if not project.actual_completion_date:
-                project.actual_completion_date = date.today()
+                project.actual_completion_date = get_local_today()
         
-        project.updated_at = datetime.utcnow()
+        project.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -356,9 +357,9 @@ def update_project_progress(id):
         else:  # progress == 100
             project.status = 'completed'
             if not project.actual_completion_date:
-                project.actual_completion_date = date.today()
+                project.actual_completion_date = get_local_today()
         
-        project.updated_at = datetime.utcnow()
+        project.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({

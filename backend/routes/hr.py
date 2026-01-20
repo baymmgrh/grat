@@ -4,6 +4,7 @@ from models import db, Employee, Department, ShiftSchedule, Attendance, Leave, E
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 hr_bp = Blueprint('hr', __name__)
 
@@ -244,7 +245,7 @@ def get_weekly_roster():
             week_start = datetime.fromisoformat(week_start_str).date()
         else:
             # Default to current week Monday
-            today = datetime.now().date()
+            today = get_local_now().date()
             week_start = today - timedelta(days=today.weekday())
 
         week_end = week_start + timedelta(days=6)
@@ -353,7 +354,7 @@ def assign_roster():
             if len(date_str) == 4:  # Just year like "2025"
                 # Default to today's date in that year
                 from datetime import date
-                today = date.today()
+                today = get_local_today()
                 roster_date = date(int(date_str), today.month, today.day)
             else:
                 # Try to parse as ISO format
@@ -497,7 +498,7 @@ def sync_attendance_to_job_costing():
         data = request.get_json()
         user_id = int(get_jwt_identity())
         
-        date_from = datetime.fromisoformat(data['date_from']).date() if data.get('date_from') else datetime.utcnow().date()
+        date_from = datetime.fromisoformat(data['date_from']).date() if data.get('date_from') else get_local_now().date()
         date_to = datetime.fromisoformat(data['date_to']).date() if data.get('date_to') else date_from
         
         # Get attendance records for the date range

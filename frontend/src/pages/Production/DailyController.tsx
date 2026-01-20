@@ -42,6 +42,7 @@ interface ShiftData {
 interface DowntimeItem {
   reason: string;
   duration_minutes: number;
+  frequency?: number;
 }
 
 interface MachineData {
@@ -540,7 +541,7 @@ const DailyController: React.FC = () => {
                               </div>
                             </div>
                             <div className="flex justify-between border-t pt-2">
-                              <span className="text-slate-500">Average Time:</span>
+                              <span className="text-slate-500">Available Time:</span>
                               <span className="font-bold text-slate-700">{machine.average_time || 510} menit</span>
                             </div>
                             <div className="flex justify-between">
@@ -644,7 +645,9 @@ const DailyController: React.FC = () => {
                                     </span>
                                     <span className="text-sm text-slate-700">{dt.reason}</span>
                                   </div>
-                                  <span className="text-sm font-medium text-red-600">{dt.duration_minutes} menit</span>
+                                  <span className="text-sm font-medium text-red-600">
+                                    {dt.duration_minutes} menit {dt.frequency && dt.frequency > 1 ? `(${dt.frequency}x)` : ''}
+                                  </span>
                                 </div>
                               ))}
                             </div>

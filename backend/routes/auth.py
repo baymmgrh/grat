@@ -3,6 +3,7 @@ from flask_jwt_extended import create_access_token, create_refresh_token, jwt_re
 from models import db, User, Role, UserRole
 from datetime import datetime
 from utils.i18n import success_response, error_response, get_message
+from utils.timezone import get_local_now, get_local_today, utc_to_local
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -34,7 +35,7 @@ def login():
             return jsonify(error_response('auth.account_inactive')), 403
         
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = get_local_now()
         db.session.commit()
         
         # Get user roles safely
@@ -183,8 +184,8 @@ def get_current_user():
                 'is_admin': user.is_admin,
                 'is_super_admin': getattr(user, 'is_super_admin', False),
                 'roles': user_roles,
-                'last_login': user.last_login.isoformat() if user.last_login else None,
-                'created_at': user.created_at.isoformat()
+                'last_login': utc_to_local(user.last_login).isoformat() if user.last_login else None,
+                'created_at': utc_to_local(user.created_at).isoformat() if user.created_at else None
             }
         }), 200
         
@@ -491,8 +492,8 @@ def get_profile():
                 'is_admin': user.is_admin,
                 'is_super_admin': user.is_super_admin,
                 'is_active': user.is_active,
-                'last_login': user.last_login.isoformat() if user.last_login else None,
-                'created_at': user.created_at.isoformat() if user.created_at else None,
+                'last_login': utc_to_local(user.last_login).isoformat() if user.last_login else None,
+                'created_at': utc_to_local(user.created_at).isoformat() if user.created_at else None,
                 'roles': user_roles
             }
         }), 200
@@ -525,7 +526,7 @@ def forgot_password():
                 # Generate reset token
                 reset_token = secrets.token_urlsafe(32)
                 user.reset_token = reset_token
-                user.reset_token_expires = datetime.utcnow() + timedelta(hours=1)
+                user.reset_token_expires = get_local_now() + timedelta(hours=1)
                 db.session.commit()
                 
                 # Send reset email
@@ -563,7 +564,7 @@ def reset_password():
         if not user or not user.reset_token_expires:
             return jsonify({'error': 'Invalid or expired reset token'}), 400
         
-        if user.reset_token_expires < datetime.utcnow():
+        if user.reset_token_expires < get_local_now():
             return jsonify({'error': 'Reset token has expired'}), 400
         
         # Update password
@@ -705,7 +706,7 @@ def google_callback():
             return jsonify({'error': 'Account is inactive'}), 403
         
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = get_local_now()
         db.session.commit()
         
         # Get user roles

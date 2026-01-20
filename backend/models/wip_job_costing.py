@@ -1,6 +1,7 @@
 from models import db
 from datetime import datetime
 from sqlalchemy import func
+from utils.timezone import get_local_now
 
 class WIPBatch(db.Model):
     """Work in Progress Batch - Tracks production batches through workflow stages"""
@@ -317,7 +318,7 @@ class WIPWorkflowIntegration:
         # Check if WIP is complete
         if wip_batch.qty_in_process <= 0:
             wip_batch.status = 'completed'
-            wip_batch.completed_at = datetime.utcnow()
+            wip_batch.completed_at = get_local_now()
             
         return wip_batch
     

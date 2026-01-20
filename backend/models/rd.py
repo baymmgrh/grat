@@ -100,6 +100,7 @@ class ProductDevelopment(db.Model):
     quality_standards = db.Column(db.Text, nullable=True)  # JSON format
     regulatory_requirements = db.Column(db.Text, nullable=True)
     intellectual_property = db.Column(db.Text, nullable=True)
+    linked_product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)  # Link to created product
     notes = db.Column(db.Text, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -109,6 +110,7 @@ class ProductDevelopment(db.Model):
     
     # Relationships
     project = db.relationship('ResearchProject', back_populates='product_developments')
+    linked_product = db.relationship('Product', foreign_keys=[linked_product_id])
     created_by_user = db.relationship('User', foreign_keys=[created_by])
     approved_by_user = db.relationship('User', foreign_keys=[approved_by])
     prototypes = db.relationship('Prototype', back_populates='product_development', cascade='all, delete-orphan')
@@ -142,6 +144,7 @@ class RDMaterial(db.Model):
     status = db.Column(db.String(50), nullable=False, default='requested')  # requested, ordered, received, in_use, consumed, expired
     requested_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     approved_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    warehouse_material_id = db.Column(db.Integer, db.ForeignKey('materials.id'), nullable=True)  # Link to warehouse material
     notes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -150,6 +153,7 @@ class RDMaterial(db.Model):
     project = db.relationship('ResearchProject', back_populates='materials')
     experiment = db.relationship('Experiment', back_populates='materials')
     supplier = db.relationship('Supplier')
+    warehouse_material = db.relationship('Material', foreign_keys=[warehouse_material_id])
     requested_by_user = db.relationship('User', foreign_keys=[requested_by])
     approved_by_user = db.relationship('User', foreign_keys=[approved_by])
 

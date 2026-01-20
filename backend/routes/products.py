@@ -7,6 +7,7 @@ from utils.calculations import (
     calculate_gsm, calculate_sheet_weight, validate_nonwoven_specs,
     calculate_packaging_structure, convert_uom, NONWOVEN_CATEGORIES
 )
+from utils.timezone import get_local_now, get_local_today
 
 products_bp = Blueprint('products', __name__)
 
@@ -805,7 +806,7 @@ def get_lifecycle_products():
         
         period = request.args.get('period', '6months')
         
-        end_date = datetime.now()
+        end_date = get_local_now()
         if period == '3months':
             start_date = end_date - timedelta(days=90)
         elif period == '6months':
@@ -848,8 +849,8 @@ def get_lifecycle_products():
                 WorkOrder.product_id == product.id
             ).order_by(WorkOrder.created_at.asc()).first()
             
-            first_wo_date = first_wo.created_at if first_wo else datetime.now()
-            days_since_first_wo = (datetime.now() - first_wo_date).days
+            first_wo_date = first_wo.created_at if first_wo else get_local_now()
+            days_since_first_wo = (get_local_now() - first_wo_date).days
             
             # Determine lifecycle stage based on production activity
             if wo_count >= 10 and total_produced > 50000:
@@ -868,7 +869,7 @@ def get_lifecycle_products():
             # Check for decline - no recent WO
             recent_wo = WorkOrder.query.filter(
                 WorkOrder.product_id == product.id,
-                WorkOrder.created_at >= (datetime.now() - timedelta(days=60))
+                WorkOrder.created_at >= (get_local_now() - timedelta(days=60))
             ).count()
             
             if wo_count > 0 and recent_wo == 0 and days_since_first_wo > 180:
@@ -892,7 +893,7 @@ def get_lifecycle_products():
                 'growth_rate': 15.0 if stage == 'growth' else (8.0 if stage == 'maturity' else (-5.0 if stage == 'decline' else 25.0)),
                 'roi': completion_rate,
                 'work_order_count': wo_count,
-                'last_updated': datetime.now().isoformat()
+                'last_updated': get_local_now().isoformat()
             })
         
         # Sort by total produced descending
@@ -917,7 +918,7 @@ def get_lifecycle_stage_metrics():
         
         period = request.args.get('period', '6months')
         
-        end_date = datetime.now()
+        end_date = get_local_now()
         if period == '3months':
             start_date = end_date - timedelta(days=90)
         elif period == '6months':
@@ -954,12 +955,12 @@ def get_lifecycle_stage_metrics():
                 WorkOrder.product_id == product_id
             ).order_by(WorkOrder.created_at.asc()).first()
             
-            days_since_first = (datetime.now() - first_wo.created_at).days if first_wo else 0
+            days_since_first = (get_local_now() - first_wo.created_at).days if first_wo else 0
             
             # Check for recent activity
             recent_wo = WorkOrder.query.filter(
                 WorkOrder.product_id == product_id,
-                WorkOrder.created_at >= (datetime.now() - timedelta(days=60))
+                WorkOrder.created_at >= (get_local_now() - timedelta(days=60))
             ).count()
             
             if wo_count >= 10 and total_produced > 50000:
@@ -1002,7 +1003,7 @@ def get_lifecycle_timeline():
         # Generate timeline for last 6 months
         timeline = []
         for i in range(6):
-            month_date = datetime.now() - timedelta(days=30 * (5 - i))
+            month_date = get_local_now() - timedelta(days=30 * (5 - i))
             timeline.append({
                 'date': month_date.strftime('%Y-%m'),
                 'introduction': 2 + i,
@@ -1047,7 +1048,7 @@ def get_analytics_performance():
         category = request.args.get('category', 'all')
         
         # Calculate date range
-        end_date = datetime.now()
+        end_date = get_local_now()
         if period == '1month':
             start_date = end_date - timedelta(days=30)
         elif period == '3months':
@@ -1116,7 +1117,7 @@ def get_analytics_timeline():
         
         period = request.args.get('period', '3months')
         
-        end_date = datetime.now()
+        end_date = get_local_now()
         if period == '1month':
             start_date = end_date - timedelta(days=30)
         elif period == '3months':
@@ -1168,7 +1169,7 @@ def get_analytics_categories():
         
         period = request.args.get('period', '3months')
         
-        end_date = datetime.now()
+        end_date = get_local_now()
         if period == '1month':
             start_date = end_date - timedelta(days=30)
         elif period == '3months':

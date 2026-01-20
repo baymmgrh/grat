@@ -14,6 +14,7 @@ import os
 import subprocess
 import shutil
 from sqlalchemy import text
+from utils.timezone import get_local_now, get_local_today
 
 settings_extended_bp = Blueprint('settings_extended', __name__)
 
@@ -112,7 +113,7 @@ def save_system_config():
                 
                 # Convert value to string for storage
                 setting.value = str(value)
-                setting.updated_at = datetime.utcnow()
+                setting.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -142,7 +143,7 @@ def get_roles():
                 'description': 'Full system access',
                 'permissions': ['all'],
                 'user_count': User.query.filter_by(is_admin=True).count(),
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             },
             {
                 'id': 2,
@@ -150,7 +151,7 @@ def get_roles():
                 'description': 'Management level access',
                 'permissions': ['read', 'write', 'manage_users'],
                 'user_count': 0,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             },
             {
                 'id': 3,
@@ -158,7 +159,7 @@ def get_roles():
                 'description': 'Standard user access',
                 'permissions': ['read', 'write'],
                 'user_count': User.query.filter_by(is_admin=False).count(),
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             }
         ]
         
@@ -367,7 +368,7 @@ def export_audit_logs():
         return Response(
             csv_content,
             mimetype='text/csv',
-            headers={'Content-Disposition': f'attachment; filename=audit_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'}
+            headers={'Content-Disposition': f'attachment; filename=audit_logs_{get_local_now().strftime("%Y%m%d_%H%M%S")}.csv'}
         )
         
     except Exception as e:

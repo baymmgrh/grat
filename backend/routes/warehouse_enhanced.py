@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 from datetime import datetime, date, timedelta
 from utils.helpers import generate_number
 import json
+from utils.timezone import get_local_now, get_local_today
 
 warehouse_enhanced_bp = Blueprint('warehouse_enhanced', __name__)
 
@@ -20,7 +21,7 @@ def get_enhanced_dashboard():
     """Enhanced warehouse dashboard with comprehensive metrics"""
     try:
         # Date ranges
-        today = date.today()
+        today = get_local_today()
         week_start = today - timedelta(days=7)
         month_start = today.replace(day=1)
         
@@ -115,7 +116,7 @@ def get_enhanced_dashboard():
             'abc_analysis': abc_data,
             'recent_movements': movement_timeline,
             'top_products': top_products_data,
-            'last_updated': datetime.utcnow().isoformat()
+            'last_updated': get_local_now().isoformat()
         }), 200
         
     except Exception as e:
@@ -136,11 +137,11 @@ def get_warehouse_analytics():
         
         # Filter by period
         if period == 'daily':
-            start_date = date.today() - timedelta(days=30)
+            start_date = get_local_today() - timedelta(days=30)
         elif period == 'weekly':
-            start_date = date.today() - timedelta(weeks=12)
+            start_date = get_local_today() - timedelta(weeks=12)
         else:  # monthly
-            start_date = date.today() - timedelta(days=365)
+            start_date = get_local_today() - timedelta(days=365)
         
         analytics = query.filter(
             WarehouseAnalytics.analysis_date >= start_date,
@@ -339,7 +340,7 @@ def acknowledge_alert(alert_id):
         
         alert.status = 'acknowledged'
         alert.acknowledged_by = user_id
-        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledged_at = get_local_now()
         
         db.session.commit()
         
@@ -361,7 +362,7 @@ def resolve_alert(alert_id):
         
         alert.status = 'resolved'
         alert.resolved_by = user_id
-        alert.resolved_at = datetime.utcnow()
+        alert.resolved_at = get_local_now()
         alert.resolution_notes = data.get('resolution_notes', '')
         
         db.session.commit()
@@ -426,7 +427,7 @@ def get_demand_forecast():
         
         # Get future forecasts
         forecasts = query.filter(
-            StockMovementForecast.forecast_date >= date.today()
+            StockMovementForecast.forecast_date >= get_local_today()
         ).order_by(StockMovementForecast.forecast_date).limit(12).all()
         
         forecast_data = []

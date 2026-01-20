@@ -15,6 +15,7 @@ from models import db
 from models.hr_extended import WorkRoster, WorkRosterAssignment, EmployeeSkill, RosterTemplate
 from models.hr import Employee, Department
 from models.production import Machine
+from utils.timezone import get_local_now, get_local_today
 
 work_roster_bp = Blueprint('work_roster', __name__)
 
@@ -206,7 +207,7 @@ def get_roster_by_week():
             week_number = week
         else:
             # Default to current week
-            today = datetime.utcnow().date()
+            today = get_local_now().date()
             week_number, year = get_week_number(today)
         
         roster = WorkRoster.query.filter_by(
@@ -304,8 +305,8 @@ def create_work_roster():
             input_date = datetime.fromisoformat(data['date']).date()
             week_number, year = get_week_number(input_date)
         else:
-            year = data.get('year', datetime.utcnow().year)
-            week_number = data.get('week_number', datetime.utcnow().isocalendar()[1])
+            year = data.get('year', get_local_now().year)
+            week_number = data.get('week_number', get_local_now().isocalendar()[1])
         
         week_start, week_end = get_week_dates(datetime.strptime(f'{year}-W{week_number:02d}-1', '%Y-W%W-%w').date())
         
@@ -396,7 +397,7 @@ def update_work_roster(id):
             roster.status = data['status']
             if data['status'] == 'published' and not roster.approved_at:
                 roster.approved_by = int(user_id)
-                roster.approved_at = datetime.utcnow()
+                roster.approved_at = get_local_now()
         if 'notes' in data:
             roster.notes = data['notes']
         
@@ -424,7 +425,7 @@ def update_work_roster(id):
                             )
                             db.session.add(new_assignment)
         
-        roster.updated_at = datetime.utcnow()
+        roster.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({
@@ -479,7 +480,7 @@ def get_roster_calendar():
         
         if not start_date or not end_date:
             # Default to current month
-            today = datetime.utcnow().date()
+            today = get_local_now().date()
             start_date = today.replace(day=1)
             end_date = (start_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
         else:
@@ -880,7 +881,7 @@ def get_operators_for_production():
         machine_id = request.args.get('machine_id')
         
         if not date_str:
-            date_str = datetime.utcnow().date().isoformat()
+            date_str = get_local_now().date().isoformat()
         
         roster_date = datetime.fromisoformat(date_str).date()
         

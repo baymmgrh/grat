@@ -8,6 +8,7 @@ from utils.i18n import success_response, error_response
 from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import func
+from utils.timezone import get_local_now, get_local_today
 
 stock_input_bp = Blueprint('stock_input', __name__)
 
@@ -28,7 +29,7 @@ def create_stock_input():
         if not reference_number:
             reference_number = generate_number('SI', InventoryMovement, 'reference_number')
         
-        movement_date = datetime.fromisoformat(data['movement_date']).date() if data.get('movement_date') else date.today()
+        movement_date = datetime.fromisoformat(data['movement_date']).date() if data.get('movement_date') else get_local_today()
         
         created_movements = []
         
@@ -102,7 +103,7 @@ def create_stock_input():
             quantity = float(item_data['quantity'])
             inventory.quantity_on_hand += quantity
             inventory.quantity_available += quantity
-            inventory.updated_at = datetime.utcnow()
+            inventory.updated_at = get_local_now()
             
             # Create inventory movement record
             movement = InventoryMovement(
@@ -324,13 +325,13 @@ def quick_stock_add():
         quantity = float(data['quantity'])
         inventory.quantity_on_hand += quantity
         inventory.quantity_available += quantity
-        inventory.updated_at = datetime.utcnow()
+        inventory.updated_at = get_local_now()
         
         # Create movement record
         movement = InventoryMovement(
             inventory_id=inventory.id,
             movement_type='stock_in',
-            movement_date=date.today(),
+            movement_date=get_local_today(),
             quantity=quantity,
             reference_number=reference_number,
             reference_type='quick_add',

@@ -2,6 +2,12 @@
 AI Assistant Route - Internal ERP Query Assistant
 Menjawab pertanyaan seputar data ERP tanpa AI eksternal
 Bahasa: Indonesia Modern & Santai 🇮🇩
+
+Features:
+- Regex-based intent detection
+- Slash commands (/help, /stock, /sales, /production, etc.)
+- Mini charts & tables in chat
+- Deep linking to modules
 """
 
 from flask import Blueprint, request, jsonify
@@ -30,6 +36,104 @@ from sqlalchemy import func, and_, or_
 from datetime import datetime, timedelta
 import re
 import random
+import json
+from utils.timezone import get_local_now, get_local_today
+
+# ===========================================
+# SLASH COMMANDS CONFIGURATION
+# ===========================================
+SLASH_COMMANDS = {
+    '/help': {
+        'description': 'Tampilkan daftar perintah',
+        'handler': 'handle_help_command'
+    },
+    '/stock': {
+        'description': 'Cek stok barang. Contoh: /stock gula',
+        'handler': 'handle_stock_command',
+        'aliases': ['/stok', '/inventory']
+    },
+    '/sales': {
+        'description': 'Info penjualan. Contoh: /sales hari ini',
+        'handler': 'handle_sales_command',
+        'aliases': ['/penjualan', '/so']
+    },
+    '/production': {
+        'description': 'Info produksi. Contoh: /production hari ini',
+        'handler': 'handle_production_command',
+        'aliases': ['/produksi', '/wo']
+    },
+    '/po': {
+        'description': 'Info purchase order. Contoh: /po pending',
+        'handler': 'handle_po_command',
+        'aliases': ['/purchase', '/pembelian']
+    },
+    '/oee': {
+        'description': 'Cek OEE mesin. Contoh: /oee MC001',
+        'handler': 'handle_oee_command',
+        'aliases': ['/efisiensi', '/efficiency']
+    },
+    '/bom': {
+        'description': 'Lihat BOM produk. Contoh: /bom ANDALAN',
+        'handler': 'handle_bom_command',
+        'aliases': ['/formula', '/resep']
+    },
+    '/employee': {
+        'description': 'Info karyawan. Contoh: /employee aktif',
+        'handler': 'handle_employee_command',
+        'aliases': ['/karyawan', '/staff']
+    },
+    '/chart': {
+        'description': 'Tampilkan grafik. Contoh: /chart sales bulan ini',
+        'handler': 'handle_chart_command',
+        'aliases': ['/grafik', '/graph']
+    },
+    '/goto': {
+        'description': 'Deep link ke halaman. Contoh: /goto dashboard',
+        'handler': 'handle_goto_command',
+        'aliases': ['/go', '/buka', '/open']
+    }
+}
+
+# Deep linking routes
+DEEP_LINKS = {
+    'dashboard': '/app/dashboard',
+    'sales': '/app/sales/orders',
+    'production': '/app/production/work-orders',
+    'inventory': '/app/warehouse/inventory',
+    'stock': '/app/warehouse/inventory',
+    'material': '/app/warehouse/materials',
+    'product': '/app/products',
+    'bom': '/app/products/bom',
+    'po': '/app/purchasing/orders',
+    'purchase': '/app/purchasing/orders',
+    'supplier': '/app/purchasing/suppliers',
+    'customer': '/app/sales/customers',
+    'oee': '/app/oee/dashboard',
+    'quality': '/app/quality/inspections',
+    'maintenance': '/app/maintenance',
+    'shipping': '/app/shipping/orders',
+    'hr': '/app/hr/employees',
+    'employee': '/app/hr/employees',
+    'attendance': '/app/hr/attendance',
+    'finance': '/app/finance/dashboard',
+    'invoice': '/app/finance/invoices',
+    'rd': '/app/rd/dashboard',
+    'rnd': '/app/rnd/dashboard',
+    'report': '/app/reports',
+    'setting': '/app/settings'
+}
+
+# Regex patterns for enhanced parsing
+REGEX_PATTERNS = {
+    'product_code': re.compile(r'\b([A-Z]{2,4}[\-_]?\d{3,6})\b', re.IGNORECASE),
+    'date_range': re.compile(r'(\d{1,2})[/\-](\d{1,2})[/\-]?(\d{2,4})?'),
+    'quantity': re.compile(r'(\d+(?:[.,]\d+)?)\s*(pcs|kg|liter|box|karton|roll|meter|unit)?', re.IGNORECASE),
+    'money': re.compile(r'(?:rp\.?\s?)?(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{2})?)(?:\s*(?:juta|ribu|rb|jt))?', re.IGNORECASE),
+    'percentage': re.compile(r'(\d+(?:[.,]\d+)?)\s*%'),
+    'machine_code': re.compile(r'\b(MC|M|LINE)[\-_]?(\d{1,3})\b', re.IGNORECASE),
+    'time_period': re.compile(r'(hari ini|kemarin|minggu ini|bulan ini|tahun ini|today|yesterday|this week|this month)', re.IGNORECASE),
+    'comparison': re.compile(r'(lebih|kurang|>=?|<=?|sama dengan|>|<)\s*(\d+)', re.IGNORECASE)
+}
 
 ai_assistant_bp = Blueprint('ai_assistant', __name__)
 
@@ -165,7 +269,7 @@ def extract_search_term(query: str) -> str:
 def extract_time_range(query: str) -> tuple:
     """Extract time range from query"""
     query_lower = query.lower()
-    today = datetime.now().date()
+    today = get_local_now().date()
     
     if 'hari ini' in query_lower or 'today' in query_lower:
         return today, today
@@ -190,6 +294,529 @@ def format_currency(value):
         return "Rp 0"
     return f"Rp {float(value):,.0f}".replace(",", ".")
 
+# ===========================================
+# SLASH COMMAND HANDLERS
+# ===========================================
+
+def handle_slash_command(query: str) -> dict:
+    """Handle slash commands"""
+    parts = query.split(maxsplit=1)
+    command = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else ''
+    
+    # Check for command aliases
+    resolved_command = None
+    for cmd, config in SLASH_COMMANDS.items():
+        if command == cmd or command in config.get('aliases', []):
+            resolved_command = cmd
+            break
+    
+    if resolved_command == '/help':
+        return handle_help_command()
+    elif resolved_command == '/stock':
+        return handle_stock_command(args)
+    elif resolved_command == '/sales':
+        return handle_sales_command(args)
+    elif resolved_command == '/production':
+        return handle_production_command(args)
+    elif resolved_command == '/po':
+        return handle_po_command_slash(args)
+    elif resolved_command == '/oee':
+        return handle_oee_command(args)
+    elif resolved_command == '/bom':
+        return handle_bom_command_slash(args)
+    elif resolved_command == '/employee':
+        return handle_employee_command(args)
+    elif resolved_command == '/chart':
+        return handle_chart_request(args)
+    elif resolved_command == '/goto':
+        return handle_goto_command(args)
+    else:
+        return {
+            'message': f"❓ Perintah `{command}` tidak dikenal.\n\nKetik `/help` untuk lihat daftar perintah.",
+            'links': [],
+            'data': None
+        }
+
+def handle_help_command() -> dict:
+    """Show available commands"""
+    msg = "📚 **Daftar Perintah AI Assistant**\n"
+    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    
+    for cmd, config in SLASH_COMMANDS.items():
+        aliases = config.get('aliases', [])
+        alias_str = f" ({', '.join(aliases)})" if aliases else ""
+        msg += f"**{cmd}**{alias_str}\n"
+        msg += f"   {config['description']}\n\n"
+    
+    msg += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    msg += "💡 *Atau ketik pertanyaan biasa seperti:*\n"
+    msg += '• "stok gula"\n'
+    msg += '• "sales hari ini"\n'
+    msg += '• "BOM ANDALAN"'
+    
+    return {
+        'message': msg,
+        'links': [{'label': 'Dashboard', 'href': '/app/dashboard'}],
+        'data': None
+    }
+
+def handle_stock_command(args: str) -> dict:
+    """Handle /stock command"""
+    if not args:
+        # Show low stock summary
+        low_stock = db.session.query(Material).join(
+            Inventory, Inventory.material_id == Material.id
+        ).filter(
+            Inventory.quantity_on_hand <= Inventory.min_stock_level,
+            Inventory.min_stock_level > 0
+        ).limit(10).all()
+        
+        if low_stock:
+            data = [{'Kode': m.code, 'Nama': m.name[:25], 'Status': '🔴 Low'} for m in low_stock]
+            return {
+                'message': f"⚠️ **{len(low_stock)} Material Stok Rendah**\n\nKetik `/stock [nama]` untuk detail spesifik.",
+                'links': [{'label': 'Lihat Semua', 'href': '/app/warehouse/materials?filter=low_stock'}],
+                'data': data
+            }
+        return {
+            'message': "✅ Semua stok dalam kondisi aman!",
+            'links': [{'label': 'Lihat Inventory', 'href': '/app/warehouse/inventory'}],
+            'data': None
+        }
+    
+    # Search specific material
+    materials = Material.query.filter(
+        or_(Material.name.ilike(f'%{args}%'), Material.code.ilike(f'%{args}%'))
+    ).limit(5).all()
+    
+    if materials:
+        data = []
+        for m in materials:
+            inv = Inventory.query.filter(Inventory.material_id == m.id).first()
+            qty = float(inv.quantity_on_hand) if inv else 0
+            data.append({'Kode': m.code, 'Nama': m.name[:25], 'Stok': f"{qty:,.0f}"})
+        
+        return {
+            'message': f"📦 **Hasil pencarian: '{args}'**",
+            'links': [{'label': 'Lihat Detail', 'href': '/app/warehouse/materials'}],
+            'data': data
+        }
+    
+    return {
+        'message': f"❌ Material '{args}' tidak ditemukan.",
+        'links': [{'label': 'Cari di Warehouse', 'href': '/app/warehouse/materials'}],
+        'data': None
+    }
+
+def handle_sales_command(args: str) -> dict:
+    """Handle /sales command"""
+    today = get_local_today()
+    start_date = today
+    
+    if 'bulan' in args.lower() or 'month' in args.lower():
+        start_date = today.replace(day=1)
+        period = "Bulan Ini"
+    elif 'minggu' in args.lower() or 'week' in args.lower():
+        start_date = today - timedelta(days=today.weekday())
+        period = "Minggu Ini"
+    else:
+        period = "Hari Ini"
+    
+    orders = SalesOrder.query.filter(
+        SalesOrder.order_date >= start_date,
+        SalesOrder.order_date <= today
+    ).all()
+    
+    total_value = sum(float(o.total_amount or 0) for o in orders)
+    pending = len([o for o in orders if o.status in ['draft', 'pending', 'confirmed']])
+    completed = len([o for o in orders if o.status in ['delivered', 'completed']])
+    
+    # Mini chart data
+    chart_data = {
+        'type': 'bar',
+        'title': f'Sales {period}',
+        'data': [
+            {'label': 'Pending', 'value': pending, 'color': '#f59e0b'},
+            {'label': 'Completed', 'value': completed, 'color': '#10b981'}
+        ]
+    }
+    
+    msg = f"📊 **Sales {period}**\n"
+    msg += f"━━━━━━━━━━━━━━━━━━━━\n"
+    msg += f"📝 Total Order: **{len(orders)}**\n"
+    msg += f"💰 Total Value: **{format_currency(total_value)}**\n"
+    msg += f"⏳ Pending: **{pending}**\n"
+    msg += f"✅ Completed: **{completed}**\n"
+    
+    return {
+        'message': msg,
+        'links': [{'label': 'Lihat Sales', 'href': '/app/sales/orders'}],
+        'data': None,
+        'chart': chart_data
+    }
+
+def handle_production_command(args: str) -> dict:
+    """Handle /production command"""
+    today = get_local_today()
+    
+    wos = WorkOrder.query.filter(
+        WorkOrder.scheduled_date == today
+    ).all()
+    
+    in_progress = len([w for w in wos if w.status == 'in_progress'])
+    completed = len([w for w in wos if w.status == 'completed'])
+    pending = len([w for w in wos if w.status in ['planned', 'released']])
+    
+    msg = f"🏭 **Produksi Hari Ini**\n"
+    msg += f"━━━━━━━━━━━━━━━━━━━━\n"
+    msg += f"📝 Total WO: **{len(wos)}**\n"
+    msg += f"🔄 In Progress: **{in_progress}**\n"
+    msg += f"✅ Completed: **{completed}**\n"
+    msg += f"⏳ Pending: **{pending}**\n"
+    
+    return {
+        'message': msg,
+        'links': [
+            {'label': 'Lihat WO', 'href': '/app/production/work-orders'},
+            {'label': 'Input Produksi', 'href': '/app/production/input'}
+        ],
+        'data': None
+    }
+
+def handle_po_command_slash(args: str) -> dict:
+    """Handle /po command"""
+    if 'pending' in args.lower():
+        pos = PurchaseOrder.query.filter(
+            PurchaseOrder.status.in_(['draft', 'pending', 'approved'])
+        ).order_by(PurchaseOrder.order_date.desc()).limit(10).all()
+    else:
+        pos = PurchaseOrder.query.order_by(
+            PurchaseOrder.order_date.desc()
+        ).limit(10).all()
+    
+    if pos:
+        data = [{
+            'No': p.po_number,
+            'Supplier': (p.supplier.name[:20] if p.supplier else '-'),
+            'Status': p.status,
+            'Total': format_currency(p.total_amount)
+        } for p in pos[:5]]
+        
+        return {
+            'message': f"📋 **{len(pos)} Purchase Order Terbaru**",
+            'links': [{'label': 'Lihat PO', 'href': '/app/purchasing/orders'}],
+            'data': data
+        }
+    
+    return {
+        'message': "📋 Tidak ada PO ditemukan.",
+        'links': [{'label': 'Buat PO', 'href': '/app/purchasing/orders/new'}],
+        'data': None
+    }
+
+def handle_oee_command(args: str) -> dict:
+    """Handle /oee command"""
+    today = get_local_today()
+    
+    # Get today's OEE records
+    records = OEERecord.query.filter(
+        func.date(OEERecord.production_date) == today
+    ).all()
+    
+    if records:
+        avg_oee = sum(float(r.oee_percentage or 0) for r in records) / len(records)
+        avg_availability = sum(float(r.availability or 0) for r in records) / len(records)
+        avg_performance = sum(float(r.performance or 0) for r in records) / len(records)
+        avg_quality = sum(float(r.quality or 0) for r in records) / len(records)
+        
+        # Mini chart for OEE breakdown
+        chart_data = {
+            'type': 'gauge',
+            'title': 'OEE Hari Ini',
+            'value': avg_oee,
+            'breakdown': [
+                {'label': 'Availability', 'value': avg_availability},
+                {'label': 'Performance', 'value': avg_performance},
+                {'label': 'Quality', 'value': avg_quality}
+            ]
+        }
+        
+        msg = f"📈 **OEE Hari Ini**\n"
+        msg += f"━━━━━━━━━━━━━━━━━━━━\n"
+        msg += f"🎯 OEE: **{avg_oee:.1f}%**\n"
+        msg += f"⏱️ Availability: **{avg_availability:.1f}%**\n"
+        msg += f"⚡ Performance: **{avg_performance:.1f}%**\n"
+        msg += f"✨ Quality: **{avg_quality:.1f}%**\n"
+        
+        return {
+            'message': msg,
+            'links': [{'label': 'Dashboard OEE', 'href': '/app/oee/dashboard'}],
+            'data': None,
+            'chart': chart_data
+        }
+    
+    return {
+        'message': "📈 Belum ada data OEE untuk hari ini.",
+        'links': [{'label': 'Dashboard OEE', 'href': '/app/oee/dashboard'}],
+        'data': None
+    }
+
+def handle_bom_command_slash(args: str) -> dict:
+    """Handle /bom command"""
+    if not args:
+        total = BillOfMaterials.query.filter(BillOfMaterials.is_active == True).count()
+        return {
+            'message': f"📋 Total **{total}** BOM aktif.\n\nKetik `/bom [nama produk]` untuk detail.",
+            'links': [{'label': 'Lihat BOM', 'href': '/app/products/bom'}],
+            'data': None
+        }
+    
+    # Search product BOM
+    products = Product.query.filter(
+        or_(Product.name.ilike(f'%{args}%'), Product.code.ilike(f'%{args}%'))
+    ).limit(5).all()
+    
+    if products:
+        data = []
+        for p in products:
+            bom = BillOfMaterials.query.filter(
+                BillOfMaterials.product_id == p.id,
+                BillOfMaterials.is_active == True
+            ).first()
+            data.append({
+                'Produk': p.name[:25],
+                'Kode': p.code,
+                'BOM': bom.bom_number if bom else '❌ Belum ada'
+            })
+        
+        return {
+            'message': f"📋 **Hasil pencarian BOM: '{args}'**",
+            'links': [{'label': 'Lihat BOM', 'href': '/app/products/bom'}],
+            'data': data
+        }
+    
+    return {
+        'message': f"❌ Produk '{args}' tidak ditemukan.",
+        'links': [{'label': 'Lihat Produk', 'href': '/app/products'}],
+        'data': None
+    }
+
+def handle_employee_command(args: str) -> dict:
+    """Handle /employee command"""
+    if 'aktif' in args.lower() or not args:
+        employees = Employee.query.filter(Employee.status == 'active').all()
+        by_dept = {}
+        for e in employees:
+            dept = e.department.name if e.department else 'Lainnya'
+            by_dept[dept] = by_dept.get(dept, 0) + 1
+        
+        data = [{'Departemen': k, 'Jumlah': v} for k, v in sorted(by_dept.items(), key=lambda x: -x[1])[:5]]
+        
+        return {
+            'message': f"👥 **{len(employees)} Karyawan Aktif**",
+            'links': [{'label': 'Lihat Karyawan', 'href': '/app/hr/employees'}],
+            'data': data
+        }
+    
+    # Search specific employee
+    employees = Employee.query.filter(
+        or_(Employee.full_name.ilike(f'%{args}%'), Employee.employee_id.ilike(f'%{args}%'))
+    ).limit(5).all()
+    
+    if employees:
+        data = [{
+            'ID': e.employee_id,
+            'Nama': e.full_name[:25],
+            'Dept': e.department.name[:15] if e.department else '-',
+            'Status': e.status
+        } for e in employees]
+        
+        return {
+            'message': f"👤 **Hasil pencarian: '{args}'**",
+            'links': [{'label': 'Lihat Detail', 'href': '/app/hr/employees'}],
+            'data': data
+        }
+    
+    return {
+        'message': f"❌ Karyawan '{args}' tidak ditemukan.",
+        'links': [{'label': 'Cari Karyawan', 'href': '/app/hr/employees'}],
+        'data': None
+    }
+
+def handle_goto_command(args: str) -> dict:
+    """Handle /goto deep linking command"""
+    if not args:
+        # Show available deep links
+        links_list = "\n".join([f"• `{k}` → {v}" for k, v in list(DEEP_LINKS.items())[:10]])
+        return {
+            'message': f"🔗 **Deep Links Tersedia:**\n\n{links_list}\n\n...\n\nKetik `/goto [nama]` untuk navigasi.",
+            'links': [{'label': 'Dashboard', 'href': '/app/dashboard'}],
+            'data': None
+        }
+    
+    target = args.lower().strip()
+    if target in DEEP_LINKS:
+        return {
+            'message': f"🚀 Navigasi ke **{target.title()}**",
+            'links': [{'label': f'Buka {target.title()}', 'href': DEEP_LINKS[target]}],
+            'data': None,
+            'redirect': DEEP_LINKS[target]
+        }
+    
+    # Fuzzy match
+    for key, href in DEEP_LINKS.items():
+        if target in key or key in target:
+            return {
+                'message': f"🚀 Navigasi ke **{key.title()}**",
+                'links': [{'label': f'Buka {key.title()}', 'href': href}],
+                'data': None,
+                'redirect': href
+            }
+    
+    return {
+        'message': f"❓ Halaman '{args}' tidak ditemukan.\n\nKetik `/goto` untuk lihat daftar.",
+        'links': [{'label': 'Dashboard', 'href': '/app/dashboard'}],
+        'data': None
+    }
+
+# ===========================================
+# CHART GENERATION FOR CHAT
+# ===========================================
+
+def handle_chart_request(query: str) -> dict:
+    """Handle chart/graph requests - generates mini chart data"""
+    query_lower = query.lower()
+    today = get_local_today()
+    
+    # Sales chart
+    if any(kw in query_lower for kw in ['sales', 'penjualan', 'omset']):
+        # Get last 7 days sales
+        start = today - timedelta(days=6)
+        daily_sales = []
+        
+        for i in range(7):
+            date = start + timedelta(days=i)
+            total = db.session.query(func.sum(SalesOrder.total_amount)).filter(
+                func.date(SalesOrder.order_date) == date
+            ).scalar() or 0
+            daily_sales.append({
+                'label': date.strftime('%d/%m'),
+                'value': float(total)
+            })
+        
+        chart_data = {
+            'type': 'line',
+            'title': 'Sales 7 Hari Terakhir',
+            'data': daily_sales,
+            'color': '#3b82f6'
+        }
+        
+        total_week = sum(d['value'] for d in daily_sales)
+        msg = f"📈 **Grafik Sales 7 Hari Terakhir**\n\n"
+        msg += f"💰 Total: **{format_currency(total_week)}**\n\n"
+        msg += "```\n"
+        max_val = max(d['value'] for d in daily_sales) or 1
+        for d in daily_sales:
+            bar_len = int((d['value'] / max_val) * 20)
+            msg += f"{d['label']} {'█' * bar_len} {format_currency(d['value'])}\n"
+        msg += "```"
+        
+        return {
+            'message': msg,
+            'links': [{'label': 'Detail Sales', 'href': '/app/sales/orders'}],
+            'data': None,
+            'chart': chart_data
+        }
+    
+    # Production chart
+    if any(kw in query_lower for kw in ['production', 'produksi', 'output']):
+        # Get last 7 days production
+        start = today - timedelta(days=6)
+        daily_prod = []
+        
+        for i in range(7):
+            date = start + timedelta(days=i)
+            total = db.session.query(func.sum(WorkOrder.quantity_good)).filter(
+                func.date(WorkOrder.scheduled_start_date) == date,
+                WorkOrder.status.in_(['completed', 'in_progress'])
+            ).scalar() or 0
+            daily_prod.append({
+                'label': date.strftime('%d/%m'),
+                'value': float(total)
+            })
+        
+        chart_data = {
+            'type': 'bar',
+            'title': 'Produksi 7 Hari Terakhir',
+            'data': daily_prod,
+            'color': '#10b981'
+        }
+        
+        total_week = sum(d['value'] for d in daily_prod)
+        msg = f"🏭 **Grafik Produksi 7 Hari Terakhir**\n\n"
+        msg += f"📦 Total Output: **{total_week:,.0f}** pcs\n\n"
+        msg += "```\n"
+        max_val = max(d['value'] for d in daily_prod) or 1
+        for d in daily_prod:
+            bar_len = int((d['value'] / max_val) * 20)
+            msg += f"{d['label']} {'█' * bar_len} {d['value']:,.0f}\n"
+        msg += "```"
+        
+        return {
+            'message': msg,
+            'links': [{'label': 'Detail Produksi', 'href': '/app/production/work-orders'}],
+            'data': None,
+            'chart': chart_data
+        }
+    
+    # OEE chart
+    if any(kw in query_lower for kw in ['oee', 'efisiensi', 'efficiency']):
+        # Get OEE trend
+        start = today - timedelta(days=6)
+        daily_oee = []
+        
+        for i in range(7):
+            date = start + timedelta(days=i)
+            records = OEERecord.query.filter(
+                func.date(OEERecord.production_date) == date
+            ).all()
+            avg_oee = sum(float(r.oee_percentage or 0) for r in records) / len(records) if records else 0
+            daily_oee.append({
+                'label': date.strftime('%d/%m'),
+                'value': avg_oee
+            })
+        
+        chart_data = {
+            'type': 'line',
+            'title': 'Trend OEE 7 Hari',
+            'data': daily_oee,
+            'color': '#8b5cf6'
+        }
+        
+        avg_week = sum(d['value'] for d in daily_oee) / 7
+        msg = f"📊 **Grafik OEE 7 Hari Terakhir**\n\n"
+        msg += f"🎯 Rata-rata: **{avg_week:.1f}%**\n\n"
+        msg += "```\n"
+        for d in daily_oee:
+            bar_len = int(d['value'] / 5)  # Scale 0-100 to 0-20
+            msg += f"{d['label']} {'█' * bar_len} {d['value']:.1f}%\n"
+        msg += "```"
+        
+        return {
+            'message': msg,
+            'links': [{'label': 'Dashboard OEE', 'href': '/app/oee/dashboard'}],
+            'data': None,
+            'chart': chart_data
+        }
+    
+    # Default - show available charts
+    return {
+        'message': "📊 **Grafik yang tersedia:**\n\n• `/chart sales` - Grafik penjualan\n• `/chart production` - Grafik produksi\n• `/chart oee` - Grafik OEE\n\nAtau ketik: *'grafik sales bulan ini'*",
+        'links': [{'label': 'Dashboard', 'href': '/app/dashboard'}],
+        'data': None
+    }
+
 @ai_assistant_bp.route('/query', methods=['POST'])
 @jwt_required(optional=True)
 def process_query():
@@ -200,10 +827,18 @@ def process_query():
         
         if not query:
             return jsonify({
-                'message': 'Halo boss! Mau tanya apa nih? 🤔\n\nKetik aja pertanyaannya, gue siap bantu!',
+                'message': 'Halo boss! Mau tanya apa nih? 🤔\n\nKetik aja pertanyaannya, gue siap bantu!\n\n💡 *Coba ketik `/help` untuk lihat perintah yang tersedia*',
                 'links': [],
                 'data': None
             })
+        
+        # Check for slash commands first
+        if query.startswith('/'):
+            return jsonify(handle_slash_command(query))
+        
+        # Check for chart/graph requests
+        if any(kw in query.lower() for kw in ['grafik', 'chart', 'graph', 'tampilkan grafik', 'lihat grafik']):
+            return jsonify(handle_chart_request(query))
         
         intents = detect_intent(query)
         start_date, end_date = extract_time_range(query)
@@ -903,7 +1538,7 @@ def handle_sales_query(query: str, search_term: str, start_date, end_date) -> di
                 period = f"dari {start_date} sampai {end_date}"
             else:
                 # Default: this month
-                today = datetime.now().date()
+                today = get_local_now().date()
                 start_month = today.replace(day=1)
                 total = db.session.query(func.sum(SalesOrder.total_amount)).filter(
                     and_(
@@ -972,7 +1607,7 @@ def handle_wo_query(query: str, search_term: str, start_date, end_date) -> dict:
     try:
         # Today's WO
         if any(word in query_lower for word in ['hari ini', 'today', 'sekarang']):
-            today = datetime.now().date()
+            today = get_local_now().date()
             wos = WorkOrder.query.filter(
                 func.date(WorkOrder.planned_start) == today
             ).limit(10).all()
@@ -1411,7 +2046,7 @@ def handle_payment_query(query: str, search_term: str, start_date, end_date) -> 
             }
         
         # General payment info
-        today = datetime.now().date()
+        today = get_local_now().date()
         payments_today = Payment.query.filter(
             func.date(Payment.payment_date) == today
         ).all()
@@ -1439,7 +2074,7 @@ def handle_payment_query(query: str, search_term: str, start_date, end_date) -> 
 def handle_attendance_query(query: str, search_term: str, start_date, end_date) -> dict:
     """Handle Attendance queries"""
     try:
-        today = datetime.now().date()
+        today = get_local_now().date()
         
         # Today's attendance
         attendance_today = Attendance.query.filter(
@@ -1513,7 +2148,7 @@ def handle_quality_query(query: str, search_term: str, start_date, end_date) -> 
     """Handle Quality queries"""
     try:
         query_lower = query.lower()
-        today = datetime.now().date()
+        today = get_local_now().date()
         
         # QC today
         if 'hari ini' in query_lower or 'today' in query_lower:
@@ -1597,7 +2232,7 @@ def handle_oee_query(query: str, search_term: str, start_date, end_date) -> dict
     """Handle OEE/Machine efficiency queries"""
     try:
         query_lower = query.lower()
-        today = datetime.now().date()
+        today = get_local_now().date()
         
         # Today's OEE
         oee_today = OEERecord.query.filter(
@@ -1715,7 +2350,7 @@ def handle_shipping_query(query: str, search_term: str, start_date, end_date) ->
     """Handle Shipping/Delivery queries"""
     try:
         query_lower = query.lower()
-        today = datetime.now().date()
+        today = get_local_now().date()
         
         # Today's shipments
         if 'hari ini' in query_lower or 'today' in query_lower:

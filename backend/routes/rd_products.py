@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import or_
 import json
+from utils.timezone import get_local_now, get_local_today
 
 rd_products_bp = Blueprint('rd_products', __name__)
 
@@ -271,7 +272,7 @@ def update_product_development(id):
         if development.development_progress == 100 and development.development_stage != 'launched':
             development.development_stage = 'production'
         
-        development.updated_at = datetime.utcnow()
+        development.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -311,7 +312,7 @@ def approve_product_development(id):
         user_id = get_jwt_identity()
         
         development.approved_by = user_id
-        development.approved_at = datetime.utcnow()
+        development.approved_at = get_local_now()
         development.status = 'approved'
         
         # Move to next stage if appropriate
@@ -320,7 +321,7 @@ def approve_product_development(id):
         elif development.development_stage == 'pilot':
             development.development_stage = 'production'
         
-        development.updated_at = datetime.utcnow()
+        development.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -527,7 +528,7 @@ def convert_rd_to_production(development_id):
         
         # Update R&D product status
         rd_product.development_stage = 'launched'
-        rd_product.actual_launch_date = date.today()
+        rd_product.actual_launch_date = get_local_today()
         
         db.session.commit()
         

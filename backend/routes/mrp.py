@@ -6,6 +6,7 @@ from utils.i18n import success_response, error_response, get_message
 from datetime import datetime, timedelta
 from math import isnan, isinf
 import json
+from utils.timezone import get_local_now, get_local_today
 
 mrp_bp = Blueprint('mrp', __name__)
 
@@ -139,7 +140,7 @@ def get_material_requirements():
         days_ahead = request.args.get('days_ahead', 30, type=int)
         include_forecasts = request.args.get('include_forecasts', 'true').lower() == 'true'
 
-        start_date = datetime.utcnow().date()
+        start_date = get_local_now().date()
         end_date = start_date + timedelta(days=days_ahead)
 
         requirements = {}
@@ -394,7 +395,7 @@ def run_whatif_simulation():
         days_ahead = data.get('days_ahead', 30)
         scenarios = data.get('scenarios', [])  # List of scenario configurations
         
-        start_date = datetime.utcnow().date()
+        start_date = get_local_now().date()
         end_date = start_date + timedelta(days=days_ahead)
         
         simulation_results = []
@@ -650,7 +651,7 @@ def get_dashboard_metrics():
         # Calculate overdue orders
         from datetime import datetime
         overdue_orders = WorkOrder.query.filter(
-            WorkOrder.scheduled_end_date < datetime.now(),
+            WorkOrder.scheduled_end_date < get_local_now(),
             WorkOrder.status.in_(['planned', 'released', 'in_progress'])
         ).count()
         
@@ -1251,8 +1252,8 @@ def create_po_from_shortage():
             po = PurchaseOrder(
                 po_number=po_number,
                 supplier_id=supplier_id,
-                order_date=datetime.utcnow().date(),
-                required_date=datetime.utcnow().date() + timedelta(days=supplier.lead_time_days or 7),
+                order_date=get_local_now().date(),
+                required_date=get_local_now().date() + timedelta(days=supplier.lead_time_days or 7),
                 status='draft',
                 priority='high',  # Auto-generated POs are high priority
                 notes=f'Auto-generated from {reference_type} {reference_number} due to material shortage',
@@ -1461,8 +1462,8 @@ def create_po_from_shortage_internal(shortage_items, reference_type, reference_i
         po = PurchaseOrder(
             po_number=po_number,
             supplier_id=supplier_id,
-            order_date=datetime.utcnow().date(),
-            required_date=datetime.utcnow().date() + timedelta(days=supplier.lead_time_days or 7),
+            order_date=get_local_now().date(),
+            required_date=get_local_now().date() + timedelta(days=supplier.lead_time_days or 7),
             status='draft',
             priority='high',
             notes=f'Auto-generated from {reference_type} {reference_number}',

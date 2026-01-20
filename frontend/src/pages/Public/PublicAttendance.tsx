@@ -6,8 +6,17 @@ import {
 import * as faceapi from 'face-api.js';
 import { useNavigate } from 'react-router-dom';
 
-// Get API base URL
-const API_BASE = `http://${window.location.hostname}:5000`;
+// Get API base URL - match axiosConfig.ts logic
+const getApiBase = () => {
+  const hostname = window.location.hostname;
+  // Production domain - use HTTPS API subdomain
+  if (hostname === 'erp.graterp.my.id' || hostname.endsWith('.graterp.my.id')) {
+    return 'https://api.graterp.my.id';
+  }
+  // Local development - use same hostname with port 5000
+  return `http://${hostname}:5000`;
+};
+const API_BASE = getApiBase();
 
 interface AttendanceRecord {
   id: number;

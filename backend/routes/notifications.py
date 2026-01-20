@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Notification, SystemAlert
 from utils.i18n import success_response, error_response, get_message
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 notifications_bp = Blueprint('notifications', __name__)
 
@@ -51,7 +52,7 @@ def mark_as_read(id):
             return jsonify(error_response('api.error', error_code=404)), 404
         
         notification.is_read = True
-        notification.read_at = datetime.utcnow()
+        notification.read_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -66,7 +67,7 @@ def mark_all_as_read():
         user_id = get_jwt_identity()
         Notification.query.filter_by(user_id=user_id, is_read=False).update({
             'is_read': True,
-            'read_at': datetime.utcnow()
+            'read_at': get_local_now()
         })
         db.session.commit()
         return jsonify(success_response('api.success')), 200

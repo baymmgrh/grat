@@ -13,8 +13,8 @@ import {
 
 interface Project {
   id: number;
-  project_code: string;
-  title: string;
+  project_number: string;
+  project_name: string;
 }
 
 interface FormData {
@@ -243,7 +243,7 @@ const MaterialForm: React.FC = () => {
                 <option value="">Select Project (Optional)</option>
                 {projects.map(project => (
                   <option key={project.id} value={project.id}>
-                    {project.project_code} - {project.title}
+                    {project.project_number} - {project.project_name}
                   </option>
                 ))}
               </select>

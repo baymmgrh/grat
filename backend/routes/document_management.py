@@ -15,6 +15,7 @@ from utils import generate_number
 import os
 import json
 from io import BytesIO
+from utils.timezone import get_local_now, get_local_today
 
 # For PDF generation
 try:
@@ -408,7 +409,7 @@ def render_pdf_from_template():
         HTML(string=html).write_pdf(pdf_buffer)
         pdf_buffer.seek(0)
         
-        filename = data.get('filename', f'document-{datetime.now().strftime("%Y%m%d%H%M%S")}.pdf')
+        filename = data.get('filename', f'document-{get_local_now().strftime("%Y%m%d%H%M%S")}.pdf')
         
         return send_file(
             pdf_buffer,
@@ -449,7 +450,7 @@ def generate_document():
             reference_id=data.get('reference_id'),
             reference_number=data.get('reference_number'),
             signature_fields=data.get('signature_fields'),
-            document_date=datetime.fromisoformat(data['document_date']) if data.get('document_date') else datetime.utcnow(),
+            document_date=datetime.fromisoformat(data['document_date']) if data.get('document_date') else get_local_now(),
             created_by=current_user_id
         )
         
@@ -523,7 +524,7 @@ def generate_pdf(id):
         
         # Update print count
         document.print_count += 1
-        document.last_printed_at = datetime.utcnow()
+        document.last_printed_at = get_local_now()
         document.printed_by = current_user_id
         
         # Log activity
@@ -719,7 +720,7 @@ def record_print(id):
         document = Document.query.get_or_404(id)
         
         document.print_count += 1
-        document.last_printed_at = datetime.utcnow()
+        document.last_printed_at = get_local_now()
         document.printed_by = current_user_id
         document.status = 'printed'
         

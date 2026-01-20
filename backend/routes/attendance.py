@@ -4,6 +4,7 @@ from models import db
 from models.hr import Attendance
 from models.user import User
 from datetime import datetime, date, timedelta
+from utils.timezone import get_local_now, get_local_today
 import hashlib
 import base64
 
@@ -53,7 +54,7 @@ def public_check_attendance():
         formatted_name = to_proper_case(name)
         
         # Get today's attendance for this name
-        today = date.today()
+        today = get_local_today()
         attendance = Attendance.query.filter(
             db.func.lower(Attendance.notes) == f'name:{formatted_name.lower()}',
             Attendance.attendance_date == today
@@ -82,6 +83,8 @@ def public_clock_in():
         return cors_preflight_response()
     """Public clock in with photo verification - using name"""
     try:
+        from models.hr import Employee
+        
         data = request.get_json()
         name = data.get('name', '').strip()
         
@@ -91,8 +94,19 @@ def public_clock_in():
         # Format name to proper case for consistency
         formatted_name = to_proper_case(name)
         
-        today = date.today()
-        now = datetime.now()
+        # Try to find employee by name (fuzzy match)
+        employee = Employee.query.filter(
+            db.func.lower(Employee.full_name) == formatted_name.lower()
+        ).first()
+        
+        # If not found, try partial match
+        if not employee:
+            employee = Employee.query.filter(
+                Employee.full_name.ilike(f'%{formatted_name}%')
+            ).first()
+        
+        today = get_local_today()
+        now = get_local_now()
         
         # Check if already clocked in today (by name stored in notes)
         existing = Attendance.query.filter(
@@ -147,6 +161,7 @@ def public_clock_in():
         
         # Create attendance record
         attendance = Attendance(
+            employee_id=employee.id if employee else None,
             attendance_date=today,
             clock_in=now,
             status=status,
@@ -194,8 +209,8 @@ def public_clock_out():
         # Format name to proper case
         formatted_name = to_proper_case(name)
         
-        today = date.today()
-        now = datetime.now()
+        today = get_local_today()
+        now = get_local_now()
         
         # Find today's attendance by name
         attendance = Attendance.query.filter(
@@ -254,8 +269,8 @@ def clock_in():
         user_id = get_jwt_identity()
         data = request.get_json()
         
-        today = date.today()
-        now = datetime.now()
+        today = get_local_today()
+        now = get_local_now()
         
         # Check if already clocked in today
         existing = Attendance.query.filter(
@@ -347,8 +362,8 @@ def clock_out():
         user_id = get_jwt_identity()
         data = request.get_json()
         
-        today = date.today()
-        now = datetime.now()
+        today = get_local_today()
+        now = get_local_now()
         
         # Find today's attendance record
         attendance = Attendance.query.filter(
@@ -434,7 +449,7 @@ def get_today_attendance():
     """Get current user's attendance for today"""
     try:
         user_id = get_jwt_identity()
-        today = date.today()
+        today = get_local_today()
         
         attendance = Attendance.query.filter(
             Attendance.user_id == user_id,
@@ -472,7 +487,7 @@ def get_attendance_history():
         
         # Default to current month if no dates specified
         if not start_date and not end_date:
-            today = date.today()
+            today = get_local_today()
             first_day = today.replace(day=1)
             query = query.filter(Attendance.attendance_date >= first_day)
         
@@ -497,8 +512,8 @@ def get_attendance_summary():
         user_id = get_jwt_identity()
         
         # Get month/year from params or use current
-        month = request.args.get('month', date.today().month, type=int)
-        year = request.args.get('year', date.today().year, type=int)
+        month = request.args.get('month', get_local_today().month, type=int)
+        year = request.args.get('year', get_local_today().year, type=int)
         
         # Calculate date range
         first_day = date(year, month, 1)
@@ -552,7 +567,7 @@ def admin_get_all_attendance():
             return jsonify({'error': 'Unauthorized'}), 403
         
         # Filters
-        target_date = request.args.get('date', date.today().isoformat())
+        target_date = request.args.get('date', get_local_today().isoformat())
         target_user_id = request.args.get('user_id', type=int)
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 50, type=int)
@@ -605,7 +620,7 @@ def admin_verify_attendance(attendance_id):
             return jsonify({'error': 'Invalid action'}), 400
         
         attendance.verified_by = user_id
-        attendance.verified_at = datetime.now()
+        attendance.verified_at = get_local_now()
         
         db.session.commit()
         
@@ -683,8 +698,8 @@ def get_attendance_report():
 def get_monthly_summary():
     """Get monthly attendance summary with total hours per person"""
     try:
-        year = request.args.get('year', date.today().year, type=int)
-        month = request.args.get('month', date.today().month, type=int)
+        year = request.args.get('year', get_local_today().year, type=int)
+        month = request.args.get('month', get_local_today().month, type=int)
         
         # Get first and last day of month
         first_day = date(year, month, 1)
@@ -755,7 +770,7 @@ def get_monthly_summary():
 def get_today_late():
     """Get list of employees who are late today - for HR notification"""
     try:
-        today = date.today()
+        today = get_local_today()
         
         # Query late attendance for today
         late_attendances = Attendance.query.filter(
@@ -793,7 +808,7 @@ def get_today_late():
 def get_attendance_dashboard_stats():
     """Get attendance statistics for dashboard"""
     try:
-        today = date.today()
+        today = get_local_today()
         
         # Today's stats
         today_total = Attendance.query.filter(Attendance.attendance_date == today).count()

@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import func, and_
 from decimal import Decimal
+from utils.timezone import get_local_now, get_local_today
 
 hr_payroll_bp = Blueprint('hr_payroll', __name__)
 
@@ -187,7 +188,7 @@ def get_employee_salary_components(employee_id):
         and_(
             EmployeeSalaryComponent.employee_id == employee_id,
             EmployeeSalaryComponent.is_active == True,
-            EmployeeSalaryComponent.effective_from <= date.today()
+            EmployeeSalaryComponent.effective_from <= get_local_today()
         )
     ).join(SalaryComponent).all()
     
@@ -318,7 +319,7 @@ def mark_payroll_paid(record_id):
         record = PayrollRecord.query.get_or_404(record_id)
         
         record.status = 'paid'
-        record.payment_date = date.today()
+        record.payment_date = get_local_today()
         record.payment_method = data.get('payment_method', 'bank_transfer')
         
         db.session.commit()

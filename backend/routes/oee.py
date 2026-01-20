@@ -10,6 +10,7 @@ from sqlalchemy import func, and_, or_, desc
 import json
 import re
 import io
+from utils.timezone import get_local_now, get_local_today
 
 oee_bp = Blueprint('oee', __name__)
 
@@ -125,8 +126,13 @@ def get_records():
                             # Only non-idle goes to downtime
                             total_downtime_minutes += duration
                         
-                        # Add to breakdown for Top 3 display
-                        downtime_breakdown.append({'reason': reason, 'duration_minutes': duration, 'is_idle': is_idle})
+                        # Add to breakdown for Top 3 display (with frequency tracking)
+                        existing_dt = next((d for d in downtime_breakdown if d['reason'] == reason), None)
+                        if existing_dt:
+                            existing_dt['duration_minutes'] += duration
+                            existing_dt['frequency'] = existing_dt.get('frequency', 1) + 1
+                        else:
+                            downtime_breakdown.append({'reason': reason, 'duration_minutes': duration, 'is_idle': is_idle, 'frequency': 1})
             
             # Fallback: use sum of category fields if issues parsing yielded 0
             if total_downtime_minutes == 0:
@@ -246,10 +252,10 @@ def export_controller_excel():
                     start_date = latest_record.production_date
                     end_date = latest_record.production_date
                 else:
-                    start_date = datetime.now().date()
-                    end_date = datetime.now().date()
+                    start_date = get_local_now().date()
+                    end_date = get_local_now().date()
         else:
-            end_date = datetime.now().date()
+            end_date = get_local_now().date()
             if period == 'month':
                 start_date = end_date - timedelta(days=30)
             else:  # week
@@ -498,7 +504,7 @@ def export_controller_excel():
         wb.save(output)
         output.seek(0)
         
-        filename = f"controller_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        filename = f"controller_report_{get_local_now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         
         return send_file(
             output,
@@ -589,7 +595,7 @@ def get_downtime():
         
         shift_records = shift_query.order_by(ShiftProduction.production_date.desc()).limit(limit).all()
         for sp in shift_records:
-            base_time = datetime.combine(sp.production_date, sp.shift_start) if sp.production_date and sp.shift_start else datetime.now()
+            base_time = datetime.combine(sp.production_date, sp.shift_start) if sp.production_date and sp.shift_start else get_local_now()
             
             # Add downtime entries for each category that has minutes
             if sp.downtime_mesin and sp.downtime_mesin > 0:
@@ -813,7 +819,7 @@ def get_oee_dashboard():
         days = request.args.get('days', 30, type=int)
         
         # Date range
-        end_date = date.today()
+        end_date = get_local_today()
         start_date = end_date - timedelta(days=days)
         
         # Get OEERecord data
@@ -904,7 +910,7 @@ def get_oee_dashboard():
             next_maintenance = MaintenanceSchedule.query.filter(
                 MaintenanceSchedule.machine_id == machine.id,
                 MaintenanceSchedule.is_active == True,
-                MaintenanceSchedule.next_maintenance_date >= date.today()
+                MaintenanceSchedule.next_maintenance_date >= get_local_today()
             ).order_by(MaintenanceSchedule.next_maintenance_date).first()
             
             # Get recent alerts
@@ -1089,7 +1095,7 @@ def acknowledge_alert(alert_id):
         
         alert.status = 'acknowledged'
         alert.acknowledged_by = user_id
-        alert.acknowledged_at = datetime.utcnow()
+        alert.acknowledged_at = get_local_now()
         
         db.session.commit()
         
@@ -1110,7 +1116,7 @@ def resolve_alert(alert_id):
         
         alert.status = 'resolved'
         alert.resolved_by = user_id
-        alert.resolved_at = datetime.utcnow()
+        alert.resolved_at = get_local_now()
         alert.resolution_notes = data.get('resolution_notes', '')
         
         db.session.commit()
@@ -1264,7 +1270,7 @@ def get_daily_controller():
         if selected_date:
             target_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
         else:
-            target_date = date.today()
+            target_date = get_local_today()
         
         # Get all shift productions for this date
         shift_records = ShiftProduction.query.filter(
@@ -1463,13 +1469,16 @@ def get_daily_controller():
             if product_name and product_name not in machines_data[machine_id]['products']:
                 machines_data[machine_id]['products'].append(product_name)
             
-            # Accumulate downtime breakdown
+            # Accumulate downtime breakdown with frequency
             for dt in downtime_breakdown:
                 existing = next((d for d in machines_data[machine_id]['top_3_downtime'] if d['reason'] == dt['reason']), None)
                 if existing:
                     existing['duration_minutes'] += dt['duration_minutes']
+                    existing['frequency'] = existing.get('frequency', 1) + dt.get('frequency', 1)
                 else:
-                    machines_data[machine_id]['top_3_downtime'].append(dt.copy())
+                    dt_copy = dt.copy()
+                    dt_copy['frequency'] = dt.get('frequency', 1)
+                    machines_data[machine_id]['top_3_downtime'].append(dt_copy)
         
         # Keywords to exclude from Top 3 Downtime (biological/personal breaks + idle time + design change + operator setting)
         excluded_keywords = [
@@ -1608,7 +1617,7 @@ def get_efficiency_alerts():
         from models.production import ShiftProduction, Machine
         
         # Get today's date
-        today = datetime.now().date()
+        today = get_local_now().date()
         
         # Get all shift productions for today
         shift_records = ShiftProduction.query.filter(
@@ -1695,7 +1704,7 @@ def get_weekly_controller():
         if date_str:
             week_start = datetime.strptime(date_str, '%Y-%m-%d').date()
         else:
-            today = datetime.now().date()
+            today = get_local_now().date()
             week_start = today - timedelta(days=today.weekday())  # Monday
         
         week_end = week_start + timedelta(days=6)  # Sunday
@@ -1808,8 +1817,8 @@ def get_monthly_controller():
         from calendar import monthrange
         
         # Get month - default to current month
-        year = request.args.get('year', datetime.now().year, type=int)
-        month = request.args.get('month', datetime.now().month, type=int)
+        year = request.args.get('year', get_local_now().year, type=int)
+        month = request.args.get('month', get_local_now().month, type=int)
         
         month_start = date(year, month, 1)
         _, last_day = monthrange(year, month)
@@ -1929,8 +1938,8 @@ def get_production_quality_objectives():
         from models.production import ShiftProduction
         
         # Get year and month from params (default to current month)
-        year = request.args.get('year', type=int) or date.today().year
-        month = request.args.get('month', type=int) or date.today().month
+        year = request.args.get('year', type=int) or get_local_today().year
+        month = request.args.get('month', type=int) or get_local_today().month
         
         # Calculate month range
         month_start = date(year, month, 1)
@@ -2066,8 +2075,8 @@ def get_production_quality_objectives():
 def get_machine_monthly_targets():
     """Get all monthly targets for a specific period"""
     try:
-        year = request.args.get('year', type=int) or date.today().year
-        month = request.args.get('month', type=int) or date.today().month
+        year = request.args.get('year', type=int) or get_local_today().year
+        month = request.args.get('month', type=int) or get_local_today().month
         
         targets = MachineMonthlyTarget.query.filter(
             MachineMonthlyTarget.year == year,
@@ -2115,7 +2124,7 @@ def set_machine_monthly_target():
         if existing:
             existing.target_quantity = target_quantity
             existing.notes = notes
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = get_local_now()
         else:
             new_target = MachineMonthlyTarget(
                 machine_id=machine_id,
@@ -2157,7 +2166,7 @@ def set_bulk_machine_monthly_targets():
             
             if existing:
                 existing.target_quantity = target_quantity
-                existing.updated_at = datetime.utcnow()
+                existing.updated_at = get_local_now()
             else:
                 new_target = MachineMonthlyTarget(
                     machine_id=machine_id,
@@ -2182,8 +2191,8 @@ def get_machine_downtime_analysis():
     try:
         from models.production import ShiftProduction
         
-        year = request.args.get('year', type=int) or date.today().year
-        month = request.args.get('month', type=int) or date.today().month
+        year = request.args.get('year', type=int) or get_local_today().year
+        month = request.args.get('month', type=int) or get_local_today().month
         machine_id = request.args.get('machine_id', type=int)
         
         # Calculate month range
@@ -2350,8 +2359,8 @@ def get_machine_downtime_analysis():
 def get_downtime_root_causes():
     """Get root cause analysis records"""
     try:
-        year = request.args.get('year', type=int) or date.today().year
-        month = request.args.get('month', type=int) or date.today().month
+        year = request.args.get('year', type=int) or get_local_today().year
+        month = request.args.get('month', type=int) or get_local_today().month
         machine_id = request.args.get('machine_id', type=int)
         
         query = DowntimeRootCause.query.filter(
@@ -2420,7 +2429,7 @@ def create_downtime_root_cause():
         record.corrective_action = data.get('corrective_action')
         record.preventive_action = data.get('preventive_action')
         record.status = data.get('status', 'open')
-        record.updated_at = datetime.utcnow()
+        record.updated_at = get_local_now()
         
         db.session.commit()
         return jsonify({'message': 'Root cause analysis saved', 'id': record.id}), 200

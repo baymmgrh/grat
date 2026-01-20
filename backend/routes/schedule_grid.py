@@ -11,6 +11,7 @@ from models.product_new_schema import ProductNew
 from models.production import WorkOrder, BillOfMaterials
 from datetime import datetime, timedelta
 import json
+from utils.timezone import get_local_now, get_local_today
 
 
 schedule_grid_bp = Blueprint('schedule_grid', __name__)
@@ -162,7 +163,7 @@ class MonthlySchedule(db.Model):
 def get_week_start(date_str):
     """Get Monday of the week for given date"""
     if not date_str:
-        date = datetime.now().date()
+        date = get_local_now().date()
     else:
         date = datetime.strptime(date_str, '%Y-%m-%d').date()
     
@@ -333,7 +334,7 @@ def save_schedule_notes():
 
 def generate_wo_number():
     """Generate unique Work Order number"""
-    today = datetime.now()
+    today = get_local_now()
     prefix = f"WO-{today.strftime('%Y%m')}-"
     
     # Find last WO number this month
@@ -456,7 +457,7 @@ def generate_work_orders_batch():
         if target_date_str:
             target_date = datetime.strptime(target_date_str, '%Y-%m-%d').date()
         else:
-            target_date = datetime.now().date()
+            target_date = get_local_now().date()
         
         # Find all schedules that have this date in their schedule_days and no WO yet
         all_schedules = ScheduleGridItem.query.filter(
@@ -531,7 +532,7 @@ def generate_work_orders_batch():
 def check_schedules_for_today():
     """Check schedules that need WO generation for today"""
     try:
-        today = datetime.now().date()
+        today = get_local_now().date()
         today_str = today.isoformat()
         
         # Find schedules for today without WO
@@ -812,8 +813,8 @@ def generate_work_order_from_approved_schedule(id):
 def get_monthly_schedules():
     """Get monthly schedules for a specific month/year"""
     try:
-        year = request.args.get('year', datetime.now().year, type=int)
-        month = request.args.get('month', datetime.now().month, type=int)
+        year = request.args.get('year', get_local_now().year, type=int)
+        month = request.args.get('month', get_local_now().month, type=int)
         
         schedules = MonthlySchedule.query.filter_by(
             year=year,
@@ -1194,8 +1195,8 @@ def generate_monthly_schedule_print():
         company_addr3 = company['address_line3']
         company_logo = company['logo']
         
-        year = request.args.get('year', datetime.now().year, type=int)
-        month = request.args.get('month', datetime.now().month, type=int)
+        year = request.args.get('year', get_local_now().year, type=int)
+        month = request.args.get('month', get_local_now().month, type=int)
         
         # Get all schedules for this month
         schedules = MonthlySchedule.query.filter_by(
@@ -1420,7 +1421,7 @@ def generate_monthly_schedule_print():
                 </div>
                 <div class="info-item">
                     <span class="info-label">Tanggal Cetak:</span>
-                    <span class="info-value">{datetime.now().strftime('%d %b %Y')}</span>
+                    <span class="info-value">{get_local_now().strftime('%d %b %Y')}</span>
                 </div>
             </div>
             

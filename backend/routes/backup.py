@@ -12,6 +12,7 @@ import os
 import shutil
 import zipfile
 import tempfile
+from utils.timezone import get_local_now, get_local_today
 
 backup_bp = Blueprint('backup', __name__)
 
@@ -100,7 +101,7 @@ def create_backup():
             return jsonify({'error': 'Database file not found'}), 404
         
         backup_dir = get_backup_dir()
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        timestamp = get_local_now().strftime('%Y-%m-%d_%H-%M-%S')
         
         # Load settings
         metadata = load_backup_metadata()
@@ -136,7 +137,7 @@ def create_backup():
             'id': len(metadata.get('backups', [])) + 1,
             'filename': filename,
             'size': file_size,
-            'created_at': datetime.now().isoformat(),
+            'created_at': get_local_now().isoformat(),
             'backup_type': 'manual',
             'status': 'completed',
             'description': description or f'Manual backup by user {user_id}',
@@ -182,7 +183,7 @@ def restore_backup(backup_id):
             return jsonify({'error': 'Database path not configured'}), 500
         
         # Create a backup of current database before restore
-        pre_restore_backup = os.path.join(backup_dir, f'pre_restore_{datetime.now().strftime("%Y%m%d_%H%M%S")}.db')
+        pre_restore_backup = os.path.join(backup_dir, f'pre_restore_{get_local_now().strftime("%Y%m%d_%H%M%S")}.db')
         if os.path.exists(db_path):
             shutil.copy2(db_path, pre_restore_backup)
         
@@ -332,7 +333,7 @@ def upload_backup():
             return jsonify({'error': 'Invalid file type. Only .db and .zip files are allowed'}), 400
         
         backup_dir = get_backup_dir()
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        timestamp = get_local_now().strftime('%Y-%m-%d_%H-%M-%S')
         filename = f'uploaded_{timestamp}{ext}'
         backup_path = os.path.join(backup_dir, filename)
         
@@ -345,7 +346,7 @@ def upload_backup():
             'id': len(metadata.get('backups', [])) + 1,
             'filename': filename,
             'size': file_size,
-            'created_at': datetime.now().isoformat(),
+            'created_at': get_local_now().isoformat(),
             'backup_type': 'uploaded',
             'status': 'completed',
             'description': f'Uploaded: {file.filename}',

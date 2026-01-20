@@ -5,6 +5,7 @@ from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime, timedelta
 from sqlalchemy import func, extract
+from utils.timezone import get_local_now, get_local_today
 
 finance_bp = Blueprint('finance', __name__)
 
@@ -246,7 +247,7 @@ def get_accounts_receivable():
                 'total_amount': float(i.total_amount),
                 'paid_amount': float(i.paid_amount),
                 'balance_due': float(i.balance_due),
-                'days_overdue': (datetime.now().date() - i.due_date).days if i.due_date and datetime.now().date() > i.due_date else 0,
+                'days_overdue': (get_local_now().date() - i.due_date).days if i.due_date and get_local_now().date() > i.due_date else 0,
                 'status': i.status
             } for i in ar_invoices.items],
             'total': ar_invoices.total,
@@ -285,7 +286,7 @@ def get_accounts_payable():
                 'total_amount': float(i.total_amount),
                 'paid_amount': float(i.paid_amount),
                 'balance_due': float(i.balance_due),
-                'days_overdue': (datetime.now().date() - i.due_date).days if i.due_date and datetime.now().date() > i.due_date else 0,
+                'days_overdue': (get_local_now().date() - i.due_date).days if i.due_date and get_local_now().date() > i.due_date else 0,
                 'status': i.status
             } for i in ap_invoices.items],
             'total': ap_invoices.total,
@@ -392,7 +393,7 @@ def get_cash_bank():
 @jwt_required()
 def get_basic_budgets():
     try:
-        year = request.args.get('year', datetime.now().year, type=int)
+        year = request.args.get('year', get_local_now().year, type=int)
         
         # Return empty budgets - to be populated from database
         # TODO: Implement Budget model and fetch from database
@@ -480,8 +481,8 @@ def get_tax_management():
     try:
         from models.finance import TaxTransaction
         
-        current_month = datetime.now().month
-        current_year = datetime.now().year
+        current_month = get_local_now().month
+        current_year = get_local_now().year
         reporting_period = f"{current_year}-{current_month:02d}"
         
         # Get tax transactions for current period
@@ -561,7 +562,7 @@ def get_consolidation():
 @jwt_required()
 def get_income_statement():
     try:
-        year = request.args.get('year', datetime.now().year, type=int)
+        year = request.args.get('year', get_local_now().year, type=int)
         
         # Calculate from actual accounting entries
         # Calculate income statement from actual data
@@ -638,7 +639,7 @@ def get_income_statement():
 @jwt_required()
 def get_balance_sheet():
     try:
-        as_of_date = request.args.get('date', datetime.now().date().isoformat())
+        as_of_date = request.args.get('date', get_local_now().date().isoformat())
         
         # Calculate from actual accounting entries
         # TODO: Implement proper balance sheet calculation from database
@@ -691,7 +692,7 @@ def get_balance_sheet():
 @jwt_required()
 def get_cash_flow_report():
     try:
-        year = request.args.get('year', datetime.now().year, type=int)
+        year = request.args.get('year', get_local_now().year, type=int)
         
         # Calculate from actual cash transactions
         # TODO: Implement proper cash flow calculation from database
@@ -842,7 +843,7 @@ def get_dashboard_cash_flow():
             from datetime import datetime, timedelta
             
             cash_flow = []
-            current_date = datetime.now()
+            current_date = get_local_now()
             
             # Check if we have payment data
             payment_count = db.session.query(Payment).count()

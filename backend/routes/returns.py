@@ -5,6 +5,7 @@ from models import SalesOrder, Customer, Product, User, Inventory, WasteRecord
 from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime, date
+from utils.timezone import get_local_now, get_local_today
 
 returns_bp = Blueprint('returns', __name__)
 
@@ -215,7 +216,7 @@ def create_qc_inspection():
         
         # Update return status
         customer_return.qc_status = qc_record.overall_result
-        customer_return.qc_date = datetime.utcnow()
+        customer_return.qc_date = get_local_now()
         customer_return.qc_by = user_id
         customer_return.qc_notes = data.get('qc_notes')
         
@@ -287,7 +288,7 @@ def create_disposition():
         # Update return status
         customer_return.status = 'processed'
         customer_return.processed_by = user_id
-        customer_return.processed_date = datetime.utcnow()
+        customer_return.processed_date = get_local_now()
         
         db.session.commit()
         

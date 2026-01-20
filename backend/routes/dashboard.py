@@ -13,6 +13,7 @@ from models.rd import ResearchProject
 from sqlalchemy import func, desc, and_
 from datetime import datetime, timedelta, date
 import json
+from utils.timezone import get_local_now, get_local_today
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -21,7 +22,7 @@ dashboard_bp = Blueprint('dashboard', __name__)
 def get_overview():
     try:
         # Sales metrics - simplified
-        today = datetime.now().date()
+        today = get_local_now().date()
         month_start = today.replace(day=1)
         
         try:
@@ -100,7 +101,7 @@ def get_overview():
 def get_sales_chart():
     try:
         days = request.args.get('days', 30, type=int)
-        start_date = datetime.now() - timedelta(days=days)
+        start_date = get_local_now() - timedelta(days=days)
         
         results = db.session.query(
             func.date(SalesOrder.order_date).label('date'),
@@ -123,7 +124,7 @@ def get_sales_chart():
 def get_production_chart():
     try:
         days = request.args.get('days', 30, type=int)
-        start_date = datetime.now() - timedelta(days=days)
+        start_date = get_local_now() - timedelta(days=days)
         
         results = db.session.query(
             func.date(WorkOrder.actual_end_date).label('date'),
@@ -150,7 +151,7 @@ def get_executive_dashboard():
         from models.production import ShiftProduction
         
         # Date ranges
-        today = date.today()
+        today = get_local_today()
         week_start = today - timedelta(days=7)
         month_start = today.replace(day=1)
         
@@ -416,7 +417,7 @@ def get_executive_dashboard():
             'critical_issues': critical_issues,
             'summary': {
                 'total_modules': 11,
-                'last_updated': datetime.now().isoformat()
+                'last_updated': get_local_now().isoformat()
             },
             'sales_orders': {
                 'count': sales_orders_count

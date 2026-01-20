@@ -9,6 +9,7 @@ from utils.i18n import success_response, error_response
 from utils import generate_number
 from datetime import datetime
 from sqlalchemy import func
+from utils.timezone import get_local_now, get_local_today
 
 material_issue_bp = Blueprint('material_issue', __name__)
 
@@ -136,7 +137,7 @@ def create_material_issue():
         mi = MaterialIssue(
             issue_number=issue_number,
             work_order_id=work_order_id,
-            issue_date=datetime.utcnow(),
+            issue_date=get_local_now(),
             requested_by=user_id,
             status='pending',
             priority=data.get('priority', 'normal'),
@@ -218,7 +219,7 @@ def create_material_issue_from_wo(work_order_id):
         mi = MaterialIssue(
             issue_number=issue_number,
             work_order_id=work_order_id,
-            issue_date=datetime.utcnow(),
+            issue_date=get_local_now(),
             requested_by=user_id,
             status='pending',
             priority='normal',
@@ -281,7 +282,7 @@ def approve_material_issue(id):
         
         mi.status = 'approved'
         mi.approved_by = user_id
-        mi.approved_date = datetime.utcnow()
+        mi.approved_date = get_local_now()
         
         # Reserve materials in inventory
         for item in mi.items:
@@ -371,7 +372,7 @@ def issue_materials(id):
             else:
                 inventory.quantity_available -= issue_qty
             
-            inventory.updated_at = datetime.utcnow()
+            inventory.updated_at = get_local_now()
             
             # Update item
             item.issued_quantity = float(item.issued_quantity or 0) + issue_qty
@@ -389,7 +390,7 @@ def issue_materials(id):
                 material_id=item.material_id,
                 location_id=inventory.location_id,
                 movement_type='stock_out',
-                movement_date=datetime.utcnow().date(),
+                movement_date=get_local_now().date(),
                 quantity=issue_qty,
                 reference_number=mi.issue_number,
                 reference_type='material_issue',
@@ -408,7 +409,7 @@ def issue_materials(id):
         
         if all_issued:
             mi.status = 'issued'
-            mi.issued_date = datetime.utcnow()
+            mi.issued_date = get_local_now()
         elif any_issued:
             mi.status = 'partial'
         

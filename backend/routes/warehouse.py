@@ -6,6 +6,7 @@ from utils.i18n import success_response, error_response, get_message
 from sqlalchemy import or_, func
 from sqlalchemy.orm import joinedload
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 warehouse_bp = Blueprint('warehouse', __name__)
 
@@ -357,7 +358,7 @@ def add_to_inventory():
         # Update quantities
         inventory.quantity_on_hand += quantity
         inventory.quantity_available += quantity
-        inventory.updated_at = datetime.utcnow()
+        inventory.updated_at = get_local_now()
         
         # Create movement record
         movement = InventoryMovement(
@@ -366,7 +367,7 @@ def add_to_inventory():
             material_id=material_id,
             location_id=location_id,
             movement_type='stock_in',
-            movement_date=datetime.utcnow().date(),
+            movement_date=get_local_now().date(),
             quantity=quantity,
             reference_number=data.get('reference_number'),
             reference_type=data.get('reference_type', 'manual_input'),
@@ -422,7 +423,7 @@ def create_movement():
             material_id=material_id,
             location_id=data.get('location_id') or data.get('to_location_id'),
             movement_type=movement_type,
-            movement_date=datetime.utcnow().date(),
+            movement_date=get_local_now().date(),
             quantity=quantity,
             reference_number=data.get('reference_number'),
             reference_type=data.get('reference_type'),
@@ -582,7 +583,7 @@ def get_warehouse_dashboard():
         from sqlalchemy import func, and_
         
         # Calculate date range for trends
-        end_date = datetime.utcnow()
+        end_date = get_local_now()
         start_date = end_date - timedelta(days=30)
         
         # Summary metrics
@@ -784,7 +785,7 @@ def get_warehouse_alerts():
                 'message': f"{item.name} is running low (Current: {item.quantity}, Min: {item.minimum_stock})",
                 'product_id': item.id,
                 'location_code': item.location_code,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             })
         
         # Add out of stock alerts
@@ -797,7 +798,7 @@ def get_warehouse_alerts():
                 'message': f"{item.name} is out of stock",
                 'product_id': item.id,
                 'location_code': item.location_code,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             })
         
         return jsonify({'alerts': alerts}), 200
@@ -812,7 +813,7 @@ def get_inventory_turnover():
         from datetime import datetime, timedelta
         
         period = int(request.args.get('period', 90))  # days
-        end_date = datetime.utcnow()
+        end_date = get_local_now()
         start_date = end_date - timedelta(days=period)
         
         # Calculate inventory turnover

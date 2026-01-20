@@ -12,6 +12,7 @@ from models.finance import AccountingEntry
 from datetime import datetime
 from sqlalchemy import func
 from utils import generate_number
+from utils.timezone import get_local_now, get_local_today
 
 wip_accounting_bp = Blueprint('wip_accounting', __name__, url_prefix='/api/wip-accounting')
 
@@ -256,7 +257,7 @@ def post_wip_transaction_to_gl(id):
             status='posted',
             created_by=current_user_id,
             approved_by=current_user_id,
-            approved_at=datetime.utcnow()
+            approved_at=get_local_now()
         )
         
         db.session.add(gl_entry)
@@ -364,7 +365,7 @@ def transfer_to_finished_goods():
         # Create COGM Transfer
         cogm_transfer = COGMTransfer(
             transfer_number=transfer_number,
-            transfer_date=datetime.utcnow(),
+            transfer_date=get_local_now(),
             work_order_id=wip_ledger.work_order_id,
             wip_ledger_id=wip_ledger.id,
             product_id=wip_ledger.product_id,
@@ -384,14 +385,14 @@ def transfer_to_finished_goods():
         
         # Auto-post to GL: WIP → Finished Goods
         gl_entry = AccountingEntry(
-            entry_date=datetime.utcnow(),
+            entry_date=get_local_now(),
             description=f'COGM Transfer - {transfer_number}',
             reference=transfer_number,
             entry_type='cogm_transfer',
             status='posted',
             created_by=current_user_id,
             approved_by=current_user_id,
-            approved_at=datetime.utcnow()
+            approved_at=get_local_now()
         )
         
         db.session.add(gl_entry)
@@ -413,7 +414,7 @@ def transfer_to_finished_goods():
         # Update WIP Ledger
         wip_ledger.cogm_amount = total_cost
         wip_ledger.cogm_posted = True
-        wip_ledger.cogm_posting_date = datetime.utcnow()
+        wip_ledger.cogm_posting_date = get_local_now()
         wip_ledger.cogm_entry_id = gl_entry.id
         wip_ledger.completed_quantity = quantity
         wip_ledger.status = 'completed'
@@ -461,14 +462,14 @@ def post_cogs():
         
         # Auto-post to GL: COGS (Debit) / Finished Goods (Credit)
         gl_entry = AccountingEntry(
-            entry_date=datetime.utcnow(),
+            entry_date=get_local_now(),
             description=f'COGS - SO {data.get("sales_order_number")}',
             reference=data.get('sales_order_number'),
             entry_type='cogs',
             status='posted',
             created_by=current_user_id,
             approved_by=current_user_id,
-            approved_at=datetime.utcnow()
+            approved_at=get_local_now()
         )
         
         db.session.add(gl_entry)
@@ -485,7 +486,7 @@ def post_cogs():
         
         cogs_posting.is_posted_to_gl = True
         cogs_posting.gl_entry_id = gl_entry.id
-        cogs_posting.posting_date = datetime.utcnow()
+        cogs_posting.posting_date = get_local_now()
         
         db.session.commit()
         

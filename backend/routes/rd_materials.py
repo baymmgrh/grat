@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import or_
 import json
+from utils.timezone import get_local_now, get_local_today
 
 rd_materials_bp = Blueprint('rd_materials', __name__)
 
@@ -258,7 +259,7 @@ def update_material(id):
         elif material.quantity_used > 0:
             material.status = 'in_use'
         
-        material.updated_at = datetime.utcnow()
+        material.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -302,7 +303,7 @@ def approve_material_request(id):
         
         material.approved_by = user_id
         material.status = 'ordered'
-        material.updated_at = datetime.utcnow()
+        material.updated_at = get_local_now()
         
         db.session.commit()
         
@@ -333,7 +334,7 @@ def receive_material(id):
         if data.get('storage_location'):
             material.storage_location = data['storage_location']
         
-        material.updated_at = datetime.utcnow()
+        material.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -362,7 +363,7 @@ def use_material(id):
         material.quantity_remaining -= quantity_to_use
         
         if not material.usage_date:
-            material.usage_date = date.today()
+            material.usage_date = get_local_today()
         
         # Update status
         if material.quantity_remaining <= 0:
@@ -370,7 +371,7 @@ def use_material(id):
         else:
             material.status = 'in_use'
         
-        material.updated_at = datetime.utcnow()
+        material.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({
@@ -426,7 +427,7 @@ def get_materials_analytics():
         
         # Expiring materials (within 30 days)
         expiring_materials = query.filter(
-            RDMaterial.expiry_date.between(date.today(), date.today().replace(day=date.today().day + 30))
+            RDMaterial.expiry_date.between(get_local_today(), get_local_today().replace(day=get_local_today().day + 30))
         ).count()
         
         return jsonify({

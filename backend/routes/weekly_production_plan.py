@@ -8,6 +8,7 @@ from models import db, WeeklyProductionPlan, WeeklyProductionPlanItem, Product, 
 from datetime import datetime, timedelta
 from sqlalchemy import func, and_
 import json
+from utils.timezone import get_local_now, get_local_today
 
 weekly_plan_bp = Blueprint('weekly_plan', __name__)
 
@@ -28,7 +29,7 @@ def get_week_dates(year, week_number):
 
 def generate_plan_number():
     """Generate unique plan number"""
-    today = datetime.now()
+    today = get_local_now()
     prefix = f"WPP-{today.strftime('%Y%m')}"
     
     last_plan = WeeklyProductionPlan.query.filter(
@@ -413,7 +414,7 @@ def approve_plan(id):
         
         plan.status = 'approved'
         plan.approved_by = current_user_id
-        plan.approved_at = datetime.utcnow()
+        plan.approved_at = get_local_now()
         
         db.session.commit()
         
@@ -443,7 +444,7 @@ def reject_plan(id):
         
         plan.status = 'rejected'
         plan.approved_by = current_user_id
-        plan.approved_at = datetime.utcnow()
+        plan.approved_at = get_local_now()
         plan.notes = f"[DITOLAK] {rejection_reason}\n\n{plan.notes or ''}"
         
         db.session.commit()
@@ -516,7 +517,7 @@ def generate_work_orders(id):
                 continue  # Already has WO
             
             # Generate WO number
-            today = datetime.now()
+            today = get_local_now()
             wo_prefix = f"WO-{today.strftime('%Y%m%d')}"
             last_wo = WorkOrder.query.filter(
                 WorkOrder.wo_number.like(f"{wo_prefix}%")
@@ -578,7 +579,7 @@ def generate_work_orders(id):
 @jwt_required()
 def get_current_week():
     """Get current week info"""
-    today = datetime.now()
+    today = get_local_now()
     week_number = today.isocalendar()[1]
     year = today.year
     week_start, week_end = get_week_dates(year, week_number)

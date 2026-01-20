@@ -10,6 +10,7 @@ from models.workflow_integration import WorkflowAutomation, WorkflowStep
 from utils.i18n import success_response, error_response
 from utils import generate_number
 from datetime import datetime, timedelta
+from utils.timezone import get_local_now, get_local_today
 
 workflow_complete_bp = Blueprint('workflow_complete', __name__)
 
@@ -24,7 +25,7 @@ def confirm_sales_order(sales_order_id):
         # Confirm the sales order
         sales_order.status = 'confirmed'
         sales_order.approved_by = user_id
-        sales_order.approved_at = datetime.utcnow()
+        sales_order.approved_at = get_local_now()
         
         db.session.commit()
         
@@ -75,7 +76,7 @@ def complete_production(work_order_id):
         # Update work order status
         work_order.status = 'completed'
         work_order.actual_quantity = data.get('actual_quantity', work_order.quantity_to_produce)
-        work_order.completed_date = datetime.utcnow()
+        work_order.completed_date = get_local_now()
         work_order.completed_by = user_id
         
         # Create Quality Inspection
@@ -84,7 +85,7 @@ def complete_production(work_order_id):
             work_order_id=work_order_id,
             product_id=work_order.product_id,
             quantity_inspected=work_order.actual_quantity,
-            inspection_date=datetime.utcnow(),
+            inspection_date=get_local_now(),
             inspector_id=user_id,
             status='pending'
         )
@@ -127,7 +128,7 @@ def approve_quality(inspection_id):
         # Update quality inspection
         inspection.status = 'passed' if data.get('approved', True) else 'failed'
         inspection.inspector_notes = data.get('notes', '')
-        inspection.inspection_date = datetime.utcnow()
+        inspection.inspection_date = get_local_now()
         inspection.inspector_id = user_id
         
         if inspection.status == 'passed':
@@ -149,7 +150,7 @@ def approve_quality(inspection_id):
                     shipping_number=generate_number('SHP', ShippingOrder, 'shipping_number'),
                     sales_order_id=sales_order.id,
                     customer_id=sales_order.customer_id,
-                    shipping_date=datetime.utcnow() + timedelta(days=1),
+                    shipping_date=get_local_now() + timedelta(days=1),
                     expected_delivery_date=sales_order.delivery_date,
                     status='preparing',
                     prepared_by=user_id,
@@ -223,7 +224,7 @@ def ship_order(shipping_id):
         
         # Update shipping status
         shipping_order.status = 'shipped'
-        shipping_order.actual_shipping_date = datetime.utcnow()
+        shipping_order.actual_shipping_date = get_local_now()
         shipping_order.tracking_number = data.get('tracking_number')
         shipping_order.carrier = data.get('carrier')
         
@@ -236,8 +237,8 @@ def ship_order(shipping_id):
             invoice_number=generate_number('INV', Invoice, 'invoice_number'),
             sales_order_id=sales_order.id,
             customer_id=sales_order.customer_id,
-            invoice_date=datetime.utcnow(),
-            due_date=datetime.utcnow() + timedelta(days=30),
+            invoice_date=get_local_now(),
+            due_date=get_local_now() + timedelta(days=30),
             subtotal=sales_order.subtotal,
             tax_amount=sales_order.tax_amount,
             total_amount=sales_order.total_amount,
@@ -268,7 +269,7 @@ def ship_order(shipping_id):
             step_order=5,
             status='completed',
             completed_by=user_id,
-            completed_at=datetime.utcnow()
+            completed_at=get_local_now()
         )
         db.session.add(workflow_step)
         

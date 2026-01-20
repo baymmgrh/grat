@@ -8,6 +8,7 @@ from models.integration_extended import (
 )
 from datetime import datetime, timedelta
 import json
+from utils.timezone import get_local_now, get_local_today
 
 integration_bp = Blueprint('integration', __name__)
 
@@ -25,10 +26,10 @@ def get_connectors():
                 'type': 'erp',
                 'endpoint_url': 'https://sap.company.com/api/v1',
                 'is_active': True,
-                'last_sync': (datetime.utcnow() - timedelta(hours=2)).isoformat(),
+                'last_sync': (get_local_now() - timedelta(hours=2)).isoformat(),
                 'sync_status': 'success',
                 'request_count': 1250,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             },
             {
                 'id': 2,
@@ -36,10 +37,10 @@ def get_connectors():
                 'type': 'crm',
                 'endpoint_url': 'https://company.salesforce.com/services/data/v50.0',
                 'is_active': True,
-                'last_sync': (datetime.utcnow() - timedelta(minutes=30)).isoformat(),
+                'last_sync': (get_local_now() - timedelta(minutes=30)).isoformat(),
                 'sync_status': 'success',
                 'request_count': 850,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             },
             {
                 'id': 3,
@@ -47,11 +48,11 @@ def get_connectors():
                 'type': 'accounting',
                 'endpoint_url': 'https://accounting.company.com/api',
                 'is_active': False,
-                'last_sync': (datetime.utcnow() - timedelta(days=1)).isoformat(),
+                'last_sync': (get_local_now() - timedelta(days=1)).isoformat(),
                 'sync_status': 'failed',
                 'error_message': 'Connection timeout',
                 'request_count': 320,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             }
         ]
         
@@ -93,7 +94,7 @@ def create_connector():
             'is_active': data.get('is_active', True),
             'sync_status': 'never',
             'request_count': 0,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': get_local_now().isoformat()
         }
         
         return jsonify({
@@ -205,7 +206,7 @@ def get_api_endpoints():
                 'auth_required': True,
                 'roles_allowed': ['admin', 'user'],
                 'request_count': 2500,
-                'last_accessed': (datetime.utcnow() - timedelta(minutes=5)).isoformat()
+                'last_accessed': (get_local_now() - timedelta(minutes=5)).isoformat()
             },
             {
                 'id': 2,
@@ -217,7 +218,7 @@ def get_api_endpoints():
                 'auth_required': True,
                 'roles_allowed': ['admin', 'manager'],
                 'request_count': 850,
-                'last_accessed': (datetime.utcnow() - timedelta(minutes=2)).isoformat()
+                'last_accessed': (get_local_now() - timedelta(minutes=2)).isoformat()
             },
             {
                 'id': 3,
@@ -229,7 +230,7 @@ def get_api_endpoints():
                 'auth_required': True,
                 'roles_allowed': ['admin'],
                 'request_count': 120,
-                'last_accessed': (datetime.utcnow() - timedelta(hours=2)).isoformat()
+                'last_accessed': (get_local_now() - timedelta(hours=2)).isoformat()
             }
         ]
         
@@ -271,7 +272,7 @@ def create_api_endpoint():
             'auth_required': data.get('auth_required', True),
             'roles_allowed': data.get('roles_allowed', []),
             'request_count': 0,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': get_local_now().isoformat()
         }
         
         return jsonify({
@@ -301,8 +302,8 @@ def get_sync_jobs():
                 'sync_type': 'incremental',
                 'schedule': 'Every 4 hours',
                 'is_active': True,
-                'last_run': (datetime.utcnow() - timedelta(hours=3)).isoformat(),
-                'next_run': (datetime.utcnow() + timedelta(hours=1)).isoformat(),
+                'last_run': (get_local_now() - timedelta(hours=3)).isoformat(),
+                'next_run': (get_local_now() + timedelta(hours=1)).isoformat(),
                 'status': 'success',
                 'records_synced': 1250
             },
@@ -314,8 +315,8 @@ def get_sync_jobs():
                 'sync_type': 'full',
                 'schedule': 'Daily at 2:00 AM',
                 'is_active': True,
-                'last_run': (datetime.utcnow() - timedelta(hours=18)).isoformat(),
-                'next_run': (datetime.utcnow() + timedelta(hours=6)).isoformat(),
+                'last_run': (get_local_now() - timedelta(hours=18)).isoformat(),
+                'next_run': (get_local_now() + timedelta(hours=6)).isoformat(),
                 'status': 'success',
                 'records_synced': 850
             },
@@ -327,7 +328,7 @@ def get_sync_jobs():
                 'sync_type': 'incremental',
                 'schedule': 'Every hour',
                 'is_active': False,
-                'last_run': (datetime.utcnow() - timedelta(days=1)).isoformat(),
+                'last_run': (get_local_now() - timedelta(days=1)).isoformat(),
                 'status': 'failed',
                 'error_message': 'Connection refused by source system',
                 'records_synced': 0
@@ -355,7 +356,7 @@ def run_sync_job(job_id):
             'success': True,
             'message': 'Sync job started successfully',
             'job_id': job_id,
-            'started_at': datetime.utcnow().isoformat()
+            'started_at': get_local_now().isoformat()
         })
         
     except Exception as e:
@@ -398,10 +399,10 @@ def get_webhooks():
                 'is_active': True,
                 'retry_count': 3,
                 'timeout_seconds': 30,
-                'last_triggered': (datetime.utcnow() - timedelta(minutes=15)).isoformat(),
+                'last_triggered': (get_local_now() - timedelta(minutes=15)).isoformat(),
                 'success_count': 1250,
                 'failure_count': 5,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             },
             {
                 'id': 2,
@@ -411,10 +412,10 @@ def get_webhooks():
                 'is_active': True,
                 'retry_count': 5,
                 'timeout_seconds': 45,
-                'last_triggered': (datetime.utcnow() - timedelta(hours=2)).isoformat(),
+                'last_triggered': (get_local_now() - timedelta(hours=2)).isoformat(),
                 'success_count': 850,
                 'failure_count': 12,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             },
             {
                 'id': 3,
@@ -426,7 +427,7 @@ def get_webhooks():
                 'timeout_seconds': 30,
                 'success_count': 120,
                 'failure_count': 8,
-                'created_at': datetime.utcnow().isoformat()
+                'created_at': get_local_now().isoformat()
             }
         ]
         
@@ -468,7 +469,7 @@ def create_webhook():
             'timeout_seconds': data.get('timeout_seconds', 30),
             'success_count': 0,
             'failure_count': 0,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': get_local_now().isoformat()
         }
         
         return jsonify({

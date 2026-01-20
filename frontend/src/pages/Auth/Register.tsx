@@ -7,7 +7,7 @@ import {
   ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import { useState, useEffect } from 'react'
-import axiosInstance from '../../utils/axiosConfig'
+import { publicApi } from '../../utils/axiosConfig'
 import toast from 'react-hot-toast'
 
 interface RoleOption {
@@ -56,7 +56,7 @@ export default function Register() {
 
   const loadCompanySettings = async () => {
     try {
-      const response = await axiosInstance.get('/api/settings/company/public')
+      const response = await publicApi.get('/api/settings/company/public')
       if (response.data && response.data.name) {
         setCompanyName(response.data.name)
       }
@@ -69,7 +69,7 @@ export default function Register() {
   const loadRoles = async () => {
     try {
       setLoadingRoles(true)
-      const response = await axiosInstance.get('/api/settings/roles/public')
+      const response = await publicApi.get('/api/settings/roles/public')
       if (response.data && response.data.categories) {
         setRoleCategories(response.data.categories)
       }
@@ -121,7 +121,7 @@ export default function Register() {
         role_id: parseInt(formData.role_id)
       }
 
-      await axiosInstance.post('/api/auth/register', registrationData)
+      await publicApi.post('/api/auth/register', registrationData)
       toast.success('Registration successful! You can now login.')
       navigate('/login')
     } catch (error: any) {

@@ -6,6 +6,7 @@ from datetime import datetime
 import psycopg2
 import redis
 import os
+from utils.timezone import get_local_now, get_local_today
 
 health_bp = Blueprint('health', __name__)
 
@@ -17,7 +18,7 @@ def health_check():
     """
     return jsonify({
         'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': get_local_now().isoformat(),
         'service': 'ERP Backend',
         'version': '1.0.0'
     }), 200
@@ -30,7 +31,7 @@ def detailed_health_check():
     """
     health_status = {
         'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': get_local_now().isoformat(),
         'service': 'ERP Backend',
         'version': '1.0.0',
         'checks': {}
@@ -84,13 +85,13 @@ def readiness_check():
         db.session.execute('SELECT 1')
         return jsonify({
             'status': 'ready',
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': get_local_now().isoformat()
         }), 200
     except Exception as e:
         return jsonify({
             'status': 'not ready',
             'error': str(e),
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': get_local_now().isoformat()
         }), 503
 
 
@@ -102,5 +103,5 @@ def liveness_check():
     """
     return jsonify({
         'status': 'alive',
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': get_local_now().isoformat()
     }), 200

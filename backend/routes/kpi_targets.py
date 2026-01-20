@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, KPITarget, seed_kpi_targets
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 kpi_targets_bp = Blueprint('kpi_targets', __name__)
 
@@ -76,7 +77,7 @@ def update_kpi_target(id):
         if 'period_type' in data:
             target.period_type = data['period_type']
         
-        target.updated_at = datetime.utcnow()
+        target.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({
@@ -147,7 +148,7 @@ def delete_kpi_target(id):
             return jsonify({'success': False, 'error': 'KPI target not found'}), 404
         
         target.is_active = False
-        target.updated_at = datetime.utcnow()
+        target.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify({

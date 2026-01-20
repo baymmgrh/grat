@@ -14,6 +14,7 @@ from utils import generate_number
 from datetime import datetime, timedelta
 from sqlalchemy import and_, or_
 import traceback
+from utils.timezone import get_local_now, get_local_today
 
 workflow_bp = Blueprint('workflow_integration', __name__)
 
@@ -145,8 +146,8 @@ def mrp_to_purchase_order():
         po = PurchaseOrder(
             po_number=po_number,
             supplier_id=supplier_id,
-            order_date=datetime.utcnow(),
-            required_date=datetime.utcnow() + timedelta(days=7),
+            order_date=get_local_now(),
+            required_date=get_local_now() + timedelta(days=7),
             status='draft',
             notes=f'Auto-generated from MRP for SO: {requirements[0].get("source_number", "")}',
             created_by=user_id
@@ -245,9 +246,9 @@ def mrp_to_work_order():
             quantity_produced=0,  # Will be updated during production
             quantity_good=0,
             quantity_scrap=0,
-            required_date=so.required_date if so.required_date else (datetime.utcnow() + timedelta(days=7)).date(),
-            scheduled_start_date=datetime.utcnow(),
-            scheduled_end_date=so.required_date if so.required_date else datetime.utcnow() + timedelta(days=7),
+            required_date=so.required_date if so.required_date else (get_local_now() + timedelta(days=7)).date(),
+            scheduled_start_date=get_local_now(),
+            scheduled_end_date=so.required_date if so.required_date else get_local_now() + timedelta(days=7),
             status='planned',
             priority='normal',
             workflow_status='scheduled',

@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date, time
 from sqlalchemy import or_
 import json
+from utils.timezone import get_local_now, get_local_today
 
 rd_experiments_bp = Blueprint('rd_experiments', __name__)
 
@@ -228,7 +229,7 @@ def update_experiment(id):
         if 'end_time' in data and data['end_time']:
             experiment.end_time = datetime.strptime(data['end_time'], '%H:%M').time()
         
-        experiment.updated_at = datetime.utcnow()
+        experiment.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -269,7 +270,7 @@ def review_experiment(id):
         user_id = get_jwt_identity()
         
         experiment.reviewed_by = user_id
-        experiment.reviewed_at = datetime.utcnow()
+        experiment.reviewed_at = get_local_now()
         
         if 'success' in data:
             experiment.success = data['success']
@@ -284,7 +285,7 @@ def review_experiment(id):
         elif data.get('rejected', False):
             experiment.status = 'failed'
         
-        experiment.updated_at = datetime.utcnow()
+        experiment.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200

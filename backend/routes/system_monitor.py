@@ -8,6 +8,7 @@ from flask_jwt_extended import jwt_required
 import psutil
 import platform
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 system_monitor_bp = Blueprint('system_monitor', __name__)
 
@@ -93,7 +94,7 @@ def get_system_metrics_internal():
                 })
         
         return jsonify({
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': get_local_now().isoformat(),
             'cpu': {
                 'usage_percent': round(cpu_percent, 0),  # Round to integer like Task Manager
                 'count_logical': cpu_count_logical,
@@ -143,7 +144,7 @@ def get_system_info():
     """
     try:
         boot_time = datetime.fromtimestamp(psutil.boot_time())
-        uptime = datetime.now() - boot_time
+        uptime = get_local_now() - boot_time
         
         return jsonify({
             'platform': platform.system(),
@@ -213,7 +214,7 @@ def get_system_history():
             memory = psutil.virtual_memory().percent
             
             history.append({
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': get_local_now().isoformat(),
                 'cpu': round(cpu, 1),
                 'memory': round(memory, 1)
             })

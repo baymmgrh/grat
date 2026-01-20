@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 import os
 from datetime import datetime
+from utils.timezone import get_local_now, get_local_today
 
 logs_bp = Blueprint('logs', __name__)
 
@@ -33,7 +34,7 @@ def receive_frontend_logs():
         # Write logs to file
         with open(frontend_log, 'a', encoding='utf-8') as f:
             for log in logs:
-                timestamp = log.get('timestamp', datetime.utcnow().isoformat())
+                timestamp = log.get('timestamp', get_local_now().isoformat())
                 log_type = log.get('type', 'error').upper()
                 message = log.get('message', '')
                 url = log.get('url', '')

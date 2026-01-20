@@ -10,6 +10,7 @@ from utils.i18n import success_response, error_response, get_message
 from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import func, desc, and_
+from utils.timezone import get_local_now, get_local_today
 
 def get_product_name_from_new(product_code):
     """Get updated product name from ProductNew model"""
@@ -191,7 +192,7 @@ def create_bom():
             product_id=data['product_id'],
             version=data.get('version', '1.0'),
             is_active=data.get('is_active', True),
-            effective_date=datetime.fromisoformat(data['effective_date']).date() if data.get('effective_date') else date.today(),
+            effective_date=datetime.fromisoformat(data['effective_date']).date() if data.get('effective_date') else get_local_today(),
             expiry_date=datetime.fromisoformat(data['expiry_date']).date() if data.get('expiry_date') else None,
             batch_size=data.get('batch_size', 1),
             batch_uom=data.get('batch_uom', 'carton'),
@@ -275,7 +276,7 @@ def update_bom(bom_id):
         bom.batch_uom = data.get('batch_uom', bom.batch_uom)
         bom.pack_per_carton = data.get('pack_per_carton', bom.pack_per_carton)
         bom.notes = data.get('notes', bom.notes)
-        bom.updated_at = datetime.utcnow()
+        bom.updated_at = get_local_now()
 
         # Update BOM items
         if 'items' in data:
@@ -406,7 +407,7 @@ def create_bom_cost_analysis(bom_id):
         # Return cost analysis without saving to database for now
         return jsonify({
             'cost_analysis': {
-                'analysis_date': date.today().isoformat(),
+                'analysis_date': get_local_today().isoformat(),
                 'total_material_cost': float(total_material_cost),
                 'cost_per_unit': float(total_material_cost / float(bom.batch_size)) if bom.batch_size > 0 else 0,
                 'raw_material_cost': float(raw_material_cost),

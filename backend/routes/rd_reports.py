@@ -6,6 +6,7 @@ from utils import generate_number
 from datetime import datetime, date
 from sqlalchemy import or_
 import json
+from utils.timezone import get_local_now, get_local_today
 
 rd_reports_bp = Blueprint('rd_reports', __name__)
 
@@ -229,7 +230,7 @@ def update_report(id):
         if 'period_to' in data and data['period_to']:
             report.period_to = datetime.strptime(data['period_to'], '%Y-%m-%d').date()
         
-        report.updated_at = datetime.utcnow()
+        report.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -272,14 +273,14 @@ def review_report(id):
             return jsonify(error_response('api.error', error_code=400)), 400
         
         report.reviewed_by = user_id
-        report.reviewed_at = datetime.utcnow()
+        report.reviewed_at = get_local_now()
         
         if data.get('approved', False):
             report.status = 'approved'
         elif data.get('rejected', False):
             report.status = 'draft'  # Send back to draft for revision
         
-        report.updated_at = datetime.utcnow()
+        report.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -300,10 +301,10 @@ def approve_report(id):
             return jsonify(error_response('api.error', error_code=400)), 400
         
         report.approved_by = user_id
-        report.approved_at = datetime.utcnow()
+        report.approved_at = get_local_now()
         report.status = 'published'
         
-        report.updated_at = datetime.utcnow()
+        report.updated_at = get_local_now()
         db.session.commit()
         
         return jsonify(success_response('api.success')), 200
@@ -327,7 +328,7 @@ def submit_report(id):
             return jsonify(error_response('api.error', error_code=400)), 400
         
         report.status = 'review'
-        report.updated_at = datetime.utcnow()
+        report.updated_at = get_local_now()
         
         db.session.commit()
         

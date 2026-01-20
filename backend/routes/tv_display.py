@@ -4,6 +4,7 @@ from models import db, WorkOrder, ShippingOrder, Machine, ProductionRecord, Empl
 from utils.i18n import success_response, error_response, get_message
 from sqlalchemy import func, and_
 from datetime import datetime, timedelta
+from utils.timezone import get_local_now, get_local_today
 
 tv_display_bp = Blueprint('tv_display', __name__)
 
@@ -29,7 +30,7 @@ def get_roster_display():
     """TV Display for Machine Roster Assignment"""
     try:
         # Get today's date
-        today = datetime.now().date()
+        today = get_local_now().date()
 
         # Get all active machines
         machines = Machine.query.filter_by(is_active=True).all()
@@ -85,7 +86,7 @@ def get_roster_display():
 
         return jsonify({
             'type': 'roster',
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': get_local_now().isoformat(),
             'date': today.isoformat(),
             'roster_data': roster_display,
             'summary': {
@@ -106,7 +107,7 @@ def get_overview_display():
         # Production data
         active_wos = WorkOrder.query.filter_by(status='in_progress').all()
         machines = Machine.query.filter_by(is_active=True).all()
-        today = datetime.now().date()
+        today = get_local_now().date()
         today_production = db.session.query(
             func.sum(ProductionRecord.quantity_produced)
         ).filter(
@@ -130,7 +131,7 @@ def get_overview_display():
 
         return jsonify({
             'type': 'overview',
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': get_local_now().isoformat(),
             'production': {
                 'active_work_orders': len(active_wos),
                 'active_machines': len([m for m in machines if m.status == 'running']),
@@ -168,7 +169,7 @@ def get_production_display():
         machines = Machine.query.filter_by(is_active=True).all()
 
         # Today's production
-        today = datetime.now().date()
+        today = get_local_now().date()
         today_production = db.session.query(
             func.sum(ProductionRecord.quantity_produced)
         ).filter(
@@ -177,7 +178,7 @@ def get_production_display():
 
         return jsonify({
             'type': 'production',
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': get_local_now().isoformat(),
             'active_work_orders': [{
                 'wo_number': wo.wo_number,
                 'product_name': wo.product.name,
@@ -208,14 +209,14 @@ def get_shipping_display():
         ).order_by(ShippingOrder.shipping_date).all()
 
         # Today's shipments
-        today = datetime.now().date()
+        today = get_local_now().date()
         today_shipments = ShippingOrder.query.filter(
             func.date(ShippingOrder.shipping_date) == today
         ).all()
 
         return jsonify({
             'type': 'shipping',
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': get_local_now().isoformat(),
             'active_shipments': [{
                 'shipping_number': s.shipping_number,
                 'customer_name': s.customer.company_name,

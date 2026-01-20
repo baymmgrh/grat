@@ -10,6 +10,7 @@ from sqlalchemy import func, extract
 from datetime import datetime, timedelta
 from calendar import monthrange
 import io
+from utils.timezone import get_local_now, get_local_today
 
 reports_bp = Blueprint('reports', __name__)
 
@@ -250,7 +251,7 @@ def hr_report():
         ).filter(Employee.is_active == True).group_by(Employee.department).all()
         
         # Get attendance for current month
-        today = datetime.now()
+        today = get_local_now()
         first_day = today.replace(day=1)
         
         attendance_records = Attendance.query.filter(
@@ -285,9 +286,9 @@ def financial_report():
         
         # Default to current month
         if not start_date:
-            start_date = datetime.now().replace(day=1).isoformat()
+            start_date = get_local_now().replace(day=1).isoformat()
         if not end_date:
-            end_date = datetime.now().isoformat()
+            end_date = get_local_now().isoformat()
         
         # Get invoices
         invoices = Invoice.query.filter(
@@ -361,7 +362,7 @@ def generate_report(report_type):
 def dashboard_summary():
     try:
         # Get data for the last 30 days
-        end_date = datetime.now()
+        end_date = get_local_now()
         start_date = end_date - timedelta(days=30)
         
         # Sales summary
@@ -429,12 +430,12 @@ def production_by_product_report():
         if start_date_str:
             start_date = datetime.fromisoformat(start_date_str)
         else:
-            start_date = datetime.now() - timedelta(days=30)
+            start_date = get_local_now() - timedelta(days=30)
         
         if end_date_str:
             end_date = datetime.fromisoformat(end_date_str)
         else:
-            end_date = datetime.now()
+            end_date = get_local_now()
         
         # Ensure end_date includes the full day
         end_date = end_date.replace(hour=23, minute=59, second=59)
@@ -579,12 +580,12 @@ def export_production_by_product():
         if start_date_str:
             start_date = datetime.fromisoformat(start_date_str)
         else:
-            start_date = datetime.now() - timedelta(days=30)
+            start_date = get_local_now() - timedelta(days=30)
         
         if end_date_str:
             end_date = datetime.fromisoformat(end_date_str)
         else:
-            end_date = datetime.now()
+            end_date = get_local_now()
         
         end_date = end_date.replace(hour=23, minute=59, second=59)
         

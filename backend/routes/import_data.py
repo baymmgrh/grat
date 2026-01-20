@@ -8,6 +8,7 @@ from models import Product, Material, Inventory, User, WarehouseLocation
 from utils.i18n import success_response, error_response, get_message
 from datetime import datetime
 import traceback
+from utils.timezone import get_local_now, get_local_today
 
 import_bp = Blueprint('import', __name__)
 
@@ -120,7 +121,7 @@ def import_products(df, user_id):
                 description=row.get('description', ''),
                 is_active=True,
                 created_by=user_id,
-                created_at=datetime.utcnow()
+                created_at=get_local_now()
             )
             
             db.session.add(product)
@@ -171,7 +172,7 @@ def import_materials(df, user_id):
                 description=row.get('description', ''),
                 is_active=True,
                 created_by=user_id,
-                created_at=datetime.utcnow()
+                created_at=get_local_now()
             )
             
             db.session.add(material)
@@ -230,7 +231,7 @@ def import_inventory(df, user_id):
                 existing_inventory.expiry_date = pd.to_datetime(row.get('expiry_date'), errors='coerce') if row.get('expiry_date') else None
                 existing_inventory.remarks = row.get('remarks', '')
                 existing_inventory.updated_by = user_id
-                existing_inventory.updated_at = datetime.utcnow()
+                existing_inventory.updated_at = get_local_now()
             else:
                 # Create new inventory record
                 inventory = Inventory(
@@ -242,7 +243,7 @@ def import_inventory(df, user_id):
                     expiry_date=pd.to_datetime(row.get('expiry_date'), errors='coerce') if row.get('expiry_date') else None,
                     remarks=row.get('remarks', ''),
                     created_by=user_id,
-                    created_at=datetime.utcnow()
+                    created_at=get_local_now()
                 )
                 db.session.add(inventory)
             
