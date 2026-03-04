@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, send_file, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db, Machine, Product
 from models.product import ProductPackaging
-from models.product_new_schema import ProductNew
+from models.product_excel_schema import ProductNew
 from models.production import WorkOrder, BillOfMaterials
 from datetime import datetime, timedelta
 import json
@@ -122,7 +122,7 @@ class MonthlySchedule(db.Model):
     def to_dict(self):
         # Lookup ProductNew directly using raw SQL to avoid model column mismatch
         product_data = db.session.execute(
-            db.text("SELECT kode_produk, nama_produk, pack_per_karton FROM products_new WHERE id = :id"),
+            db.text("SELECT code, name, pack_per_karton FROM products WHERE id = :id"),
             {'id': self.product_id}
         ).fetchone()
         

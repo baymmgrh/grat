@@ -1,6 +1,6 @@
 """
-New Product Routes - Matching Excel Schema
-API endpoints for ProductNew model with all Excel fields
+New Product Routes - Using unified products table
+API endpoints with all Excel fields, now backed by the merged products table.
 """
 
 from flask import Blueprint, request, jsonify
@@ -35,8 +35,8 @@ def get_products():
         if search:
             query = query.filter(
                 db.or_(
-                    ProductNew.kode_produk.ilike(f'%{search}%'),
-                    ProductNew.nama_produk.ilike(f'%{search}%'),
+                    ProductNew.code.ilike(f'%{search}%'),
+                    ProductNew.name.ilike(f'%{search}%'),
                     ProductNew.spunlace.ilike(f'%{search}%'),
                     ProductNew.process_produksi.ilike(f'%{search}%')
                 )
@@ -76,9 +76,9 @@ def get_product(product_id):
 
 @products_new_bp.route('/kode/<kode_produk>', methods=['GET'])
 def get_product_by_kode(kode_produk):
-    """Get product by kode_produk"""
+    """Get product by kode_produk (code)"""
     try:
-        product = ProductNew.query.filter_by(kode_produk=kode_produk).first_or_404()
+        product = ProductNew.query.filter_by(code=kode_produk).first_or_404()
         return jsonify({
             'product': product.to_dict()
         })
@@ -96,17 +96,27 @@ def create_product():
         if not data.get('kode_produk') or not data.get('nama_produk'):
             return jsonify({'error': 'kode_produk and nama_produk are required'}), 400
         
-        # Check for duplicate kode_produk
-        existing = ProductNew.query.filter_by(kode_produk=data['kode_produk']).first()
+        # Check for duplicate
+        existing = ProductNew.query.filter_by(code=data['kode_produk']).first()
         if existing:
             return jsonify({'error': f'Product with kode_produk {data["kode_produk"]} already exists'}), 400
         
         # Create new product
         product = ProductNew()
         
-        # Map all fields from request
+        # Map kode_produk/nama_produk to code/name
+        product.code = data['kode_produk']
+        product.name = data['nama_produk']
+        
+        # Required fields with defaults
+        product.material_type = data.get('material_type', 'finished_goods')
+        product.primary_uom = data.get('primary_uom', 'PCS')
+        product.price = data.get('price', 0)
+        product.cost = data.get('cost', 0)
+        
+        # Map all detail fields from request
         for field in [
-            'kode_produk', 'nama_produk', 'gramasi', 'cd', 'md',
+            'gramasi', 'cd', 'md',
             'sheet_per_pack', 'pack_per_karton', 'berat_kering', 'ratio', 'ingredient',
             'ukuran_batch_vol', 'ukuran_batch_ctn', 'spunlace', 'rayon', 'polyester', 'es',
             'slitting_cm', 'lebar_mr_net_cm', 'lebar_mr_gross_cm', 'keterangan_slitting',
@@ -157,9 +167,15 @@ def update_product(product_id):
                 spec_changed = True
                 break
         
-        # Update fields
+        # Map kode_produk/nama_produk to code/name if provided
+        if 'nama_produk' in data:
+            product.name = data['nama_produk']
+        if 'kode_produk' in data:
+            product.code = data['kode_produk']
+        
+        # Update detail fields
         for field in [
-            'nama_produk', 'gramasi', 'cd', 'md', 'sheet_per_pack', 'pack_per_karton',
+            'gramasi', 'cd', 'md', 'sheet_per_pack', 'pack_per_karton',
             'berat_kering', 'ratio', 'ingredient', 'ukuran_batch_vol', 'ukuran_batch_ctn',
             'spunlace', 'rayon', 'polyester', 'es', 'slitting_cm', 'lebar_mr_net_cm',
             'lebar_mr_gross_cm', 'keterangan_slitting', 'no_mesin_epd', 'speed_epd_pack_menit',
@@ -179,7 +195,6 @@ def update_product(product_id):
             version = ProductVersion()
             version.product_id = product.id
             version.version = product.version
-            version.previous_data = previous_data
             version.change_reason = data.get('change_reason', 'Specification update')
             version.created_by = data.get('created_by')
             
@@ -229,7 +244,6 @@ def get_product_versions(product_id):
                 'version': v.version,
                 'change_reason': v.change_reason,
                 'created_at': v.created_at.isoformat() if v.created_at else None,
-                'previous_data': v.previous_data
             } for v in versions]
         })
         
@@ -286,9 +300,9 @@ def search_products():
         query = ProductNew.query
         
         if kode_produk:
-            query = query.filter(ProductNew.kode_produk.ilike(f'%{kode_produk}%'))
+            query = query.filter(ProductNew.code.ilike(f'%{kode_produk}%'))
         if nama_produk:
-            query = query.filter(ProductNew.nama_produk.ilike(f'%{nama_produk}%'))
+            query = query.filter(ProductNew.name.ilike(f'%{nama_produk}%'))
         if spunlace:
             query = query.filter(ProductNew.spunlace.ilike(f'%{spunlace}%'))
         if process:
@@ -311,7 +325,7 @@ def search_products():
 
 @products_new_bp.route('/import/excel', methods=['POST'])
 def import_excel():
-    """Import Excel file directly to new schema"""
+    """Import Excel file directly"""
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'No file provided'}), 400
@@ -327,13 +341,11 @@ def import_excel():
         import pandas as pd
         df = pd.read_excel(file)
         
-        # Process similar to import_produk_to_new_schema function
         success_count = 0
         error_count = 0
         
         for index, row in df.iterrows():
             try:
-                # Skip invalid rows
                 kode_produk = str(row['KODE PRODUK']).strip() if pd.notna(row['KODE PRODUK']) else ''
                 nama_produk = str(row['NAMA PRODUK']).strip() if pd.notna(row['NAMA PRODUK']) else ''
                 
@@ -341,13 +353,18 @@ def import_excel():
                     continue
                 
                 # Check for existing product
-                existing = ProductNew.query.filter_by(kode_produk=kode_produk).first()
+                existing = ProductNew.query.filter_by(code=kode_produk).first()
                 if existing:
                     continue
                 
-                # Create product (similar to import function)
                 product = ProductNew()
-                # ... (mapping logic from import function)
+                product.code = kode_produk
+                product.name = nama_produk
+                product.material_type = 'finished_goods'
+                product.primary_uom = 'PCS'
+                product.price = 0
+                product.cost = 0
+                product.version = 0
                 
                 db.session.add(product)
                 success_count += 1

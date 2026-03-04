@@ -45,9 +45,6 @@ def calculate_standard_costs_from_bom(product_id, quantity):
     overhead_cost = 0
     if hasattr(bom, 'overhead_rate') and bom.overhead_rate:
         overhead_cost = float(bom.overhead_rate) * quantity
-    elif labor_cost > 0:
-        # If no overhead rate, use 150% of labor cost as default
-        overhead_cost = labor_cost * 1.5
     
     return material_cost, labor_cost, overhead_cost
 

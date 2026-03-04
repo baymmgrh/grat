@@ -20,6 +20,8 @@ import LoadingSpinner from '../../components/Common/LoadingSpinner'
 
 interface EmployeeFormData {
   employee_number: string
+  nik: string
+  npwp: string
   first_name: string
   last_name: string
   email: string
@@ -34,8 +36,16 @@ interface EmployeeFormData {
   department_id: string
   position: string
   employment_type: string
+  pay_type: string
+  pay_rate: string
+  outsourcing_vendor_id: string
   hire_date: string
   salary: string
+  ptkp_status: string
+  dependents: string
+  has_allowance: boolean
+  position_allowance_amount: string
+  transport_allowance_amount: string
   emergency_contact_name: string
   emergency_contact_phone: string
   emergency_contact_relation: string
@@ -52,12 +62,28 @@ export default function EmployeeForm() {
   const { data: positions } = useGetPositionsQuery({})
   const [createEmployee] = useCreateEmployeeMutation()
   
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<EmployeeFormData>({
+  const [outsourcingVendors, setOutsourcingVendors] = useState<any[]>([])
+  const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<EmployeeFormData>({
     defaultValues: {
       hire_date: new Date().toISOString().split('T')[0],
-      employment_type: 'full_time'
+      employment_type: 'full_time',
+      pay_type: 'monthly',
+      ptkp_status: 'TK/0',
+      dependents: '0',
+      has_allowance: false,
+      position_allowance_amount: '0',
+      transport_allowance_amount: '0'
     }
   })
+  const watchPayType = watch('pay_type')
+  const watchHasAllowance = watch('has_allowance')
+
+  // Fetch outsourcing vendors
+  useEffect(() => {
+    axiosInstance.get('/api/hr/payroll/outsourcing-vendors')
+      .then(res => setOutsourcingVendors(res.data.vendors || []))
+      .catch(() => {})
+  }, [])
 
   // Fetch employee data for edit mode
   useEffect(() => {
@@ -68,6 +94,8 @@ export default function EmployeeForm() {
           const emp = res.data.employee
           reset({
             employee_number: emp.employee_number || '',
+            nik: emp.nik || '',
+            npwp: emp.npwp || '',
             first_name: emp.first_name || '',
             last_name: emp.last_name || '',
             email: emp.email || '',
@@ -82,8 +110,16 @@ export default function EmployeeForm() {
             department_id: emp.department_id?.toString() || '',
             position: emp.position || '',
             employment_type: emp.employment_type || 'full_time',
+            pay_type: emp.pay_type || 'monthly',
+            pay_rate: emp.pay_rate?.toString() || '',
+            outsourcing_vendor_id: emp.outsourcing_vendor_id?.toString() || '',
             hire_date: emp.hire_date ? emp.hire_date.split('T')[0] : '',
             salary: emp.salary?.toString() || '',
+            ptkp_status: emp.ptkp_status || 'TK/0',
+            dependents: emp.dependents?.toString() || '0',
+            has_allowance: emp.has_allowance || false,
+            position_allowance_amount: emp.position_allowance_amount?.toString() || '0',
+            transport_allowance_amount: emp.transport_allowance_amount?.toString() || '0',
             emergency_contact_name: emp.emergency_contact_name || '',
             emergency_contact_phone: emp.emergency_contact_phone || '',
             emergency_contact_relation: emp.emergency_contact_relation || ''
@@ -132,7 +168,12 @@ export default function EmployeeForm() {
       const payload = {
         ...data,
         department_id: data.department_id ? parseInt(data.department_id) : null,
-        salary: data.salary ? parseFloat(data.salary) : null
+        salary: data.salary ? parseFloat(data.salary) : null,
+        pay_rate: data.pay_rate ? parseFloat(data.pay_rate) : null,
+        outsourcing_vendor_id: data.outsourcing_vendor_id ? parseInt(data.outsourcing_vendor_id) : null,
+        dependents: data.dependents ? parseInt(data.dependents) : 0,
+        position_allowance_amount: data.position_allowance_amount ? parseFloat(data.position_allowance_amount) : 0,
+        transport_allowance_amount: data.transport_allowance_amount ? parseFloat(data.transport_allowance_amount) : 0
       }
 
       if (isEdit) {
@@ -185,18 +226,39 @@ export default function EmployeeForm() {
             </div>
           </div>
           
-          <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label className={labelClass}>NIK / No. Karyawan <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                {...register('employee_number', { required: 'NIK wajib diisi' })}
-                className={`${inputClass} ${errors.employee_number ? 'border-red-300 bg-red-50' : ''}`}
-                placeholder="Contoh: 001"
-              />
-              {errors.employee_number && <p className={errorClass}>{errors.employee_number.message}</p>}
+          <div className="p-6 space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div>
+                <label className={labelClass}>NIK</label>
+                <input
+                  type="text"
+                  {...register('nik')}
+                  className={inputClass}
+                  placeholder="Nomor Induk Kependudukan"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>NPWP</label>
+                <input
+                  type="text"
+                  {...register('npwp')}
+                  className={inputClass}
+                  placeholder="Nomor NPWP"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>No. Karyawan <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  {...register('employee_number', { required: 'No. Karyawan wajib diisi' })}
+                  className={`${inputClass} ${errors.employee_number ? 'border-red-300 bg-red-50' : ''}`}
+                  placeholder="Contoh: EMP-001"
+                />
+                {errors.employee_number && <p className={errorClass}>{errors.employee_number.message}</p>}
+              </div>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             <div>
               <label className={labelClass}>Nama Depan <span className="text-red-500">*</span></label>
               <input
@@ -255,14 +317,18 @@ export default function EmployeeForm() {
               </select>
             </div>
 
-            <div className="md:col-span-2">
-              <label className={labelClass}>Alamat</label>
-              <textarea {...register('address')} rows={2} className={inputClass} placeholder="Alamat lengkap..." />
             </div>
 
-            <div>
-              <label className={labelClass}>Kota</label>
-              <input type="text" {...register('city')} className={inputClass} placeholder="Kota" />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              <div className="md:col-span-2">
+                <label className={labelClass}>Alamat</label>
+                <textarea {...register('address')} rows={2} className={inputClass} placeholder="Alamat lengkap..." />
+              </div>
+
+              <div>
+                <label className={labelClass}>Kota</label>
+                <input type="text" {...register('city')} className={inputClass} placeholder="Kota" />
+              </div>
             </div>
           </div>
         </div>
@@ -297,6 +363,32 @@ export default function EmployeeForm() {
               </select>
             </div>
 
+            <div className="md:col-span-3">
+              <div className="flex items-center mb-3">
+                <input
+                  type="checkbox"
+                  id="has_allowance"
+                  {...register('has_allowance')}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="has_allowance" className="ml-2 text-sm font-medium text-gray-700">
+                  Mendapatkan Tunjangan
+                </label>
+              </div>
+              {watchHasAllowance && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Tunjangan Jabatan (Rp)</label>
+                    <input type="number" {...register('position_allowance_amount')} className={inputClass} placeholder="0" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Tunjangan Transportasi (Rp)</label>
+                    <input type="number" {...register('transport_allowance_amount')} className={inputClass} placeholder="0" />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className={labelClass}>Tipe Karyawan</label>
               <select {...register('employment_type')} className={inputClass}>
@@ -310,9 +402,100 @@ export default function EmployeeForm() {
             </div>
 
             <div>
-              <label className={labelClass}>Gaji Pokok (Rp)</label>
-              <input type="number" {...register('salary')} className={inputClass} placeholder="0" />
+              <label className={labelClass}>Kategori Penggajian <span className="text-red-500">*</span></label>
+              <select {...register('pay_type')} className={inputClass}>
+                <option value="monthly">Bulanan</option>
+                <option value="fixed">Fixed</option>
+                <option value="weekly">Mingguan</option>
+                <option value="daily">Harian</option>
+                <option value="piecework">Borongan</option>
+                <option value="outsourcing">Outsourcing</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-400">
+                {watchPayType === 'fixed' && 'Gaji tetap, tanpa potongan absensi'}
+                {watchPayType === 'monthly' && 'Gaji bulanan reguler, ada potongan absensi proporsional'}
+                {watchPayType === 'weekly' && 'Gaji per minggu × jumlah minggu dalam periode'}
+                {watchPayType === 'daily' && 'Gaji per hari × jumlah hari hadir'}
+                {watchPayType === 'piecework' && 'Gaji berdasarkan output/hasil kerja (borongan)'}
+                {watchPayType === 'outsourcing' && 'Gaji disetor ke vendor outsourcing, bukan langsung ke karyawan'}
+              </p>
             </div>
+
+            {(watchPayType === 'fixed' || watchPayType === 'monthly' || watchPayType === 'outsourcing') && (
+              <div>
+                <label className={labelClass}>Gaji Pokok / Bulan (Rp)</label>
+                <input type="number" {...register('salary')} className={inputClass} placeholder="0" />
+              </div>
+            )}
+
+            {(watchPayType === 'weekly') && (
+              <div>
+                <label className={labelClass}>Tarif per Minggu (Rp)</label>
+                <input type="number" {...register('pay_rate')} className={inputClass} placeholder="0" />
+              </div>
+            )}
+
+            {(watchPayType === 'daily') && (
+              <div>
+                <label className={labelClass}>Tarif per Hari (Rp)</label>
+                <input type="number" {...register('pay_rate')} className={inputClass} placeholder="0" />
+              </div>
+            )}
+
+            {(watchPayType === 'piecework') && (
+              <div>
+                <label className={labelClass}>Tarif Default per Unit (Rp)</label>
+                <input type="number" {...register('pay_rate')} className={inputClass} placeholder="0" />
+                <p className="mt-1 text-xs text-gray-400">Tarif bisa di-override per log borongan</p>
+              </div>
+            )}
+
+            {watchPayType === 'outsourcing' && (
+              <div>
+                <label className={labelClass}>Vendor Outsourcing</label>
+                <select {...register('outsourcing_vendor_id')} className={inputClass}>
+                  <option value="">Pilih vendor</option>
+                  {outsourcingVendors.map((v: any) => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* PTKP & Tanggungan — untuk perhitungan PPh 21 */}
+            {watchPayType !== 'outsourcing' && watchPayType !== 'piecework' && watchPayType !== 'daily' && (
+            <>
+            <div>
+              <label className={labelClass}>Status PTKP</label>
+              <select {...register('ptkp_status')} className={inputClass}>
+                <option value="TK/0">TK/0 — Tidak Kawin, Tanpa Tanggungan</option>
+                <option value="TK/1">TK/1 — Tidak Kawin, 1 Tanggungan</option>
+                <option value="TK/2">TK/2 — Tidak Kawin, 2 Tanggungan</option>
+                <option value="TK/3">TK/3 — Tidak Kawin, 3 Tanggungan</option>
+                <option value="K/0">K/0 — Kawin, Tanpa Tanggungan</option>
+                <option value="K/1">K/1 — Kawin, 1 Tanggungan</option>
+                <option value="K/2">K/2 — Kawin, 2 Tanggungan</option>
+                <option value="K/3">K/3 — Kawin, 3 Tanggungan</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-400">Menentukan tarif TER PPh 21 (PP 58/2023)</p>
+            </div>
+
+            <div>
+              <label className={labelClass}>Jumlah Tanggungan</label>
+              <select {...register('dependents')} className={inputClass}>
+                <option value="0">0</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+            </>
+            )}
+
+            {/* Hidden salary field for non-monthly types that still need it */}
+            {(watchPayType === 'weekly' || watchPayType === 'daily' || watchPayType === 'piecework') && (
+              <input type="hidden" {...register('salary')} value="0" />
+            )}
           </div>
         </div>
 

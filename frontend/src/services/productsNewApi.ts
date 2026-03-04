@@ -1,5 +1,7 @@
-import axios from 'axios';
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+import axiosInstance from '../utils/axiosConfig';
+
+// Use axiosInstance which has dynamic baseURL
+const API_BASE_URL = '/api';
 
 export interface ProductNew {
   id: number;
@@ -88,50 +90,50 @@ export interface PaginatedResponse<T> {
 class ProductsNewApi {
   // Get all products with pagination and filtering
   async getProducts(params: PaginationParams = {}): Promise<PaginatedResponse<ProductNew>> {
-    const response = await axios.get(`${API_BASE_URL}/products-new`, { params });
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new`, { params });
     return response.data;
   }
 
   // Get single product by ID
   async getProduct(id: number): Promise<{ product: ProductNew }> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/${id}`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/${id}`);
     return response.data;
   }
 
   // Get product by kode_produk
   async getProductByKode(kodeProduk: string): Promise<{ product: ProductNew }> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/kode/${encodeURIComponent(kodeProduk)}`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/kode/${encodeURIComponent(kodeProduk)}`);
     return response.data;
   }
 
   // Create new product
   async createProduct(productData: Omit<ProductNew, 'id' | 'created_at' | 'updated_at' | 'version'>): Promise<{ message: string; product: ProductNew }> {
-    const response = await axios.post(`${API_BASE_URL}/products-new`, productData);
+    const response = await axiosInstance.post(`${API_BASE_URL}/products-new`, productData);
     return response.data;
   }
 
   // Update existing product
   async updateProduct(id: number, productData: Partial<ProductNew>): Promise<{ message: string; product: ProductNew }> {
-    const response = await axios.put(`${API_BASE_URL}/products-new/${id}`, productData);
+    const response = await axiosInstance.put(`${API_BASE_URL}/products-new/${id}`, productData);
     return response.data;
   }
 
   // Delete product (soft delete)
   async deleteProduct(id: number): Promise<{ message: string }> {
-    const response = await axios.delete(`${API_BASE_URL}/products-new/${id}`);
+    const response = await axiosInstance.delete(`${API_BASE_URL}/products-new/${id}`);
     return response.data;
   }
 
   // Get product version history
   async getProductVersions(id: number): Promise<{ product: ProductNew; versions: ProductVersion[] }> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/${id}/versions`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/${id}/versions`);
     return response.data;
   }
 
   // Get dashboard statistics
   async getDashboardStats(timeRange?: string): Promise<DashboardStats> {
     const params = timeRange ? { time_range: timeRange } : {};
-    const response = await axios.get(`${API_BASE_URL}/products-new/dashboard`, { params });
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/dashboard`, { params });
     return response.data;
   }
 
@@ -144,13 +146,13 @@ class ProductsNewApi {
     gsm_min?: number;
     gsm_max?: number;
   }): Promise<{ products: ProductNew[]; count: number }> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/search`, { params });
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/search`, { params });
     return response.data;
   }
 
   // Export products to Excel
   async exportProducts(params: PaginationParams = {}): Promise<Blob> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/export`, {
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/export`, {
       params,
       responseType: 'blob'
     });
@@ -162,7 +164,7 @@ class ProductsNewApi {
     const formData = new FormData();
     formData.append('file', file);
 
-    const response = await axios.post(`${API_BASE_URL}/products-new/import/excel`, formData, {
+    const response = await axiosInstance.post(`${API_BASE_URL}/products-new/import/excel`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
@@ -172,25 +174,25 @@ class ProductsNewApi {
 
   // Get spunlace options (for dropdowns)
   async getSpunlaceOptions(): Promise<string[]> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/options/spunlace`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/options/spunlace`);
     return response.data;
   }
 
   // Get process options (for dropdowns)
   async getProcessOptions(): Promise<string[]> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/options/process`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/options/process`);
     return response.data;
   }
 
   // Get machine options (for dropdowns)
   async getMachineOptions(): Promise<string[]> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/options/machines`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/options/machines`);
     return response.data;
   }
 
   // Validate product data before saving
   async validateProduct(productData: Partial<ProductNew>): Promise<{ valid: boolean; errors: Record<string, string> }> {
-    const response = await axios.post(`${API_BASE_URL}/products-new/validate`, productData);
+    const response = await axiosInstance.post(`${API_BASE_URL}/products-new/validate`, productData);
     return response.data;
   }
 
@@ -200,25 +202,25 @@ class ProductsNewApi {
     if (excludeId) {
       params['exclude_id'] = excludeId;
     }
-    const response = await axios.get(`${API_BASE_URL}/products-new/check-kode`, { params });
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/check-kode`, { params });
     return response.data;
   }
 
   // Get products by spunlace type
   async getProductsBySpunlace(spunlace: string): Promise<ProductNew[]> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/spunlace/${encodeURIComponent(spunlace)}`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/spunlace/${encodeURIComponent(spunlace)}`);
     return response.data;
   }
 
   // Get products by process type
   async getProductsByProcess(process: string): Promise<ProductNew[]> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/process/${encodeURIComponent(process)}`);
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/process/${encodeURIComponent(process)}`);
     return response.data;
   }
 
   // Get product suggestions for autocomplete
   async getProductSuggestions(query: string, limit: number = 10): Promise<ProductNew[]> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/suggestions`, {
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/suggestions`, {
       params: { q: query, limit }
     });
     return response.data;
@@ -232,7 +234,7 @@ class ProductsNewApi {
     kebutuhan_polyester_kg: number;
     kebutuhan_es_kg: number;
   }> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/${productId}/material-requirements`, {
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/${productId}/material-requirements`, {
       params: { quantity }
     });
     return response.data;
@@ -247,7 +249,7 @@ class ProductsNewApi {
     top_processes: Array<{ process: string; count: number }>;
     gsm_distribution: Array<{ range: string; count: number }>;
   }> {
-    const response = await axios.get(`${API_BASE_URL}/products-new/analytics`, {
+    const response = await axiosInstance.get(`${API_BASE_URL}/products-new/analytics`, {
       params: { time_range: timeRange }
     });
     return response.data;

@@ -31,6 +31,8 @@ def auto_deduct_materials(work_order_id, user_id=None):
     Returns: (success: bool, message: str, transactions: list)
     """
     try:
+        from utils.opname_lock import check_opname_lock
+        
         wo = WorkOrder.query.get(work_order_id)
         if not wo:
             return False, "Work order not found", []
@@ -43,6 +45,15 @@ def auto_deduct_materials(work_order_id, user_id=None):
         
         if not bom_items:
             return False, "No BOM items found for this work order", []
+        
+        # Check opname lock for all BOM materials before deducting
+        for bom_item in bom_items:
+            lock = check_opname_lock(
+                material_id=bom_item.material_id,
+                product_id=bom_item.product_id
+            )
+            if lock['locked']:
+                return False, lock['message'], []
         
         transactions = []
         insufficient_materials = []
@@ -162,6 +173,7 @@ def auto_receive_finished_goods(work_order_id, quantity_produced, user_id=None):
     Returns: (success: bool, message: str, inventory_id: int)
     """
     from sqlalchemy import text
+    from utils.opname_lock import check_opname_lock
     
     try:
         # Get WO info using raw SQL (including scheduled_start_date for proper dating)
@@ -175,6 +187,12 @@ def auto_receive_finished_goods(work_order_id, quantity_produced, user_id=None):
             return False, "Work order not found", None
         
         wo_id, wo_number, product_id, wo_start_date, wo_end_date = wo_row
+        
+        # Check opname lock for the finished goods product
+        if product_id:
+            lock = check_opname_lock(product_id=product_id)
+            if lock['locked']:
+                return False, lock['message'], None
         
         # Use WO end date if available, otherwise start date, otherwise today
         movement_date = wo_end_date or wo_start_date or get_local_now().date()

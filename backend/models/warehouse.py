@@ -76,7 +76,7 @@ class Inventory(db.Model):
     qc_notes = db.Column(db.Text, nullable=True)
     
     # GRN reference for materials
-    grn_id = db.Column(db.Integer, db.ForeignKey('goods_receipt_notes.id'), nullable=True)
+    grn_id = db.Column(db.Integer, db.ForeignKey('goods_received_notes.id'), nullable=True)
     supplier_batch = db.Column(db.String(100), nullable=True)  # Batch dari supplier
     
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)

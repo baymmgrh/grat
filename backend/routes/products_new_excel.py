@@ -63,8 +63,8 @@ def get_products():
         if search:
             query = query.filter(
                 db.or_(
-                    ProductNew.kode_produk.like(f'%{search}%'),
-                    ProductNew.nama_produk.like(f'%{search}%'),
+                    ProductNew.code.like(f'%{search}%'),
+                    ProductNew.name.like(f'%{search}%'),
                     ProductNew.spunlace.like(f'%{search}%')
                 )
             )
@@ -102,7 +102,7 @@ def get_products():
 def get_product(kode_produk):
     """Get specific product by kode_produk"""
     try:
-        product = ProductNew.query.filter_by(kode_produk=kode_produk).first()
+        product = ProductNew.query.filter_by(code=kode_produk).first()
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -119,14 +119,14 @@ def create_product():
         data = request.get_json()
         
         # Check if product already exists
-        existing = ProductNew.query.filter_by(kode_produk=data.get('kode_produk')).first()
+        existing = ProductNew.query.filter_by(code=data.get('kode_produk')).first()
         if existing:
             return jsonify({'error': 'Product with this kode already exists'}), 400
         
         # Create new product
         product = ProductNew()
-        product.kode_produk = data.get('kode_produk')
-        product.nama_produk = data.get('nama_produk')
+        product.code = data.get('kode_produk')
+        product.name = data.get('nama_produk')
         product.version = 0
         
         # Update all fields from data
@@ -160,7 +160,7 @@ def create_product():
 def update_product(kode_produk):
     """Update product with automatic version increment"""
     try:
-        product = ProductNew.query.filter_by(kode_produk=kode_produk).first()
+        product = ProductNew.query.filter_by(code=kode_produk).first()
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -217,7 +217,7 @@ def update_product(kode_produk):
 def delete_product(kode_produk):
     """Soft delete product (set is_active=False)"""
     try:
-        product = ProductNew.query.filter_by(kode_produk=kode_produk).first()
+        product = ProductNew.query.filter_by(code=kode_produk).first()
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -250,7 +250,7 @@ def delete_product(kode_produk):
 def get_product_versions(kode_produk):
     """Get version history for a product"""
     try:
-        product = ProductNew.query.filter_by(kode_produk=kode_produk).first()
+        product = ProductNew.query.filter_by(code=kode_produk).first()
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -287,7 +287,7 @@ def get_product_versions(kode_produk):
 def compare_product_versions(kode_produk):
     """Compare two versions of a product"""
     try:
-        product = ProductNew.query.filter_by(kode_produk=kode_produk).first()
+        product = ProductNew.query.filter_by(code=kode_produk).first()
         
         if not product:
             return jsonify({'error': 'Product not found'}), 404
@@ -381,8 +381,8 @@ def get_dashboard():
         for product in recent_products:
             recent_products_data.append({
                 'id': product.id,
-                'kode_produk': product.kode_produk,
-                'nama_produk': product.nama_produk,
+                'kode_produk': product.code,
+                'nama_produk': product.name,
                 'created_at': product.created_at.isoformat() if product.created_at else None,
                 'is_active': product.is_active
             })
@@ -395,8 +395,8 @@ def get_dashboard():
         for version in recent_versions:
             product = ProductNew.query.get(version.product_id)
             recent_changes.append({
-                'product_kode': product.kode_produk if product else 'Unknown',
-                'product_name': product.nama_produk if product else 'Unknown',
+                'product_kode': product.code if product else 'Unknown',
+                'product_name': product.name if product else 'Unknown',
                 'version': version.version,
                 'change_type': version.change_type,
                 'change_reason': version.change_reason,

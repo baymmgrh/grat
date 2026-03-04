@@ -10,7 +10,8 @@ import {
   DocumentTextIcon,
   ExclamationCircleIcon,
   HashtagIcon as Hash,
-  MapPinIcon
+  MapPinIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 interface Product {
   id: number;
@@ -537,7 +538,7 @@ const MovementForm: React.FC = () => {
               onClick={() => navigate('/app/warehouse/movements')}
               className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
             >
-              <X className="inline h-4 w-4 mr-2" />{t('common.cancel')}</button>
+              <XMarkIcon className="inline h-4 w-4 mr-2" />{t('common.cancel')}</button>
             <button
               type="submit"
               disabled={loading}

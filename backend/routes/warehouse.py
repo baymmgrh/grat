@@ -103,6 +103,106 @@ def get_locations():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@warehouse_bp.route('/locations/<int:id>', methods=['GET'])
+@jwt_required()
+def get_location_detail(id):
+    """Get single warehouse location with inventory items"""
+    try:
+        location = WarehouseLocation.query.get(id)
+        if not location:
+            return jsonify({'error': 'Location not found'}), 404
+        
+        # Get inventory items at this location
+        inventory_items = Inventory.query.filter_by(
+            location_id=id,
+            is_active=True
+        ).all()
+        
+        items = []
+        for inv in inventory_items:
+            item_name = ''
+            item_code = ''
+            item_type = ''
+            if inv.product_id and inv.product:
+                item_name = inv.product.name
+                item_code = inv.product.code if hasattr(inv.product, 'code') else ''
+                item_type = 'product'
+            elif inv.material_id and inv.material:
+                item_name = inv.material.name
+                item_code = inv.material.code
+                item_type = 'material'
+            
+            items.append({
+                'id': inv.id,
+                'item_type': item_type,
+                'item_name': item_name,
+                'item_code': item_code,
+                'product_id': inv.product_id,
+                'material_id': inv.material_id,
+                'batch_number': inv.batch_number,
+                'lot_number': inv.lot_number,
+                'quantity_on_hand': float(inv.quantity_on_hand or 0),
+                'quantity_reserved': float(inv.quantity_reserved or 0),
+                'quantity_available': float(inv.quantity_available or 0),
+                'stock_status': inv.stock_status,
+                'expiry_date': inv.expiry_date.isoformat() if inv.expiry_date else None,
+                'created_at': inv.created_at.isoformat() if inv.created_at else None
+            })
+        
+        # Get recent movements at this location
+        recent_movements = InventoryMovement.query.filter_by(
+            location_id=id
+        ).order_by(InventoryMovement.created_at.desc()).limit(20).all()
+        
+        movements = []
+        for mv in recent_movements:
+            mv_item_name = ''
+            if mv.product_id and mv.product:
+                mv_item_name = mv.product.name
+            elif mv.material_id and mv.material:
+                mv_item_name = mv.material.name
+            
+            movements.append({
+                'id': mv.id,
+                'movement_type': mv.movement_type,
+                'item_name': mv_item_name,
+                'quantity': float(mv.quantity),
+                'batch_number': mv.batch_number,
+                'reference_number': mv.reference_number,
+                'reference_type': mv.reference_type,
+                'unit_cost': float(mv.unit_cost) if mv.unit_cost else None,
+                'total_cost': float(mv.total_cost) if mv.total_cost else None,
+                'notes': mv.notes,
+                'created_at': mv.created_at.isoformat() if mv.created_at else None
+            })
+        
+        return jsonify({
+            'location': {
+                'id': location.id,
+                'location_code': location.location_code,
+                'zone_id': location.zone_id,
+                'zone_name': location.zone.name if location.zone else '',
+                'zone_code': location.zone.code if location.zone else '',
+                'zone_material_type': location.zone.material_type if location.zone else '',
+                'rack': location.rack,
+                'level': location.level,
+                'position': location.position,
+                'capacity': float(location.capacity),
+                'capacity_uom': location.capacity_uom,
+                'occupied': float(location.occupied),
+                'available': float(location.capacity - location.occupied),
+                'is_active': location.is_active,
+                'is_available': location.is_available,
+                'created_at': location.created_at.isoformat() if location.created_at else None,
+                'updated_at': location.updated_at.isoformat() if location.updated_at else None
+            },
+            'inventory_items': items,
+            'recent_movements': movements
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @warehouse_bp.route('/locations', methods=['POST'])
 @jwt_required()
 def create_location():
@@ -286,8 +386,18 @@ def add_to_inventory():
     """Add product or material to inventory"""
     try:
         from flask_jwt_extended import get_jwt_identity
+        from utils.opname_lock import check_opname_lock
         data = request.get_json()
         user_id = int(get_jwt_identity())
+        
+        # Check opname lock
+        lock = check_opname_lock(
+            location_id=data.get('location_id'),
+            material_id=data.get('material_id'),
+            product_id=data.get('product_id')
+        )
+        if lock['locked']:
+            return error_response(lock['message']), 423
         
         # Validate required fields
         if not data.get('location_id'):
@@ -397,12 +507,175 @@ def add_to_inventory():
         db.session.rollback()
         return error_response(str(e)), 500
 
+@warehouse_bp.route('/movements', methods=['GET'])
+@jwt_required()
+def get_movements():
+    """Get inventory movements with pagination and filters"""
+    try:
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        search = request.args.get('search', '')
+        movement_type = request.args.get('movement_type', '')
+        status = request.args.get('status', '')
+        date_from = request.args.get('date_from', '')
+        date_to = request.args.get('date_to', '')
+
+        query = InventoryMovement.query
+
+        if search:
+            query = query.outerjoin(Product, InventoryMovement.product_id == Product.id)\
+                         .outerjoin(Material, InventoryMovement.material_id == Material.id)\
+                         .filter(
+                db.or_(
+                    InventoryMovement.reference_number.ilike(f'%{search}%'),
+                    InventoryMovement.notes.ilike(f'%{search}%'),
+                    Product.code.ilike(f'%{search}%'),
+                    Product.name.ilike(f'%{search}%'),
+                    Material.code.ilike(f'%{search}%'),
+                    Material.name.ilike(f'%{search}%')
+                )
+            )
+
+        if movement_type:
+            query = query.filter(InventoryMovement.movement_type == movement_type)
+
+        if date_from:
+            from datetime import datetime
+            query = query.filter(InventoryMovement.movement_date >= datetime.strptime(date_from, '%Y-%m-%d').date())
+
+        if date_to:
+            from datetime import datetime
+            query = query.filter(InventoryMovement.movement_date <= datetime.strptime(date_to, '%Y-%m-%d').date())
+
+        query = query.order_by(InventoryMovement.created_at.desc())
+        movements = query.paginate(page=page, per_page=per_page, error_out=False)
+
+        result = []
+        for m in movements.items:
+            product_code = ''
+            product_name = ''
+            if m.product:
+                product_code = m.product.code or ''
+                product_name = m.product.name or ''
+            elif m.material:
+                product_code = m.material.code or ''
+                product_name = m.material.name or ''
+
+            location_code = m.location.location_code if m.location else ''
+            location_name = m.location.zone.name if m.location and m.location.zone else ''
+            created_by_name = ''
+            if m.created_by_user:
+                created_by_name = m.created_by_user.full_name or m.created_by_user.username or ''
+
+            result.append({
+                'id': m.id,
+                'movement_number': m.reference_number or f'MOV-{m.id:06d}',
+                'movement_type': m.movement_type,
+                'product_code': product_code,
+                'product_name': product_name,
+                'quantity': float(m.quantity),
+                'unit_cost': float(m.unit_cost) if m.unit_cost else 0,
+                'total_value': float(m.quantity) * float(m.unit_cost or 0),
+                'location_code': location_code,
+                'location_name': location_name,
+                'reference_type': m.reference_type or '',
+                'reference_number': m.reference_number or '',
+                'movement_date': str(m.movement_date) if m.movement_date else '',
+                'created_by': created_by_name,
+                'notes': m.notes or '',
+                'status': 'completed',
+                'created_at': str(m.created_at) if m.created_at else ''
+            })
+
+        return jsonify({
+            'movements': result,
+            'total': movements.total,
+            'pages': movements.pages,
+            'current_page': movements.page
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@warehouse_bp.route('/movements/<int:movement_id>', methods=['GET'])
+@jwt_required()
+def get_movement_detail(movement_id):
+    """Get single inventory movement detail"""
+    try:
+        m = InventoryMovement.query.get_or_404(movement_id)
+
+        product_code = ''
+        product_name = ''
+        product_uom = ''
+        if m.product:
+            product_code = m.product.code or ''
+            product_name = m.product.name or ''
+            product_uom = m.product.primary_uom or 'pcs'
+        elif m.material:
+            product_code = m.material.code or ''
+            product_name = m.material.name or ''
+            product_uom = m.material.primary_uom or 'pcs'
+
+        location = None
+        from_location = None
+        to_location = None
+        if m.location:
+            loc_data = {
+                'id': m.location.id,
+                'location_code': m.location.location_code,
+                'zone_name': m.location.zone.name if m.location.zone else ''
+            }
+            location = loc_data
+            if m.movement_type in ('stock_out', 'issue'):
+                from_location = loc_data
+            elif m.movement_type in ('stock_in', 'receive', 'production_receipt'):
+                to_location = loc_data
+            else:
+                to_location = loc_data
+
+        created_by_name = ''
+        if m.created_by_user:
+            created_by_name = m.created_by_user.full_name or m.created_by_user.username or ''
+
+        return jsonify({
+            'id': m.id,
+            'movement_number': m.reference_number or f'MOV-{m.id:06d}',
+            'movement_type': m.movement_type,
+            'product_id': m.product_id,
+            'material_id': m.material_id,
+            'product_code': product_code,
+            'product_name': product_name,
+            'product_uom': product_uom,
+            'quantity': float(m.quantity),
+            'unit_cost': float(m.unit_cost) if m.unit_cost else 0,
+            'total_cost': float(m.total_cost) if m.total_cost else float(m.quantity) * float(m.unit_cost or 0),
+            'location_id': m.location_id,
+            'location': location,
+            'from_location': from_location,
+            'to_location': to_location,
+            'reference_type': m.reference_type or '',
+            'reference_number': m.reference_number or '',
+            'reference_id': m.reference_id,
+            'batch_number': m.batch_number or '',
+            'lot_number': m.lot_number or '',
+            'serial_number': m.serial_number or '',
+            'expiry_date': str(m.expiry_date) if m.expiry_date else None,
+            'movement_date': str(m.movement_date) if m.movement_date else '',
+            'notes': m.notes or '',
+            'status': 'completed',
+            'created_by': created_by_name,
+            'created_at': str(m.created_at) if m.created_at else ''
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @warehouse_bp.route('/movements', methods=['POST'])
 @jwt_required()
 def create_movement():
     """Create inventory movement (stock_in, stock_out, transfer, adjust)"""
     try:
         from flask_jwt_extended import get_jwt_identity
+        from utils.opname_lock import check_opname_lock
         data = request.get_json()
         user_id = int(get_jwt_identity())
         
@@ -410,12 +683,24 @@ def create_movement():
         if movement_type not in ['stock_in', 'stock_out', 'transfer', 'adjust']:
             return error_response('Invalid movement type'), 400
         
+        # Check opname lock — block all transactions if zone/location is under opname
+        lock_location = data.get('location_id') or data.get('to_location_id') or data.get('from_location_id')
+        lock = check_opname_lock(
+            location_id=lock_location,
+            material_id=data.get('material_id'),
+            product_id=data.get('product_id')
+        )
+        if lock['locked']:
+            return error_response(lock['message']), 423
+        
         product_id = data.get('product_id')
         material_id = data.get('material_id')
         quantity = float(data.get('quantity', 0))
         
         if quantity <= 0:
             return error_response('Quantity must be greater than 0'), 400
+        
+        unit_cost = float(data.get('unit_cost', 0)) if data.get('unit_cost') else None
         
         # Create movement record
         movement = InventoryMovement(
@@ -430,6 +715,8 @@ def create_movement():
             reference_id=data.get('reference_id'),
             batch_number=data.get('batch_number'),
             lot_number=data.get('lot_number'),
+            unit_cost=unit_cost,
+            total_cost=round(quantity * unit_cost, 2) if unit_cost else None,
             notes=data.get('notes'),
             created_by=user_id
         )
@@ -438,12 +725,26 @@ def create_movement():
         # Update inventory based on movement type
         if movement_type == 'stock_in':
             location_id = data.get('to_location_id') or data.get('location_id')
+            batch_number = data.get('batch_number')
+            lot_number = data.get('lot_number')
+            
             if location_id:
-                inventory = Inventory.query.filter_by(
-                    product_id=product_id,
-                    material_id=material_id,
-                    location_id=location_id
-                ).first()
+                # For stock_in with batch_number, always create a NEW inventory record
+                # per batch to support FIFO tracking
+                if batch_number:
+                    # Check if same batch already exists at this location
+                    inventory = Inventory.query.filter_by(
+                        product_id=product_id,
+                        material_id=material_id,
+                        location_id=location_id,
+                        batch_number=batch_number
+                    ).first()
+                else:
+                    inventory = Inventory.query.filter_by(
+                        product_id=product_id,
+                        material_id=material_id,
+                        location_id=location_id
+                    ).first()
                 
                 if inventory:
                     inventory.quantity_on_hand += quantity
@@ -455,26 +756,39 @@ def create_movement():
                         location_id=location_id,
                         quantity_on_hand=quantity,
                         quantity_available=quantity,
-                        batch_number=data.get('batch_number'),
+                        batch_number=batch_number,
+                        lot_number=lot_number,
                         is_active=True,
                         created_by=user_id
                     )
                     db.session.add(inventory)
+                    db.session.flush()
+                
+                # Link movement to inventory record
+                movement.inventory_id = inventory.id
         
         elif movement_type == 'stock_out':
-            location_id = data.get('from_location_id') or data.get('location_id')
-            if location_id:
-                inventory = Inventory.query.filter_by(
-                    product_id=product_id,
-                    material_id=material_id,
-                    location_id=location_id
-                ).first()
-                
-                if inventory:
-                    if inventory.quantity_available < quantity:
-                        return error_response('Insufficient stock available'), 400
-                    inventory.quantity_on_hand -= quantity
-                    inventory.quantity_available -= quantity
+            from utils.fifo_helper import fifo_deduct_stock
+            
+            result = fifo_deduct_stock(
+                material_id=material_id,
+                product_id=product_id,
+                quantity_needed=quantity,
+                reference_number=data.get('reference_number'),
+                reference_type=data.get('reference_type'),
+                reference_id=data.get('reference_id'),
+                notes=data.get('notes'),
+                user_id=user_id
+            )
+            
+            if not result['success']:
+                return error_response(result['error']), 400
+            
+            # Update the movement record with FIFO cost info
+            if result['movements']:
+                movement.batch_number = result['movements'][0]['batch_number']
+                movement.unit_cost = result['weighted_avg_cost']
+                movement.total_cost = result['total_cost']
         
         elif movement_type == 'transfer':
             from_location_id = data.get('from_location_id')
@@ -745,63 +1059,100 @@ def get_warehouse_dashboard():
 @warehouse_bp.route('/alerts', methods=['GET'])
 @jwt_required()
 def get_warehouse_alerts():
+    """Get warehouse alerts: low stock & out of stock for both Products AND Materials"""
     try:
-        status = request.args.get('status', 'active')
-        
-        # Get low stock alerts
-        low_stock_items = db.session.query(
-            Product.id,
-            Product.code,
-            Product.name,
-            Inventory.quantity_on_hand,
-            Product.minimum_stock,
-            WarehouseLocation.code.label('location_code')
-        ).join(Inventory).join(WarehouseLocation).filter(
-            and_(
-                Inventory.quantity_on_hand <= Product.minimum_stock,
-                Product.minimum_stock > 0
-            )
-        ).all()
-        
-        # Get out of stock alerts
-        out_of_stock_items = db.session.query(
-            Product.id,
-            Product.code,
-            Product.name,
-            WarehouseLocation.code.label('location_code')
-        ).join(Inventory).join(WarehouseLocation).filter(
-            Inventory.quantity_on_hand <= 0
-        ).all()
+        item_type = request.args.get('item_type')  # 'product', 'material', or None for all
         
         alerts = []
         
-        # Add low stock alerts
-        for item in low_stock_items:
-            alerts.append({
-                'id': f"low_stock_{item.id}",
-                'type': 'low_stock',
-                'severity': 'medium',
-                'title': f"Low Stock: {item.code}",
-                'message': f"{item.name} is running low (Current: {item.quantity}, Min: {item.minimum_stock})",
-                'product_id': item.id,
-                'location_code': item.location_code,
-                'created_at': get_local_now().isoformat()
-            })
+        # ── Product alerts ──
+        if item_type in (None, 'product'):
+            try:
+                product_low = db.session.query(
+                    Product.id, Product.code, Product.name, Product.primary_uom,
+                    func.sum(Inventory.quantity_on_hand).label('total_on_hand'),
+                    Product.min_stock_level
+                ).join(Inventory, Inventory.product_id == Product.id).filter(
+                    Inventory.is_active == True,
+                    Product.min_stock_level > 0
+                ).group_by(Product.id).having(
+                    func.sum(Inventory.quantity_on_hand) <= Product.min_stock_level
+                ).all()
+                
+                for item in product_low:
+                    qty = float(item.total_on_hand or 0)
+                    min_lvl = float(item.min_stock_level or 0)
+                    is_out = qty <= 0
+                    alerts.append({
+                        'id': f"{'out' if is_out else 'low'}_product_{item.id}",
+                        'type': 'out_of_stock' if is_out else 'low_stock',
+                        'severity': 'high' if is_out else 'medium',
+                        'item_type': 'product',
+                        'item_id': item.id,
+                        'item_code': item.code,
+                        'item_name': item.name,
+                        'uom': item.primary_uom,
+                        'current_stock': qty,
+                        'min_stock_level': min_lvl,
+                        'shortage': round(min_lvl - qty, 2),
+                        'title': f"{'Habis' if is_out else 'Stok Rendah'}: {item.code}",
+                        'message': f"{item.name} {'habis' if is_out else 'di bawah minimum'} "
+                                   f"(Stok: {qty} {item.primary_uom}, Min: {min_lvl} {item.primary_uom})"
+                    })
+            except Exception:
+                pass
         
-        # Add out of stock alerts
-        for item in out_of_stock_items:
-            alerts.append({
-                'id': f"out_of_stock_{item.id}",
-                'type': 'out_of_stock',
-                'severity': 'high',
-                'title': f"Out of Stock: {item.code}",
-                'message': f"{item.name} is out of stock",
-                'product_id': item.id,
-                'location_code': item.location_code,
-                'created_at': get_local_now().isoformat()
-            })
+        # ── Material alerts ──
+        if item_type in (None, 'material'):
+            try:
+                material_low = db.session.query(
+                    Material.id, Material.code, Material.name, Material.primary_uom,
+                    Material.material_type, Material.category,
+                    func.sum(Inventory.quantity_on_hand).label('total_on_hand'),
+                    Material.min_stock_level
+                ).join(Inventory, Inventory.material_id == Material.id).filter(
+                    Inventory.is_active == True,
+                    Material.min_stock_level > 0
+                ).group_by(Material.id).having(
+                    func.sum(Inventory.quantity_on_hand) <= Material.min_stock_level
+                ).all()
+                
+                for item in material_low:
+                    qty = float(item.total_on_hand or 0)
+                    min_lvl = float(item.min_stock_level or 0)
+                    is_out = qty <= 0
+                    alerts.append({
+                        'id': f"{'out' if is_out else 'low'}_material_{item.id}",
+                        'type': 'out_of_stock' if is_out else 'low_stock',
+                        'severity': 'high' if is_out else 'medium',
+                        'item_type': 'material',
+                        'item_id': item.id,
+                        'item_code': item.code,
+                        'item_name': item.name,
+                        'material_type': item.material_type,
+                        'category': item.category,
+                        'uom': item.primary_uom,
+                        'current_stock': qty,
+                        'min_stock_level': min_lvl,
+                        'shortage': round(min_lvl - qty, 2),
+                        'title': f"{'Habis' if is_out else 'Stok Rendah'}: {item.code}",
+                        'message': f"{item.name} {'habis' if is_out else 'di bawah minimum'} "
+                                   f"(Stok: {qty} {item.primary_uom}, Min: {min_lvl} {item.primary_uom})"
+                    })
+            except Exception:
+                pass
         
-        return jsonify({'alerts': alerts}), 200
+        # Sort: out_of_stock first, then low_stock
+        alerts.sort(key=lambda x: (0 if x['type'] == 'out_of_stock' else 1, x.get('item_code', '')))
+        
+        return jsonify({
+            'alerts': alerts,
+            'total': len(alerts),
+            'summary': {
+                'out_of_stock': len([a for a in alerts if a['type'] == 'out_of_stock']),
+                'low_stock': len([a for a in alerts if a['type'] == 'low_stock'])
+            }
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -858,6 +1209,62 @@ def get_inventory_turnover():
             'period_days': period,
             'turnover_analysis': turnover_analysis
         }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============ FIFO BATCH AVAILABILITY ============
+
+@warehouse_bp.route('/fifo-batches', methods=['GET'])
+@jwt_required()
+def get_fifo_batches():
+    """Get available inventory batches in FIFO order (oldest first).
+    Used to show which batches will be consumed for a given quantity.
+    
+    Query params:
+        material_id (int): Material ID
+        product_id (int): Product ID  
+        quantity (float, optional): If provided, shows which batches will be used
+    """
+    try:
+        from utils.fifo_helper import fifo_check_available
+        
+        material_id = request.args.get('material_id', type=int)
+        product_id = request.args.get('product_id', type=int)
+        quantity_needed = request.args.get('quantity', type=float)
+        
+        result = fifo_check_available(material_id=material_id, product_id=product_id)
+        
+        response = {
+            'total_available': result['total_available'],
+            'batches': result['batches']
+        }
+        
+        # If quantity requested, show allocation plan
+        if quantity_needed and quantity_needed > 0:
+            allocation = []
+            remaining = quantity_needed
+            sufficient = result['total_available'] >= quantity_needed
+            
+            for batch in result['batches']:
+                if remaining <= 0:
+                    break
+                take = min(batch['quantity_on_hand'], remaining)
+                allocation.append({
+                    'batch_number': batch['batch_number'],
+                    'quantity_to_take': take,
+                    'unit_cost': batch['unit_cost'],
+                    'total_cost': round(take * batch['unit_cost'], 2) if batch['unit_cost'] else 0
+                })
+                remaining -= take
+            
+            response['allocation_plan'] = allocation
+            response['quantity_requested'] = quantity_needed
+            response['sufficient_stock'] = sufficient
+            response['shortage'] = max(0, remaining) if not sufficient else 0
+        
+        return jsonify(response), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

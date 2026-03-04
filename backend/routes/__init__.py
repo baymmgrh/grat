@@ -32,6 +32,10 @@ def register_routes(app):
     from .warehouse_enhanced import warehouse_enhanced_bp
     from .attendance import attendance_bp
     from .logs import logs_bp
+    from .converting import converting_bp
+    from .staff_leave import staff_leave_bp
+    from .hr_payroll import hr_payroll_bp
+    from .live_monitoring import live_monitoring_bp
     
     # Register all blueprints
     app.register_blueprint(health_bp, url_prefix='/api')
@@ -61,6 +65,14 @@ def register_routes(app):
     app.register_blueprint(warehouse_enhanced_bp, url_prefix='/api/warehouse-enhanced')
     app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
+    app.register_blueprint(converting_bp)  # Routes already have /api/converting prefix
+    app.register_blueprint(staff_leave_bp, url_prefix='/api/staff-leave')
+    app.register_blueprint(hr_payroll_bp, url_prefix='/api/hr/payroll')
+    app.register_blueprint(live_monitoring_bp, url_prefix='/api/live-monitoring')
+    print("✓ Converting routes registered")
+    print("✓ Live Monitoring routes registered")
+    print("✓ Staff Leave routes registered")
+    print("✓ Payroll routes registered")
     
     # API documentation endpoint
     @app.route('/api/docs')

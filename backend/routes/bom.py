@@ -16,9 +16,9 @@ def get_product_name_from_new(product_code):
     """Get updated product name from ProductNew model"""
     if not product_code:
         return None
-    product_new = ProductNew.query.filter_by(kode_produk=product_code).first()
+    product_new = ProductNew.query.filter_by(code=product_code).first()
     if product_new:
-        return product_new.nama_produk
+        return product_new.name
     return None
 
 bom_bp = Blueprint('bom', __name__)

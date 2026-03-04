@@ -31,13 +31,28 @@ interface PackingList {
   created_at: string;
 }
 
-interface WIPProduct {
+interface WIPComponent {
+  material_code: string;
+  material_name: string;
+  wip_product_id: number | null;
+  qty_per_karton: number;
+  uom: string;
+  wip_stock_pcs: number;
+  wip_stock_karton: number;
+  possible_fg_kartons: number;
+}
+
+interface FGProduct {
   id: number;
   code: string;
   name: string;
-  wip_carton: number;
-  wip_pcs: number;
+  bom_id: number | null;
+  bom_number: string | null;
   pack_per_carton: number;
+  source: 'direct' | 'bom_components';
+  available_kartons: number;
+  available_pcs: number;
+  wip_components: WIPComponent[];
 }
 
 export default function PackingListNew() {
@@ -48,13 +63,15 @@ export default function PackingListNew() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [wipProducts, setWipProducts] = useState<WIPProduct[]>([]);
+  const [wipProducts, setWipProducts] = useState<FGProduct[]>([]);
   const [creating, setCreating] = useState(false);
 
   // Form state for new packing list
   const [formData, setFormData] = useState({
     product_id: '',
     total_carton: '',
+    pack_per_carton: '',
+    start_carton_number: '',
     customer_name: '',
     batch_mixing: '',
     notes: ''
@@ -99,6 +116,8 @@ export default function PackingListNew() {
     setFormData({
       product_id: '',
       total_carton: '',
+      pack_per_carton: '',
+      start_carton_number: '1',
       customer_name: '',
       batch_mixing: '',
       notes: ''
@@ -115,16 +134,23 @@ export default function PackingListNew() {
     const selectedProduct = wipProducts.find(p => p.id === parseInt(formData.product_id));
     const totalCarton = parseInt(formData.total_carton);
     
-    if (selectedProduct && totalCarton > selectedProduct.wip_carton) {
-      toast.error(`Stok WIP tidak cukup. Tersedia: ${selectedProduct.wip_carton} karton`);
+    const ppc = parseInt(formData.pack_per_carton) || 0;
+    const maxK = selectedProduct && ppc > 0
+      ? Math.min(...selectedProduct.wip_components.map(c => Math.floor(c.wip_stock_pcs / ppc)))
+      : selectedProduct?.available_kartons || 0;
+    if (selectedProduct && totalCarton > maxK) {
+      toast.error(`Stok WIP tidak cukup. Maksimal: ${maxK} karton`);
       return;
     }
 
     try {
       setCreating(true);
+      const startNumber = parseInt(formData.start_carton_number) || 1;
       await axiosInstance.post('/api/packing-list', {
         product_id: parseInt(formData.product_id),
         total_carton: totalCarton,
+        pack_per_carton: parseInt(formData.pack_per_carton) || undefined,
+        start_carton_number: startNumber,
         customer_name: formData.customer_name || null,
         batch_mixing: formData.batch_mixing || null,
         notes: formData.notes || null
@@ -144,13 +170,19 @@ export default function PackingListNew() {
     const styles: Record<string, string> = {
       draft: 'bg-gray-100 text-gray-800',
       in_progress: 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800'
+      completed: 'bg-yellow-100 text-yellow-800',
+      quarantine: 'bg-orange-100 text-orange-800',
+      released: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      cancelled: 'bg-gray-100 text-gray-500'
     };
     const labels: Record<string, string> = {
       draft: 'Draft',
       in_progress: 'Dalam Proses',
-      completed: 'Selesai',
+      completed: 'Selesai Timbang',
+      quarantine: 'Quarantine',
+      released: 'Released',
+      rejected: 'Rejected',
       cancelled: 'Dibatalkan'
     };
     return (
@@ -162,13 +194,30 @@ export default function PackingListNew() {
 
   const selectedProduct = wipProducts.find(p => p.id === parseInt(formData.product_id));
 
+  // Recalculate max kartons based on user's pack_per_carton input
+  const userPPC = parseInt(formData.pack_per_carton) || 0;
+  const recalcMaxKartons = (() => {
+    if (!selectedProduct) return 0;
+    if (selectedProduct.source === 'direct') {
+      // Direct mode: max kartons = FG WIP Stock kartons (fixed, not affected by PPC)
+      return selectedProduct.available_kartons;
+    }
+    // BOM components mode: recalculate based on user PPC
+    if (userPPC > 0 && selectedProduct.wip_components.length > 0) {
+      return Math.min(...selectedProduct.wip_components.map(comp => 
+        Math.floor(comp.wip_stock_pcs / userPPC)
+      ));
+    }
+    return selectedProduct.available_kartons;
+  })();
+
   return (
     <div className="p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">📦 Packing List</h1>
-          <p className="text-sm text-gray-500">Kelola packing dari stok WIP</p>
+          <p className="text-sm text-gray-500">Kelola packing produk Finished Good</p>
         </div>
         <div className="flex gap-3">
           <Link
@@ -213,7 +262,10 @@ export default function PackingListNew() {
               <option value="">Semua Status</option>
               <option value="draft">Draft</option>
               <option value="in_progress">Dalam Proses</option>
-              <option value="completed">Selesai</option>
+              <option value="completed">Selesai Timbang</option>
+              <option value="quarantine">Quarantine</option>
+              <option value="released">Released</option>
+              <option value="rejected">Rejected</option>
               <option value="cancelled">Dibatalkan</option>
             </select>
           </div>
@@ -346,37 +398,83 @@ export default function PackingListNew() {
               {/* Product Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pilih Produk dari WIP *
+                  Pilih Produk Finished Good *
                 </label>
                 <select
                   value={formData.product_id}
-                  onChange={(e) => setFormData({ ...formData, product_id: e.target.value })}
+                  onChange={(e) => {
+                    const pid = e.target.value;
+                    const prod = wipProducts.find(p => p.id === parseInt(pid));
+                    setFormData({ 
+                      ...formData, 
+                      product_id: pid,
+                      pack_per_carton: prod ? prod.pack_per_carton.toString() : ''
+                    });
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">-- Pilih Produk --</option>
                   {wipProducts.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({p.code}) - WIP: {p.wip_carton} karton
+                      {p.name} ({p.code})
                     </option>
                   ))}
                 </select>
                 {wipProducts.length === 0 && (
                   <p className="text-sm text-orange-600 mt-1">
-                    Tidak ada produk dengan stok WIP. Selesaikan Work Order terlebih dahulu.
+                    Tidak ada produk Finished Good dengan stok WIP tersedia. Selesaikan Work Order WIP terlebih dahulu.
                   </p>
                 )}
               </div>
 
-              {/* WIP Info */}
+              {/* Pack per Carton - di atas info ketersediaan agar maks karton terupdate */}
               {selectedProduct && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                  <p className="text-sm font-medium text-purple-800">Stok WIP Tersedia:</p>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pack per Karton *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.pack_per_carton}
+                    onChange={(e) => setFormData({ ...formData, pack_per_carton: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Contoh: 24"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Jumlah pack/pcs dalam 1 karton. Default dari BOM, bisa diubah sesuai kebutuhan.
+                  </p>
+                </div>
+              )}
+
+              {/* FG Availability Info */}
+              {selectedProduct && userPPC > 0 && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
+                  <p className="text-sm font-medium text-purple-800">Ketersediaan untuk Packing:</p>
                   <p className="text-lg font-bold text-purple-900">
-                    {selectedProduct.wip_carton} karton ({selectedProduct.wip_pcs.toLocaleString()} pcs)
+                    Maks {recalcMaxKartons.toLocaleString()} karton ({(recalcMaxKartons * userPPC).toLocaleString()} pcs)
                   </p>
                   <p className="text-xs text-purple-600">
-                    Pack per karton: {selectedProduct.pack_per_carton}
+                    {selectedProduct.source === 'direct' ? 'Stok langsung (WIP Stock FG)' : `BOM: ${selectedProduct.bom_number}`}
                   </p>
+                  {/* WIP Component Breakdown - only for bom_components mode */}
+                  {selectedProduct.source === 'bom_components' && selectedProduct.wip_components.length > 0 && (
+                    <div className="mt-2 border-t border-purple-200 pt-2">
+                      <p className="text-xs font-medium text-purple-700 mb-1">Komponen WIP per karton ({userPPC} pcs/krt):</p>
+                      {selectedProduct.wip_components.map((comp, idx) => {
+                        const compMaxKrt = Math.floor(comp.wip_stock_pcs / userPPC);
+                        const isBottleneck = compMaxKrt === recalcMaxKartons;
+                        return (
+                          <div key={idx} className={`flex justify-between text-xs py-0.5 ${isBottleneck && selectedProduct.wip_components.length > 1 ? 'text-red-600 font-medium' : 'text-purple-600'}`}>
+                            <span>{comp.material_name}</span>
+                            <span>
+                              Stok: {comp.wip_stock_pcs.toLocaleString()} pcs → {compMaxKrt.toLocaleString()} krt
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -388,12 +486,69 @@ export default function PackingListNew() {
                 <input
                   type="number"
                   min="1"
-                  max={selectedProduct?.wip_carton || 999999}
+                  max={recalcMaxKartons || 999999}
                   value={formData.total_carton}
                   onChange={(e) => setFormData({ ...formData, total_carton: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Masukkan jumlah karton"
                 />
+                {formData.total_carton && formData.pack_per_carton && (
+                  <p className="text-xs text-green-600 mt-1 font-medium">
+                    Total: {(parseInt(formData.total_carton) * parseInt(formData.pack_per_carton)).toLocaleString()} pcs
+                  </p>
+                )}
+              </div>
+
+              {/* Auto Numbering */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-blue-800 mb-2">
+                  🔢 Auto Numbering Karton (Maks 10.000)
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-blue-600 mb-1">Nomor Awal</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      value={formData.start_carton_number}
+                      onChange={(e) => setFormData({ ...formData, start_carton_number: e.target.value })}
+                      className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="1"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-blue-600 mb-1">Nomor Akhir</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={formData.total_carton && formData.start_carton_number 
+                        ? (() => {
+                            const start = parseInt(formData.start_carton_number);
+                            const total = parseInt(formData.total_carton);
+                            let end = start + total - 1;
+                            if (end > 10000) end = ((end - 1) % 10000) + 1;
+                            return end.toString();
+                          })()
+                        : '-'}
+                      className="w-full px-3 py-2 border border-blue-200 rounded-lg bg-blue-100 text-blue-800 font-bold"
+                    />
+                  </div>
+                </div>
+                {formData.total_carton && formData.start_carton_number && (
+                  <p className="text-xs text-blue-600 mt-2">
+                    {(() => {
+                      const start = parseInt(formData.start_carton_number);
+                      const total = parseInt(formData.total_carton);
+                      let end = start + total - 1;
+                      const willWrap = end > 10000;
+                      if (willWrap) end = ((end - 1) % 10000) + 1;
+                      return willWrap 
+                        ? <>Karton: <strong>{start}</strong> → <strong>10000</strong> → <strong>1</strong> → <strong>{end}</strong> (reset setelah 10000)</>
+                        : <>Karton akan dinomori dari <strong>{start}</strong> sampai <strong>{end}</strong></>;
+                    })()}
+                  </p>
+                )}
               </div>
 
               {/* Customer Name */}

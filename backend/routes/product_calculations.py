@@ -138,7 +138,7 @@ def recalculate_product(kode_produk):
     Recalculate and update stored calculations for a product
     """
     try:
-        product = ProductNew.query.filter_by(kode_produk=kode_produk).first_or_404()
+        product = ProductNew.query.filter_by(code=kode_produk).first_or_404()
         
         # Prepare data for calculation
         product_data = {
@@ -223,7 +223,7 @@ def recalculate_all_products():
             except Exception as e:
                 error_count += 1
                 errors.append({
-                    'kode_produk': product.kode_produk,
+                    'kode_produk': product.code,
                     'error': str(e)
                 })
         

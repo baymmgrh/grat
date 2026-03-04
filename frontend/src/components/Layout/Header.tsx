@@ -1,20 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAppDispatch, useAppSelector } from '../../hooks/redux'
-import { logout } from '../../store/slices/authSlice'
 import {
   Bars3Icon
 } from '@heroicons/react/24/outline'
 import axiosInstance from '../../utils/axiosConfig'
 import NotificationBell from '../NotificationBell'
+
 interface HeaderProps {
   toggleSidebar: () => void
 }
 
 export default function Header({ toggleSidebar }: HeaderProps) {
-  const { user } = useAppSelector((state) => state.auth)
-  const dispatch = useAppDispatch()
-  const navigate = useNavigate()
   const [companyName, setCompanyName] = useState('PT. Gratia Makmur Sentosa - ERP System')
 
   useEffect(() => {
@@ -44,11 +39,6 @@ export default function Header({ toggleSidebar }: HeaderProps) {
     }
   }
 
-  const handleLogout = () => {
-    dispatch(logout())
-    navigate('/')
-  }
-
   return (
     <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
       <button
@@ -74,24 +64,6 @@ export default function Header({ toggleSidebar }: HeaderProps) {
         </div>
         <div className="flex items-center gap-x-4 lg:gap-x-6">
           <NotificationBell />
-
-          <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" aria-hidden="true" />
-
-          <div className="flex items-center gap-x-4">
-            <button
-              onClick={() => navigate('/app/profile')}
-              className="text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors"
-              title="Lihat Profil"
-            >
-              {user?.full_name}
-            </button>
-            <button
-              onClick={handleLogout}
-              className="text-sm font-medium text-primary-600 hover:text-primary-700"
-            >
-              Keluar
-            </button>
-          </div>
         </div>
       </div>
     </div>

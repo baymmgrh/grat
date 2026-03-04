@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom';
+import { toast } from 'react-hot-toast'
+import axiosInstance from '../../utils/axiosConfig'
 import { useGetEmployeesQuery, useGetDepartmentsQuery, useGetPositionsQuery } from '../../services/api'
 import {
   PlusIcon,
@@ -9,7 +11,8 @@ import {
   EyeIcon,
   UserGroupIcon,
   ArrowLeftIcon,
-  XMarkIcon
+  XMarkIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
 
@@ -53,6 +56,17 @@ export default function EmployeeList() {
   }
 
   const hasActiveFilters = searchQuery || departmentFilter || positionFilter || statusFilter || employmentTypeFilter
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!window.confirm(`Yakin hapus karyawan "${name}"?`)) return
+    try {
+      await axiosInstance.delete(`/api/hr/employees/${id}`)
+      toast.success('Karyawan berhasil dihapus')
+      refetch()
+    } catch {
+      toast.error('Gagal menghapus karyawan')
+    }
+  }
 
   const employmentTypes = [
     { value: 'full_time', label: 'Karyawan Tetap' },
@@ -275,6 +289,13 @@ export default function EmployeeList() {
                         >
                           <PencilSquareIcon className="h-5 w-5" />
                         </Link>
+                        <button
+                          onClick={() => handleDelete(employee.id, employee.full_name)}
+                          className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Hapus"
+                        >
+                          <TrashIcon className="h-5 w-5" />
+                        </button>
                       </div>
                     </td>
                   </tr>

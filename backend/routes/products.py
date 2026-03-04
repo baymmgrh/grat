@@ -1084,8 +1084,8 @@ def get_analytics_performance():
             if total_produced > 0 or len(work_orders) > 0:
                 performance.append({
                     'product_id': product.id,
-                    'product_name': product.nama_produk,
-                    'product_code': product.kode_produk,
+                    'product_name': product.name,
+                    'product_code': product.code,
                     'category': product.spunlace or 'General',
                     'total_produced': int(total_produced),
                     'total_planned': int(total_planned),

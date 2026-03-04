@@ -441,10 +441,11 @@ def production_by_product_report():
         end_date = end_date.replace(hour=23, minute=59, second=59)
         
         # Build base query for production records
+        # Use COALESCE to prefer ProductionRecord.product_id, fallback to WorkOrder.product_id
         query = db.session.query(
             ProductionRecord.production_date,
             ProductionRecord.work_order_id,
-            WorkOrder.product_id,
+            func.coalesce(ProductionRecord.product_id, WorkOrder.product_id).label('product_id'),
             Product.code.label('product_code'),
             Product.name.label('product_name'),
             ProductionRecord.quantity_produced,
@@ -453,15 +454,20 @@ def production_by_product_report():
             ProductionRecord.waste_kg
         ).join(
             WorkOrder, ProductionRecord.work_order_id == WorkOrder.id
-        ).join(
-            Product, WorkOrder.product_id == Product.id
+        ).outerjoin(
+            Product, func.coalesce(ProductionRecord.product_id, WorkOrder.product_id) == Product.id
         ).filter(
             ProductionRecord.production_date >= start_date.date(),
             ProductionRecord.production_date <= end_date.date()
         )
         
         if product_id:
-            query = query.filter(WorkOrder.product_id == product_id)
+            query = query.filter(
+                db.or_(
+                    ProductionRecord.product_id == product_id,
+                    db.and_(ProductionRecord.product_id.is_(None), WorkOrder.product_id == product_id)
+                )
+            )
         
         records = query.all()
         
@@ -589,10 +595,10 @@ def export_production_by_product():
         
         end_date = end_date.replace(hour=23, minute=59, second=59)
         
-        # Get data (reuse logic from above)
+        # Get data - use COALESCE to prefer ProductionRecord.product_id
         query = db.session.query(
             ProductionRecord.production_date,
-            WorkOrder.product_id,
+            func.coalesce(ProductionRecord.product_id, WorkOrder.product_id).label('product_id'),
             Product.code.label('product_code'),
             Product.name.label('product_name'),
             func.sum(ProductionRecord.quantity_produced).label('total_produced'),
@@ -602,19 +608,24 @@ def export_production_by_product():
             func.count(func.distinct(ProductionRecord.work_order_id)).label('wo_count')
         ).join(
             WorkOrder, ProductionRecord.work_order_id == WorkOrder.id
-        ).join(
-            Product, WorkOrder.product_id == Product.id
+        ).outerjoin(
+            Product, func.coalesce(ProductionRecord.product_id, WorkOrder.product_id) == Product.id
         ).filter(
             ProductionRecord.production_date >= start_date.date(),
             ProductionRecord.production_date <= end_date.date()
         )
         
         if product_id:
-            query = query.filter(WorkOrder.product_id == product_id)
+            query = query.filter(
+                db.or_(
+                    ProductionRecord.product_id == product_id,
+                    db.and_(ProductionRecord.product_id.is_(None), WorkOrder.product_id == product_id)
+                )
+            )
         
         # Group by product
         query = query.group_by(
-            WorkOrder.product_id,
+            func.coalesce(ProductionRecord.product_id, WorkOrder.product_id),
             Product.code,
             Product.name
         ).order_by(func.sum(ProductionRecord.quantity_produced).desc())

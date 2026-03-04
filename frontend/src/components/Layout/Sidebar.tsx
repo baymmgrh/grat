@@ -1,6 +1,8 @@
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useAppDispatch, useAppSelector } from '../../hooks/redux'
+import { logout } from '../../store/slices/authSlice'
 import {
   ArrowPathIcon,
   ArrowDownTrayIcon,
@@ -35,6 +37,7 @@ import {
   CalendarDaysIcon,
   AcademicCapIcon,
   CurrencyDollarIcon,
+  SignalIcon,
   CalculatorIcon,
   ClipboardDocumentListIcon,
   RocketLaunchIcon,
@@ -50,7 +53,9 @@ import {
   ScaleIcon,
   CheckBadgeIcon,
   CameraIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  ArrowRightOnRectangleIcon,
+  UserCircleIcon
 } from '@heroicons/react/24/outline'
 import clsx from 'clsx'
 import axiosInstance from '../../utils/axiosConfig'
@@ -62,9 +67,16 @@ interface SidebarProps {
 }
 
 function SidebarContent() {
-  const [companyName, setCompanyName] = useState('ERP System')
   const [expandedItems, setExpandedItems] = useState<string[]>([])
   const { hasPermission, hasAnyPermission, isAdmin, isSuperAdmin, isLoading } = usePermissions()
+  const { user } = useAppSelector((state) => state.auth)
+  const dispatch = useAppDispatch()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    dispatch(logout())
+    navigate('/')
+  }
 
   // Permission-based menu visibility
   // If still loading or is admin/super admin, show all menus
@@ -78,6 +90,8 @@ function SidebarContent() {
       items: [
         { name: 'Dashboard', href: '/app', icon: HomeIcon, permission: 'dashboard' },
         { name: 'Production Executive', href: '/app/executive/production', icon: PresentationChartLineIcon, permission: 'dashboard' },
+        { name: 'Production Monitoring', href: '/app/executive/production-monitoring', icon: ChartBarIcon, permission: 'dashboard' },
+        { name: 'Live Monitoring', href: '/app/production/live-monitoring', icon: SignalIcon, permission: 'dashboard' },
       ]
     },
     {
@@ -105,13 +119,27 @@ function SidebarContent() {
           permission: 'warehouse',
           children: [
             { name: 'Dashboard', href: '/app/warehouse', icon: PresentationChartLineIcon },
-            { name: 'Inventory', href: '/app/warehouse/inventory', icon: ArchiveBoxIcon, permission: 'inventory' },
-            { name: 'Materials', href: '/app/warehouse/materials', icon: CubeIcon, permission: 'materials' },
-            { name: 'Stock Input', href: '/app/warehouse/stock-input', icon: ClipboardDocumentCheckIcon },
-            { name: 'Stok Opname', href: '/app/warehouse/stock-opname', icon: ClipboardDocumentCheckIcon },
-            { name: 'Locations', href: '/app/warehouse/locations', icon: MapPinIcon },
-            { name: 'Movements', href: '/app/warehouse/movements', icon: ArrowsRightLeftIcon },
-            { name: 'Analytics', href: '/app/warehouse/analytics', icon: ChartPieIcon },
+            { name: 'Transaksi', icon: ArrowsRightLeftIcon, isSubMenu: true, subChildren: [
+              { name: 'Permintaan Barang', href: '/app/warehouse/material-issues' },
+              { name: 'Pemindahan Barang', href: '/app/warehouse/movements' },
+              { name: 'Penyesuaian Persediaan', href: '/app/warehouse/stock-input' },
+              { name: 'Penambahan Bahan Baku', href: '/app/warehouse/inventory' },
+            ]},
+            { name: 'Stok Opname', icon: ClipboardDocumentCheckIcon, isSubMenu: true, subChildren: [
+              { name: 'Perintah Opname', href: '/app/warehouse/stock-opname' },
+              { name: 'Hasil Opname', href: '/app/warehouse/stock-opname/results' },
+            ]},
+            { name: 'Master Data', icon: CubeIcon, isSubMenu: true, subChildren: [
+              { name: 'Barang & Material', href: '/app/warehouse/materials' },
+              { name: 'Gudang & Lokasi', href: '/app/warehouse/locations' },
+              { name: 'Satuan Barang', href: '/app/warehouse/uom' },
+              { name: 'Kategori Barang', href: '/app/products/categories' },
+            ]},
+            { name: 'Laporan', icon: DocumentChartBarIcon, isSubMenu: true, subChildren: [
+              { name: 'Barang per Gudang', href: '/app/warehouse/stock-summary' },
+              { name: 'Stok Minimum', href: '/app/warehouse/alerts' },
+              { name: 'Analytics', href: '/app/warehouse/analytics' },
+            ]},
           ]
         },
         { 
@@ -130,6 +158,7 @@ function SidebarContent() {
               { name: 'Mingguan', href: '/app/production/weekly-controller' },
               { name: 'Bulanan', href: '/app/production/monthly-controller' },
             ]},
+            { name: 'Converting', href: '/app/production/converting', icon: CogIcon },
             { name: 'Jadwal', icon: CalendarDaysIcon, isSubMenu: true, subChildren: [
               { name: 'Mingguan', href: '/app/production/scheduling' },
               { name: 'Bulanan', href: '/app/production/monthly-schedule' },
@@ -160,6 +189,7 @@ function SidebarContent() {
             { name: 'QC Barang Masuk', href: '/app/quality/incoming', icon: ArrowDownTrayIcon },
             { name: 'QC Dalam Proses', href: '/app/quality/in-process', icon: CogIcon },
             { name: 'QC Barang Jadi', href: '/app/quality/finish-good', icon: ClipboardDocumentCheckIcon },
+            { name: 'QC Packing List', href: '/app/quality/packing-list', icon: ArchiveBoxIcon },
             { name: 'Analytics', href: '/app/quality/analytics', icon: ChartPieIcon },
           ]
         },
@@ -257,6 +287,9 @@ function SidebarContent() {
             { name: 'Employees', href: '/app/hr/employees', icon: UserGroupIcon, permission: 'employees' },
             { name: 'Absensi (Foto)', href: '/app/hr/absensi', icon: CameraIcon, permission: 'attendance' },
             { name: 'Laporan Absensi', href: '/app/hr/attendance-report', icon: ClockIcon, permission: 'attendance' },
+            { name: 'Belum Clock Out', href: '/app/hr/attendance-not-clocked-out', icon: ClockIcon, permission: 'attendance' },
+            { name: 'Kelola Absensi', href: '/app/hr/attendance-admin', icon: ClockIcon, permission: 'attendance' },
+            { name: 'Kelola Data Wajah', href: '/app/hr/face-admin', icon: CameraIcon, permission: 'attendance' },
             { name: 'Leave Management', href: '/app/hr/leaves', icon: CalendarDaysIcon, permission: 'leave' },
             { name: 'Payroll', href: '/app/hr/payroll', icon: CurrencyDollarIcon, permission: 'payroll' },
             { name: 'Performance', href: '/app/hr/appraisal', icon: ChartBarIcon, permission: 'appraisal' },
@@ -344,23 +377,6 @@ function SidebarContent() {
     }
   ]
 
-  useEffect(() => {
-    loadCompanySettings()
-  }, [])
-
-  const loadCompanySettings = async () => {
-    try {
-      const response = await axiosInstance.get('/api/settings/company/public')
-      if (response.data && response.data.name) {
-        setCompanyName(response.data.name)
-      }
-    } catch (error) {
-      console.error('Error loading company settings:', error)
-      // Use fallback if API fails  
-      setCompanyName('ERP System')
-    }
-  }
-
   const toggleExpanded = (itemName: string) => {
     setExpandedItems(prev => 
       prev.includes(itemName) 
@@ -371,13 +387,16 @@ function SidebarContent() {
 
   return (
     <div className="flex grow flex-col gap-y-3 overflow-y-auto bg-gradient-to-b from-slate-900 to-slate-800 px-4 pb-4">
-      {/* Company Header */}
+      {/* User Header */}
       <div className="flex h-16 shrink-0 items-center border-b border-slate-700/50 mb-2">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg" aria-hidden="true">
-            <CubeIcon className="w-5 h-5 text-white" />
+        <div className="flex items-center gap-3 w-full">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg">
+            <UserCircleIcon className="w-6 h-6 text-white" />
           </div>
-          <span className="text-white text-lg font-bold tracking-tight">{companyName}</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-bold tracking-tight truncate">{user?.full_name || 'User'}</p>
+            <p className="text-[10px] text-slate-400 truncate">{user?.email || ''}</p>
+          </div>
         </div>
       </div>
 
@@ -464,7 +483,7 @@ function SidebarContent() {
                                         </button>
                                         <div className={clsx(
                                           'overflow-hidden transition-all duration-200',
-                                          expandedItems.includes(`${item.name}-${child.name}`.toLowerCase()) ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0'
+                                          expandedItems.includes(`${item.name}-${child.name}`.toLowerCase()) ? 'max-h-64 opacity-100' : 'max-h-0 opacity-0'
                                         )}>
                                           <ul className="mt-1 ml-3 border-l border-slate-600/50 pl-2 space-y-0.5">
                                             {child.subChildren?.map((subChild: any) => (
@@ -538,10 +557,22 @@ function SidebarContent() {
         </div>
       </nav>
 
-      {/* Footer */}
+      {/* Footer with Profil & Logout */}
       <div className="mt-auto pt-4 border-t border-slate-700/50">
-        <div className="px-2 py-2 text-center">
-          <span className="text-[10px] text-slate-500">ERP System v2.0</span>
+        <div className="flex gap-2 px-2">
+          <button
+            onClick={() => navigate('/app/profile')}
+            className="flex-1 px-3 py-2 text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+          >
+            Profil
+          </button>
+          <button
+            onClick={handleLogout}
+            className="flex-1 px-3 py-2 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors flex items-center justify-center gap-1"
+          >
+            <ArrowRightOnRectangleIcon className="w-4 h-4" />
+            Keluar
+          </button>
         </div>
       </div>
     </div>

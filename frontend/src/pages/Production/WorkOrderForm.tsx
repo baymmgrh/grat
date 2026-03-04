@@ -175,10 +175,6 @@ const navigate = useNavigate()
           const bomData = await bomDetailResponse.json()
           setBom(bomData.bom)
           setShowBOMDetails(true)
-          // Auto-fill pack_per_karton from BOM
-          const ppc = bomData.bom?.pack_per_carton || 1
-          setPackPerKarton(ppc)
-          setTargetCalc(prev => ({ ...prev, pack_per_karton: String(ppc) }))
         } else {
           setBom(null)
         }
@@ -340,6 +336,11 @@ const navigate = useNavigate()
       if (wo.scheduled_end_date) {
         setValue('scheduled_end_date', new Date(wo.scheduled_end_date).toISOString().slice(0, 16))
       }
+      // Load pack_per_carton from existing WO
+      if (wo.pack_per_carton && wo.pack_per_carton > 0) {
+        setPackPerKarton(wo.pack_per_carton)
+        setTargetCalc(prev => ({ ...prev, pack_per_karton: String(wo.pack_per_carton) }))
+      }
     } catch (error) {
       console.error('Error loading work order:', error)
       alert('Failed to load work order')
@@ -350,6 +351,12 @@ const navigate = useNavigate()
     // Validate product selection
     if (!selectedProduct) {
       alert('Please select a product');
+      return;
+    }
+    
+    // Validate pack per carton
+    if (!packPerKarton || packPerKarton <= 0) {
+      alert('Pack per Karton harus diisi (minimal 1)');
       return;
     }
     
@@ -364,7 +371,8 @@ const navigate = useNavigate()
         machine_id: data.machine_id ? parseInt(data.machine_id.toString()) : undefined,
         supervisor_id: data.supervisor_id ? parseInt(data.supervisor_id.toString()) : undefined,
         quantity: parseFloat(data.quantity.toString()),
-        uom: uom
+        uom: uom,
+        pack_per_carton: packPerKarton || 1
       }
       
       console.log('Work Order Payload:', payload);

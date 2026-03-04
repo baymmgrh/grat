@@ -14,13 +14,14 @@ from .production import (
     Machine, WorkOrder, ProductionRecord, BillOfMaterials, BOMItem, 
     ProductionSchedule, ShiftProduction, DowntimeRecord, WeeklyProductionPlan, 
     WeeklyProductionPlanItem, ProductChangeover, PackingList, PackingListItem,
-    WIPStock, WIPStockMovement, PackingListNew, PackingListNewItem
+    WIPStock, WIPStockMovement, PackingListNew, PackingListNewItem,
+    LiveMonitoringCheck
 )
 from .quality import QualityTest, QualityInspection, CAPA, QualityStandard
 from .shipping import ShippingOrder, ShippingItem, DeliveryTracking, LogisticsProvider
 from .returns import CustomerReturn, ReturnItem, ReturnQCRecord, ReturnDisposition
 from .finance import Invoice, InvoiceItem, Payment, AccountingEntry, CostCenter
-from .hr import Employee, Department, ShiftSchedule, Attendance, Leave, EmployeeRoster
+from .hr import Employee, Department, ShiftSchedule, Attendance, Leave, EmployeeRoster, OutsourcingVendor, PieceworkLog
 from .hr_extended import (
     PayrollPeriod, PayrollRecord, SalaryComponent, EmployeeSalaryComponent,
     AppraisalCycle, AppraisalTemplate, AppraisalCriteria, EmployeeAppraisal, AppraisalScore,
@@ -72,6 +73,8 @@ from .group_chat import (
     ChatServerRoleMember, ChatUserStatus, ChatUnreadMessage
 )
 from .work_order_bom import WorkOrderBOMItem
+from .converting import ConvertingMachine, ConvertingProduction
+from .uom import UnitOfMeasure, UoMConversion
 
 # Import to ensure models are registered
 from . import product_new_schema
@@ -90,7 +93,7 @@ __all__ = [
     'Supplier', 'PurchaseOrder', 'PurchaseOrderItem', 'GoodsReceivedNote', 'GRNItem',
     # Production models
     'Machine', 'WorkOrder', 'ProductionRecord', 'BillOfMaterials', 'BOMItem', 'ProductionSchedule', 'ShiftProduction', 'DowntimeRecord', 'WeeklyProductionPlan', 'WeeklyProductionPlanItem', 'ProductChangeover',
-    'PackingList', 'PackingListItem', 'WIPStock', 'WIPStockMovement', 'PackingListNew', 'PackingListNewItem',
+    'PackingList', 'PackingListItem', 'WIPStock', 'WIPStockMovement', 'PackingListNew', 'PackingListNewItem', 'LiveMonitoringCheck',
     # Quality models
     'QualityTest', 'QualityInspection', 'CAPA', 'QualityStandard',
     # Shipping models
@@ -101,6 +104,7 @@ __all__ = [
     'Invoice', 'InvoiceItem', 'Payment', 'AccountingEntry', 'CostCenter',
     # HR models
     'Employee', 'Department', 'ShiftSchedule', 'Attendance', 'Leave', 'EmployeeRoster',
+    'OutsourcingVendor', 'PieceworkLog',
     # HR Extended models
     'PayrollPeriod', 'PayrollRecord', 'SalaryComponent', 'EmployeeSalaryComponent',
     'AppraisalCycle', 'AppraisalTemplate', 'AppraisalCriteria', 'EmployeeAppraisal', 'AppraisalScore',
@@ -150,4 +154,8 @@ __all__ = [
     'ChatServer', 'ChatCategory', 'ChatChannel', 'ChatMessage', 'ChatAttachment',
     'ChatReaction', 'ChatMention', 'ChatPinnedMessage', 'ChatServerRole',
     'ChatServerRoleMember', 'ChatUserStatus', 'ChatUnreadMessage',
+    # Converting models
+    'ConvertingMachine', 'ConvertingProduction',
+    # UoM models
+    'UnitOfMeasure', 'UoMConversion',
 ]

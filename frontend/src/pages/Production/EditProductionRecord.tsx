@@ -44,10 +44,17 @@ interface ProductionRecord {
 interface WorkOrder {
   id: number;
   wo_number: string;
+  product_id: number;
   product_name: string;
   quantity: number;
   quantity_produced: number;
   pack_per_carton: number;
+}
+
+interface Product {
+  id: number;
+  code: string;
+  name: string;
 }
 
 // Downtime categories
@@ -70,7 +77,12 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
     'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
     'tunggu obat', 'tunggu ingredient', 'tunggu packing', 'tunggu instruksi',
-    'tunggu approval', 'tunggu qc', 'tunggu hasil qc',
+    'tunggu approval', 'tunggu qc', 'tunggu hasil qc', 'tunggu bahan kimia',
+    // Tunggu produk (dari mesin lain)
+    'tunggu produk',
+    // Tunggu temperatur
+    'tunggu temperatur stabil', 'tunggu temperatur',
+    'tunggu temperature stabil', 'tunggu temperature',
     'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
     'menunggu obat', 'menunggu ingredient',
     'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
@@ -78,7 +90,7 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
     'bahan habis', 'material habis', 'ingredient habis', 'obat habis',
     'waiting for', 'standby material', 'standby', 'idle', 'menganggur',
-    'tidak ada order', 'no order', 'no material'
+    'tidak ada order', 'no order', 'no material', 'menghabiskan order'
   ],
   // MESIN (Machine/Equipment): Semua masalah teknis mesin dan komponen
   mesin: [
@@ -89,6 +101,7 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     'cutter', 'cutter tumpul', 'blade', 'blade aus',
     'belt', 'belt putus', 'round belt putus', 'vanbelt', 'vanbelt putus',
     'conveyor', 'conveyor macet', 'conveyor slip',
+    'infeeding', 'infeeding macet', 'infeeding macet total',
     'folding', 'lipatan', 'lipat', 'kain keluar lajur folding',
     'tumpukan kain tdk rapih', 'tumpukan kain tidak rapi',
     'selang', 'selang bocor', 'selang angin bocor',
@@ -96,7 +109,7 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     'metal detector', 'metal detektor', 'detector putus',
     'inkjet', 'inkjet error', 'inkjet macet', 'printer inkjet',
     'temperature', 'temperatur', 'suhu', 'overheat', 'panas berlebih',
-    'low temperature', 'suhu rendah',
+    'low temperature', 'suhu rendah', 'tekanan angin', 'tekanan angin drop',
     'motor', 'motor rusak', 'motor mati', 'bearing', 'bearing aus',
     'gear', 'gear rusak',
     'sensor', 'sensor error', 'sensor rusak',
@@ -126,22 +139,24 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   ],
   // DESIGN CHANGE: Pergantian produk (kata "ganti"), sanitasi, cleaning
   design: [
-    'ganti', 'ganti order', 'ganti produk', 'ganti artikel', 'ganti model',
-    'ganti size', 'ganti warna', 'ganti stiker', 'ganti label', 
+    'ganti ukuran', 'ganti size', 'ganti warna', 'ganti stiker', 'ganti label', 
     'ganti packaging', 'ganti kemasan', 'ganti design', 'ganti desain',
     'ganti mixing', 'pergantian produk', 'pergantian artikel',
-    'sanitasi', 'persiapan & sanitasi', 'sterilisasi',
+    'sanitasi', 'sanitasi dan setting', 'sterilisasi',
     'persiapan produksi',
     'obat habis',
     'changeover', 'change over',
     'cleaning', 'cuci mesin', 'bersih-bersih',
     'warmup', 'pemanasan', 'warm up',
-    'repack', 'repacking'
+    'repack', 'repacking',
+    'setting packaging', 'setting kemasan',
+    'setting mesin', 'setting mc',
+    'setting dan tunggu temperatur', 'setting tunggu temperatur'
   ],
-  // OPERATOR: Kesalahan manusia, setting, training
+  // OPERATOR: Kesalahan manusia, setting (selain mesin/packaging), training
   operator: [
-    'setting', 'setting mc', 'setting mesin', 'setting ulang', 'salah setting',
-    'setup produk', 'setup mesin',
+    'setting ulang', 'salah setting',
+    'setup produk',
     'keluar jalur (sambungan)', 'kain keluar jalur (sambungan)', 'sambungan',
     'kesalahan operator', 'operator salah', 'human error',
     'salah parameter', 'salah input', 'salah prosedur', 'kelalaian operator',
@@ -169,19 +184,12 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
 const detectCategory = (reason: string, isFirstEntry: boolean = false): string => {
   const lowerReason = reason.toLowerCase();
   
-  // SPECIAL CASE: "setting mc/mesin" - depends on position
-  // If first entry → design (changeover/setup awal)
-  // If not first → mesin (adjustment mesin)
-  if (lowerReason.includes('setting mc') || lowerReason.includes('setting mesin')) {
-    return isFirstEntry ? 'design' : 'mesin';
-  }
-  
   // Urutan prioritas pengecekan:
   // 0. IDLE - untuk "tunggu kain/stiker/packaging/mixing" (prioritas tertinggi)
   // 1. OPERATOR - untuk "keluar jalur (sambungan)" 
   // 2. MATERIAL - untuk "keluar jalur (kain tipis/gembos/tidak sesuai)"
   // 3. MESIN - untuk "keluar jalur (bak mesin)" dan masalah mesin lainnya
-  // 4. DESIGN - untuk changeover, sanitasi
+  // 4. DESIGN - untuk changeover, sanitasi, setting
   // 5. OTHERS - default
   const categoryOrder = ['idle', 'operator', 'material', 'mesin', 'design', 'others'];
   
@@ -205,6 +213,10 @@ export default function EditProductionRecord() {
   const [record, setRecord] = useState<ProductionRecord | null>(null);
   const [workOrder, setWorkOrder] = useState<WorkOrder | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
@@ -215,6 +227,7 @@ export default function EditProductionRecord() {
   const [formData, setFormData] = useState({
     production_date: '',
     shift: '1',
+    product_id: '',         // Product ID (default dari WO, bisa diganti)
     quantity_good: '',      // Grade A
     quantity_rework: '0',   // Grade B
     quantity_reject: '0',   // Grade C
@@ -237,19 +250,33 @@ export default function EditProductionRecord() {
     fetchData();
   }, [workOrderId, recordId]);
 
+  // Close product dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.product-dropdown-container')) {
+        setShowProductDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [recordRes, woRes, empRes] = await Promise.all([
+      const [recordRes, woRes, empRes, productsRes] = await Promise.all([
         axiosInstance.get(`/api/production/production-records/${recordId}`),
         axiosInstance.get(`/api/production/work-orders/${workOrderId}`),
-        axiosInstance.get('/api/hr/employees')
+        axiosInstance.get('/api/hr/employees'),
+        axiosInstance.get('/api/products?status=active&per_page=500')
       ]);
       
       const rec = recordRes.data.record;
       setRecord(rec);
       setWorkOrder(woRes.data.work_order);
       setEmployees(empRes.data.employees || []);
+      setProducts(productsRes.data.products || []);
       
       // Parse downtime entries from notes if available
       const parsedEntries: DowntimeEntry[] = [];
@@ -300,9 +327,13 @@ export default function EditProductionRecord() {
       
       // Populate form with existing data
       const prodDate = rec.production_date ? rec.production_date.split('T')[0] : '';
+      
+      // Set selected product (from record or default to WO product)
+      const productId = rec.product_id || woRes.data.work_order.product_id;
       setFormData({
         production_date: prodDate,
         shift: rec.shift || '1',
+        product_id: productId?.toString() || '',
         quantity_good: rec.quantity_good?.toString() || '',
         quantity_rework: rec.quantity_rework?.toString() || '0',
         quantity_reject: rec.quantity_scrap?.toString() || '0',
@@ -320,6 +351,22 @@ export default function EditProductionRecord() {
         early_stop_reason: rec.early_stop_reason || '',
         early_stop_notes: rec.early_stop_notes || '',
       });
+      
+      // Set selected product for display
+      if (rec.product_id && rec.product) {
+        setSelectedProduct({
+          id: rec.product_id,
+          code: rec.product.code || '',
+          name: rec.product.name || rec.product_name || ''
+        });
+      } else {
+        // Default to WO product
+        setSelectedProduct({
+          id: woRes.data.work_order.product_id,
+          code: '',
+          name: woRes.data.work_order.product_name
+        });
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error('Gagal memuat data');
@@ -353,6 +400,20 @@ export default function EditProductionRecord() {
       return updated;
     });
   };
+
+  // Product selection handler
+  const handleProductSelect = (product: Product) => {
+    setSelectedProduct(product);
+    setFormData(prev => ({ ...prev, product_id: product.id.toString() }));
+    setProductSearch('');
+    setShowProductDropdown(false);
+  };
+
+  // Filter products based on search
+  const filteredProducts = products.filter(p => 
+    p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+    p.code.toLowerCase().includes(productSearch.toLowerCase())
+  ).slice(0, 10); // Limit to 10 results
 
   // Downtime entry handlers
   const addDowntimeEntry = () => {
@@ -458,6 +519,7 @@ export default function EditProductionRecord() {
       const payload = {
         production_date: formData.production_date,
         shift: formData.shift,
+        product_id: parseInt(formData.product_id) || null,
         quantity_produced: parseFloat(formData.quantity_produced),
         quantity_good: parseFloat(formData.quantity_good),
         quantity_scrap: parseFloat(formData.quantity_reject),
@@ -542,6 +604,79 @@ export default function EditProductionRecord() {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="bg-white shadow rounded-lg p-6 space-y-6">
+        {/* Product Selection */}
+        <div className="relative product-dropdown-container">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Produk *
+            <span className="text-xs text-gray-500 font-normal ml-2">(Default: produk WO, bisa diganti jika perlu)</span>
+          </label>
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={showProductDropdown ? productSearch : (selectedProduct ? `${selectedProduct.code ? selectedProduct.code + ' - ' : ''}${selectedProduct.name}` : '')}
+                onChange={(e) => {
+                  setProductSearch(e.target.value);
+                  setShowProductDropdown(true);
+                }}
+                onFocus={() => setShowProductDropdown(true)}
+                placeholder="Cari produk..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              {showProductDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {/* Default WO Product */}
+                  {workOrder && (
+                    <button
+                      type="button"
+                      onClick={() => handleProductSelect({ id: workOrder.product_id, code: '', name: workOrder.product_name })}
+                      className="w-full px-3 py-2 text-left hover:bg-blue-50 border-b border-gray-200 bg-blue-50"
+                    >
+                      <span className="text-xs text-blue-600 font-medium">Default WO:</span>
+                      <span className="block text-sm font-medium">{workOrder.product_name}</span>
+                    </button>
+                  )}
+                  {/* Search Results */}
+                  {filteredProducts.length > 0 ? (
+                    filteredProducts.map(product => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => handleProductSelect(product)}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-100 border-b border-gray-100 last:border-0"
+                      >
+                        <span className="text-xs text-gray-500">{product.code}</span>
+                        <span className="block text-sm">{product.name}</span>
+                      </button>
+                    ))
+                  ) : productSearch && (
+                    <div className="px-3 py-2 text-sm text-gray-500">Tidak ada produk ditemukan</div>
+                  )}
+                </div>
+              )}
+            </div>
+            {selectedProduct && selectedProduct.id !== workOrder?.product_id && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (workOrder) {
+                    handleProductSelect({ id: workOrder.product_id, code: '', name: workOrder.product_name });
+                  }
+                }}
+                className="px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg border border-blue-200"
+                title="Reset ke produk WO"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          {selectedProduct && selectedProduct.id !== workOrder?.product_id && (
+            <p className="text-xs text-orange-600 mt-1">
+              ⚠️ Produk berbeda dari WO default ({workOrder?.product_name})
+            </p>
+          )}
+        </div>
+
         {/* Date & Shift */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div>

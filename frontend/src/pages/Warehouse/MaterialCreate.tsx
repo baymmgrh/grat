@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   ArrowLeftIcon,
   BookmarkIcon,
@@ -111,23 +112,9 @@ const MaterialCreate: React.FC = () => {
 
     setSaving(true);
     try {
-      const response = await fetch('http://localhost:5000/api/materials/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create material');
-      }
-
-      const result = await response.json();
+      const response = await axiosInstance.post('/api/materials/', formData);
       alert('Material created successfully');
-      navigate(`/app/warehouse/materials/${result.material_id}`);
+      navigate(`/app/warehouse/materials/${response.data.material_id}`);
     } catch (err) {
       console.error('Error creating material:', err);
       alert(err instanceof Error ? err.message : 'Failed to create material');

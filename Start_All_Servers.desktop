@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ERP All Servers
+Comment=Start Backend + Frontend
+Exec=gnome-terminal -- bash -c 'cd /home/superadmin/Documents/ERP && ./start_all.sh; exec bash'
+Terminal=false
+Icon=utilities-terminal

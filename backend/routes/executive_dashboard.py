@@ -873,7 +873,7 @@ def get_production_executive_dashboard():
         for ms in monthly_schedules:
             # Get product data via raw SQL (MonthlySchedule uses products_new table)
             product_data = db.session.execute(
-                db.text("SELECT kode_produk, nama_produk, pack_per_karton FROM products_new WHERE id = :id"),
+                db.text("SELECT code, name, pack_per_karton FROM products WHERE id = :id"),
                 {'id': ms.product_id}
             ).fetchone()
             
@@ -930,6 +930,7 @@ def get_production_executive_dashboard():
             'operator': 0,
             'material': 0,
             'design': 0,
+            'idle': 0,
             'others': 0
         }
         
@@ -969,6 +970,7 @@ def get_production_executive_dashboard():
             downtime_by_category['operator'] += float(sp.downtime_operator or 0)
             downtime_by_category['material'] += float(sp.downtime_material or 0)
             downtime_by_category['design'] += float(sp.downtime_design or 0)
+            downtime_by_category['idle'] += float(sp.idle_time or 0)
             downtime_by_category['others'] += float(sp.downtime_others or 0)
             
             # Parse downtime reasons from issues
@@ -1003,6 +1005,11 @@ def get_production_executive_dashboard():
                             # Pass is_first_entry parameter for proper categorization
                             is_first_entry = (idx == 0)
                             category = detect_downtime_category(reason, is_first_entry)
+                        
+                        # Always re-check: if auto-detect says 'idle', override explicit tag
+                        auto_cat = detect_downtime_category(reason.lower())
+                        if auto_cat == 'idle':
+                            category = 'idle'
                         
                         # Use reason + category as unique key
                         key = f"{reason}|{category}"
@@ -1118,6 +1125,545 @@ def get_production_executive_dashboard():
                 'products': products_list,
                 'machines': machines_list,
                 'daily_trend': daily_trend_list
+            }
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@executive_dashboard_bp.route('/production-monitoring', methods=['GET'])
+@jwt_required(optional=True)
+def get_production_monitoring():
+    """
+    Production Monitoring Dashboard - Weekly/Monthly target vs actual
+    With Grade A/B/C, Runtime/Downtime/IdleTime breakdown per day per product
+    Data sourced from Work Orders and ShiftProduction
+    """
+    try:
+        from routes.schedule_grid import MonthlySchedule
+        from models.production import Machine
+        import re
+        from utils import detect_downtime_category
+        
+        # Get parameters
+        year = request.args.get('year', get_local_now().year, type=int)
+        month = request.args.get('month', get_local_now().month, type=int)
+        view_mode = request.args.get('view', 'monthly')  # 'weekly' or 'monthly'
+        week_number = request.args.get('week', 0, type=int)  # 1-5 for weekly view
+        
+        month_names = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+        
+        # Calculate date range
+        start_date = datetime(year, month, 1).date()
+        if month == 12:
+            end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            end_date = datetime(year, month + 1, 1).date() - timedelta(days=1)
+        
+        # For weekly view, calculate week boundaries
+        if view_mode == 'weekly' and week_number > 0:
+            week_start = start_date + timedelta(days=(week_number - 1) * 7)
+            week_end = min(week_start + timedelta(days=6), end_date)
+            start_date = week_start
+            end_date = week_end
+        
+        # Calculate weeks in the month
+        weeks_in_month = []
+        temp_date = datetime(year, month, 1).date()
+        month_end = end_date
+        week_num = 1
+        while temp_date <= month_end:
+            w_start = temp_date
+            w_end = min(temp_date + timedelta(days=6), month_end)
+            weeks_in_month.append({
+                'week': week_num,
+                'start_date': w_start.isoformat(),
+                'end_date': w_end.isoformat(),
+                'label': f"Week {week_num} ({w_start.strftime('%d %b')} - {w_end.strftime('%d %b')})"
+            })
+            temp_date = w_end + timedelta(days=1)
+            week_num += 1
+        
+        # ===== 1. GET MONTHLY TARGETS =====
+        monthly_schedules = MonthlySchedule.query.filter_by(year=year, month=month).all()
+        
+        targets_by_product = {}
+        total_target_ctn = 0
+        
+        for ms in monthly_schedules:
+            product_data = db.session.execute(
+                db.text("SELECT code, name, pack_per_karton FROM products WHERE id = :id"),
+                {'id': ms.product_id}
+            ).fetchone()
+            
+            product_name = product_data[1] if product_data else f"Product {ms.product_id}"
+            product_code = product_data[0] if product_data else ''
+            pack_per_ctn = int(product_data[2]) if product_data and product_data[2] else 50
+            
+            target_ctn = float(ms.target_ctn or 0)
+            
+            if product_name not in targets_by_product:
+                targets_by_product[product_name] = {
+                    'product_id': ms.product_id,
+                    'product_code': product_code,
+                    'product_name': product_name,
+                    'target_ctn_monthly': 0,
+                    'pack_per_ctn': pack_per_ctn,
+                    'machines': []
+                }
+            
+            targets_by_product[product_name]['target_ctn_monthly'] += target_ctn
+            machine_name = ms.machine.name if ms.machine else "Unassigned"
+            targets_by_product[product_name]['machines'].append({
+                'machine_id': ms.machine_id,
+                'machine_name': machine_name,
+                'target_ctn': target_ctn
+            })
+            total_target_ctn += target_ctn
+        
+        # ===== 2. GET SHIFT PRODUCTIONS =====
+        shift_productions = ShiftProduction.query.filter(
+            ShiftProduction.production_date >= start_date,
+            ShiftProduction.production_date <= end_date
+        ).all()
+        
+        # ===== 3. BUILD DAILY DETAIL PER PRODUCT =====
+        daily_product_data = {}  # {date: {product_name: {grade_a, grade_b, grade_c, ...}}}
+        product_totals = {}  # Aggregated per product
+        
+        # Time tracking
+        total_runtime = 0
+        total_downtime = 0
+        total_idle_time = 0
+        total_planned = 0
+        
+        # Downtime details
+        downtime_reasons = {}
+        downtime_by_category = {
+            'mesin': 0, 'operator': 0, 'material': 0, 'design': 0, 'others': 0
+        }
+        
+        # Daily downtime records for expanded view
+        daily_downtime_records = {}  # {date: [{reason, category, duration, shift, machine, product, wo}]}
+        
+        # Machine tracking
+        machine_data = {}
+        
+        for sp in shift_productions:
+            date_str = sp.production_date.isoformat() if sp.production_date else None
+            if not date_str:
+                continue
+            
+            # Get product name
+            product_name = None
+            product_code = ''
+            if sp.product:
+                product_name = sp.product.name
+                product_code = sp.product.code or ''
+            elif sp.work_order and sp.work_order.product:
+                product_name = sp.work_order.product.name
+                product_code = sp.work_order.product.code or ''
+            
+            if not product_name:
+                product_name = f"Unknown Product {sp.product_id}"
+            
+            # Grade quantities
+            grade_a = float(sp.good_quantity or 0)
+            grade_b = float(sp.rework_quantity or 0)
+            grade_c = float(sp.reject_quantity or 0)
+            total_qty = float(sp.actual_quantity or 0)
+            
+            # Time metrics
+            planned_rt = int(sp.planned_runtime or 480)
+            dt_mesin = int(sp.downtime_mesin or 0)
+            dt_operator = int(sp.downtime_operator or 0)
+            dt_material = int(sp.downtime_material or 0)
+            dt_design = int(sp.downtime_design or 0)
+            dt_others = int(sp.downtime_others or 0)
+            idle_min = int(sp.idle_time or 0)
+            total_dt = dt_mesin + dt_operator + dt_material + dt_design + dt_others
+            runtime_min = max(0, planned_rt - total_dt - idle_min)
+            
+            total_runtime += runtime_min
+            total_downtime += total_dt
+            total_idle_time += idle_min
+            total_planned += planned_rt
+            
+            # Downtime categories
+            downtime_by_category['mesin'] += dt_mesin
+            downtime_by_category['operator'] += dt_operator
+            downtime_by_category['material'] += dt_material
+            downtime_by_category['design'] += dt_design
+            downtime_by_category['others'] += dt_others
+            
+            # Get pack_per_ctn for carton calculation
+            pack_per_ctn = 50  # Default
+            if product_name in targets_by_product:
+                pack_per_ctn = targets_by_product[product_name]['pack_per_ctn']
+            elif sp.pack_per_carton and sp.pack_per_carton > 0:
+                pack_per_ctn = sp.pack_per_carton
+            elif sp.work_order and sp.work_order.pack_per_carton and sp.work_order.pack_per_carton > 0:
+                pack_per_ctn = sp.work_order.pack_per_carton
+            
+            # Daily product data
+            if date_str not in daily_product_data:
+                daily_product_data[date_str] = {}
+            
+            if product_name not in daily_product_data[date_str]:
+                daily_product_data[date_str][product_name] = {
+                    'product_name': product_name,
+                    'product_code': product_code,
+                    'grade_a': 0, 'grade_b': 0, 'grade_c': 0,
+                    'total_pcs': 0, 'total_ctn': 0,
+                    'runtime': 0, 'downtime': 0, 'idle_time': 0,
+                    'planned_runtime': 0,
+                    'pack_per_ctn': pack_per_ctn,
+                    'shifts': []
+                }
+            
+            dpd = daily_product_data[date_str][product_name]
+            dpd['grade_a'] += grade_a
+            dpd['grade_b'] += grade_b
+            dpd['grade_c'] += grade_c
+            dpd['total_pcs'] += total_qty
+            dpd['total_ctn'] = dpd['total_pcs'] / pack_per_ctn if pack_per_ctn > 0 else 0
+            dpd['runtime'] += runtime_min
+            dpd['downtime'] += total_dt
+            dpd['idle_time'] += idle_min
+            dpd['planned_runtime'] += planned_rt
+            
+            shift_num = 1
+            if sp.shift:
+                shift_match = re.search(r'(\d+)', str(sp.shift))
+                if shift_match:
+                    shift_num = int(shift_match.group(1))
+            
+            dpd['shifts'].append({
+                'shift': shift_num,
+                'grade_a': int(grade_a),
+                'grade_b': int(grade_b),
+                'grade_c': int(grade_c),
+                'total': int(total_qty),
+                'runtime': runtime_min,
+                'downtime': total_dt,
+                'idle_time': idle_min,
+                'machine': sp.machine.name if sp.machine else 'N/A',
+                'wo_number': sp.work_order.wo_number if sp.work_order else 'N/A'
+            })
+            
+            # Product totals
+            if product_name not in product_totals:
+                product_totals[product_name] = {
+                    'product_name': product_name,
+                    'product_code': product_code,
+                    'grade_a': 0, 'grade_b': 0, 'grade_c': 0,
+                    'total_pcs': 0, 'total_ctn': 0,
+                    'runtime': 0, 'downtime': 0, 'idle_time': 0,
+                    'pack_per_ctn': pack_per_ctn,
+                    'target_ctn': targets_by_product.get(product_name, {}).get('target_ctn_monthly', 0),
+                    'shift_count': 0
+                }
+            
+            pt = product_totals[product_name]
+            pt['grade_a'] += grade_a
+            pt['grade_b'] += grade_b
+            pt['grade_c'] += grade_c
+            pt['total_pcs'] += total_qty
+            pt['total_ctn'] = pt['total_pcs'] / pack_per_ctn if pack_per_ctn > 0 else 0
+            pt['runtime'] += runtime_min
+            pt['downtime'] += total_dt
+            pt['idle_time'] += idle_min
+            pt['shift_count'] += 1
+            
+            # Machine data
+            machine_name = sp.machine.name if sp.machine else f"Machine {sp.machine_id}"
+            if machine_name not in machine_data:
+                machine_data[machine_name] = {
+                    'machine_name': machine_name,
+                    'total_produced': 0, 'grade_a': 0, 'grade_b': 0, 'grade_c': 0,
+                    'runtime': 0, 'downtime': 0, 'idle_time': 0,
+                    'shift_count': 0, 'oee_sum': 0
+                }
+            md = machine_data[machine_name]
+            md['total_produced'] += total_qty
+            md['grade_a'] += grade_a
+            md['grade_b'] += grade_b
+            md['grade_c'] += grade_c
+            md['runtime'] += runtime_min
+            md['downtime'] += total_dt
+            md['idle_time'] += idle_min
+            md['shift_count'] += 1
+            md['oee_sum'] += float(sp.oee_score or 0)
+            
+            # Parse downtime reasons from issues
+            if sp.issues:
+                issue_parts = sp.issues.split(';')
+                for idx, part in enumerate(issue_parts):
+                    part = part.strip()
+                    if not part:
+                        continue
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+?)(?:\s*\[([^\]]+)\])?\s*$', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason = match.group(2).strip()
+                        explicit_cat = match.group(3).strip() if match.group(3) else None
+                        reason = re.sub(r'\s*\[.+\]\s*$', '', reason).strip()
+                        
+                        excluded = ['istirahat', 'sholat', 'solat', 'toilet', 'makan', 'minum']
+                        if any(kw in reason.lower() for kw in excluded):
+                            continue
+                        
+                        if explicit_cat:
+                            category = explicit_cat.lower()
+                        else:
+                            try:
+                                is_first = (idx == 0)
+                                category = detect_downtime_category(reason, is_first)
+                            except TypeError:
+                                category = detect_downtime_category(reason)
+                        
+                        # Always re-check: if auto-detect says 'idle', override explicit tag
+                        auto_cat = detect_downtime_category(reason.lower())
+                        if auto_cat == 'idle':
+                            category = 'idle'
+                        
+                        key = f"{reason}|{category}"
+                        if key not in downtime_reasons:
+                            downtime_reasons[key] = {'reason': reason, 'category': category, 'count': 0, 'total_minutes': 0}
+                        downtime_reasons[key]['count'] += 1
+                        downtime_reasons[key]['total_minutes'] += duration
+                        
+                        # Add to daily downtime records for expanded view
+                        dt_shift_num = 1
+                        if sp.shift:
+                            dt_shift_match = re.search(r'(\d+)', str(sp.shift))
+                            if dt_shift_match:
+                                dt_shift_num = int(dt_shift_match.group(1))
+                        
+                        if date_str not in daily_downtime_records:
+                            daily_downtime_records[date_str] = []
+                        
+                        # PIC mapping based on category
+                        pic_mapping = {
+                            'mesin': 'MTC',
+                            'operator': 'Operator',
+                            'material': 'Warehouse',
+                            'design': 'Design',
+                            'idle': 'Supervisor',
+                            'others': 'Supervisor'
+                        }
+                        
+                        daily_downtime_records[date_str].append({
+                            'reason': reason,
+                            'category': category,
+                            'duration_minutes': duration,
+                            'shift': dt_shift_num,
+                            'machine_name': sp.machine.name if sp.machine else 'N/A',
+                            'product_name': product_name,
+                            'wo_number': sp.work_order.wo_number if sp.work_order else 'N/A',
+                            'pic': pic_mapping.get(category, 'Supervisor')
+                        })
+        
+        # ===== 4. BUILD DAILY TABLE =====
+        all_dates = sorted(daily_product_data.keys())
+        daily_table = []
+        cumulative_by_product = {}
+        
+        # Calculate daily target (monthly target / working days)
+        total_days_in_range = len(all_dates) if len(all_dates) > 0 else 1
+        
+        for date_str in all_dates:
+            products_for_day = []
+            day_total_a = 0
+            day_total_b = 0
+            day_total_c = 0
+            day_total_pcs = 0
+            day_total_ctn = 0
+            day_runtime = 0
+            day_downtime = 0
+            day_idle = 0
+            
+            for pname, pdata in daily_product_data[date_str].items():
+                # Cumulative tracking
+                if pname not in cumulative_by_product:
+                    cumulative_by_product[pname] = {'pcs': 0, 'ctn': 0}
+                cumulative_by_product[pname]['pcs'] += pdata['total_pcs']
+                cumulative_by_product[pname]['ctn'] += pdata['total_ctn']
+                
+                target_monthly = targets_by_product.get(pname, {}).get('target_ctn_monthly', 0)
+                
+                products_for_day.append({
+                    **pdata,
+                    'total_ctn': round(pdata['total_ctn'], 2),
+                    'cumulative_ctn': round(cumulative_by_product[pname]['ctn'], 2),
+                    'target_monthly_ctn': round(target_monthly, 2),
+                    'gap_ctn': round(target_monthly - cumulative_by_product[pname]['ctn'], 2),
+                    'shifts': pdata['shifts']
+                })
+                
+                day_total_a += pdata['grade_a']
+                day_total_b += pdata['grade_b']
+                day_total_c += pdata['grade_c']
+                day_total_pcs += pdata['total_pcs']
+                day_total_ctn += pdata['total_ctn']
+                day_runtime += pdata['runtime']
+                day_downtime += pdata['downtime']
+                day_idle += pdata['idle_time']
+            
+            daily_table.append({
+                'date': date_str,
+                'day_name': datetime.strptime(date_str, '%Y-%m-%d').strftime('%A'),
+                'products': products_for_day,
+                'day_summary': {
+                    'grade_a': int(day_total_a),
+                    'grade_b': int(day_total_b),
+                    'grade_c': int(day_total_c),
+                    'total_pcs': int(day_total_pcs),
+                    'total_ctn': round(day_total_ctn, 2),
+                    'runtime': day_runtime,
+                    'downtime': day_downtime,
+                    'idle_time': day_idle
+                },
+                'downtime_records': daily_downtime_records.get(date_str, [])
+            })
+        
+        # ===== 5. PRODUCT ACHIEVEMENT TABLE =====
+        products_achievement = []
+        total_actual_ctn = 0
+        for pname, pt in product_totals.items():
+            target = pt['target_ctn']
+            actual = pt['total_ctn']
+            total_actual_ctn += actual
+            achievement = round((actual / target * 100), 2) if target > 0 else 0
+            gap = target - actual
+            quality = round((pt['grade_a'] / pt['total_pcs'] * 100), 2) if pt['total_pcs'] > 0 else 0
+            
+            products_achievement.append({
+                'product_name': pname,
+                'product_code': pt['product_code'],
+                'target_ctn': round(target, 2),
+                'actual_ctn': round(actual, 2),
+                'gap_ctn': round(gap, 2),
+                'achievement_pct': achievement,
+                'grade_a': int(pt['grade_a']),
+                'grade_b': int(pt['grade_b']),
+                'grade_c': int(pt['grade_c']),
+                'total_pcs': int(pt['total_pcs']),
+                'quality_rate': quality,
+                'runtime': pt['runtime'],
+                'downtime': pt['downtime'],
+                'idle_time': pt['idle_time'],
+                'pack_per_ctn': pt['pack_per_ctn']
+            })
+        
+        products_achievement.sort(key=lambda x: x['achievement_pct'])
+        
+        # ===== 6. MACHINE SUMMARY =====
+        machines_list = []
+        for mname, md in machine_data.items():
+            avg_oee = round(md['oee_sum'] / md['shift_count'], 2) if md['shift_count'] > 0 else 0
+            quality = round((md['grade_a'] / md['total_produced'] * 100), 2) if md['total_produced'] > 0 else 0
+            machines_list.append({
+                'machine_name': mname,
+                'total_produced': int(md['total_produced']),
+                'grade_a': int(md['grade_a']),
+                'grade_b': int(md['grade_b']),
+                'grade_c': int(md['grade_c']),
+                'runtime': md['runtime'],
+                'downtime': md['downtime'],
+                'idle_time': md['idle_time'],
+                'shift_count': md['shift_count'],
+                'avg_oee': avg_oee,
+                'quality_rate': quality
+            })
+        machines_list.sort(key=lambda x: x['avg_oee'], reverse=True)
+        
+        # ===== 7. TOP DOWNTIME REASONS =====
+        top_downtime = sorted(
+            list(downtime_reasons.values()),
+            key=lambda x: x['total_minutes'],
+            reverse=True
+        )[:15]
+        
+        # ===== 8. WORK ORDER STATUS SUMMARY =====
+        work_orders = WorkOrder.query.filter(
+            WorkOrder.created_at >= datetime(year, month, 1),
+            WorkOrder.created_at <= datetime(year, month, end_date.day, 23, 59, 59)
+        ).all()
+        
+        wo_summary = {
+            'total': len(work_orders),
+            'planned': sum(1 for wo in work_orders if wo.status == 'planned'),
+            'in_progress': sum(1 for wo in work_orders if wo.status == 'in_progress'),
+            'completed': sum(1 for wo in work_orders if wo.status == 'completed'),
+            'cancelled': sum(1 for wo in work_orders if wo.status == 'cancelled'),
+        }
+        
+        # ===== 9. OVERALL SUMMARY =====
+        overall_achievement = round((total_actual_ctn / total_target_ctn * 100), 2) if total_target_ctn > 0 else 0
+        
+        # 22 working days per month tracking
+        TOTAL_WORKING_DAYS = 22
+        days_elapsed = len(all_dates)  # days with actual production data
+        daily_target_pct = round(100 / TOTAL_WORKING_DAYS, 2)  # ~4.55% per day
+        expected_achievement_pct = round(days_elapsed * daily_target_pct, 2)  # expected cumulative %
+        daily_target_ctn = round(total_target_ctn / TOTAL_WORKING_DAYS, 2) if total_target_ctn > 0 else 0
+        is_behind = overall_achievement < expected_achievement_pct and total_target_ctn > 0
+        behind_pct = round(expected_achievement_pct - overall_achievement, 2) if is_behind else 0
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'period': {
+                    'year': year,
+                    'month': month,
+                    'month_name': month_names[month],
+                    'start_date': start_date.isoformat(),
+                    'end_date': end_date.isoformat(),
+                    'view_mode': view_mode,
+                    'week_number': week_number,
+                    'weeks': weeks_in_month
+                },
+                'summary': {
+                    'target_ctn': round(total_target_ctn, 2),
+                    'actual_ctn': round(total_actual_ctn, 2),
+                    'gap_ctn': round(total_target_ctn - total_actual_ctn, 2),
+                    'achievement_pct': overall_achievement,
+                    'total_grade_a': int(sum(p['grade_a'] for p in products_achievement)),
+                    'total_grade_b': int(sum(p['grade_b'] for p in products_achievement)),
+                    'total_grade_c': int(sum(p['grade_c'] for p in products_achievement)),
+                    'total_pcs': int(sum(p['total_pcs'] for p in products_achievement)),
+                    'quality_rate': round(
+                        (sum(p['grade_a'] for p in products_achievement) / 
+                         sum(p['total_pcs'] for p in products_achievement) * 100)
+                        if sum(p['total_pcs'] for p in products_achievement) > 0 else 0, 2
+                    ),
+                    'runtime_minutes': total_runtime,
+                    'runtime_hours': round(total_runtime / 60, 1),
+                    'downtime_minutes': total_downtime,
+                    'downtime_hours': round(total_downtime / 60, 1),
+                    'idle_time_minutes': total_idle_time,
+                    'idle_time_hours': round(total_idle_time / 60, 1),
+                    'planned_runtime_minutes': total_planned,
+                    'utilization_pct': round((total_runtime / total_planned * 100), 2) if total_planned > 0 else 0,
+                    'working_days': days_elapsed,
+                    'total_working_days': TOTAL_WORKING_DAYS,
+                    'daily_target_pct': daily_target_pct,
+                    'daily_target_ctn': daily_target_ctn,
+                    'expected_achievement_pct': expected_achievement_pct,
+                    'is_behind': is_behind,
+                    'behind_pct': behind_pct
+                },
+                'downtime_by_category': downtime_by_category,
+                'top_downtime_reasons': top_downtime,
+                'products': products_achievement,
+                'machines': machines_list,
+                'daily_table': daily_table,
+                'work_orders': wo_summary
             }
         }), 200
         

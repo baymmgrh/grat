@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
 import {
   ArrowDownTrayIcon,
+  ArrowUpTrayIcon,
   ArrowsUpDownIcon as ArrowUpDown,
   CalendarIcon as Calendar,
   CubeIcon,
@@ -10,8 +11,7 @@ import {
   EyeIcon as Eye,
   FunnelIcon,
   MagnifyingGlassIcon as Search,
-  MapPinIcon
-,
+  MapPinIcon,
   PencilIcon as Edit,
   PlusIcon as Plus,
   TagIcon
@@ -19,7 +19,7 @@ import {
 interface InventoryMovement {
   id: number;
   movement_number: string;
-  movement_type: 'in' | 'out' | 'transfer' | 'adjustment';
+  movement_type: string;
   product_code: string;
   product_name: string;
   quantity: number;
@@ -50,10 +50,13 @@ const MovementList: React.FC = () => {
   const itemsPerPage = 20;
 
   const movementTypes = [
-    { value: 'in', label: 'Stock In', color: 'text-green-600', icon: ArrowDown },
-    { value: 'out', label: 'Stock Out', color: 'text-red-600', icon: ArrowUp },
+    { value: 'stock_in', label: 'Stock In', color: 'text-green-600', icon: ArrowDownTrayIcon },
+    { value: 'stock_out', label: 'Stock Out', color: 'text-red-600', icon: ArrowUpTrayIcon },
+    { value: 'receive', label: 'Receive', color: 'text-green-600', icon: ArrowDownTrayIcon },
+    { value: 'issue', label: 'Issue', color: 'text-red-600', icon: ArrowUpTrayIcon },
     { value: 'transfer', label: 'Transfer', color: 'text-blue-600', icon: ArrowUpDown },
-    { value: 'adjustment', label: 'Adjustment', color: 'text-purple-600', icon: DocumentTextIcon }
+    { value: 'adjust', label: 'Adjustment', color: 'text-purple-600', icon: DocumentTextIcon },
+    { value: 'production_receipt', label: 'Produksi Masuk', color: 'text-emerald-600', icon: CubeIcon }
   ];
 
   const statusOptions = [
@@ -100,7 +103,7 @@ const MovementList: React.FC = () => {
   };
 
   const getMovementTypeInfo = (type: string) => {
-    return movementTypes.find(t => t.value === type) || movementTypes[0];
+    return movementTypes.find(t => t.value === type) || { value: type, label: type, color: 'text-gray-600', icon: DocumentTextIcon };
   };
 
   const getStatusColor = (status: string) => {
@@ -295,16 +298,12 @@ const MovementList: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">No. Movement</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('production.product')}</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipe</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.quantity')}</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nilai</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lokasi</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.date')}</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.status')}</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('common.actions')}</th>
@@ -393,12 +392,20 @@ const MovementList: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <Link
-                          to={`/app/warehouse/movements/${movement.id}`}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            to={`/app/warehouse/movements/${movement.id}`}
+                            className="text-blue-600 hover:text-blue-900" title="Detail"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Link>
+                          <Link
+                            to={`/app/warehouse/movements/${movement.id}/edit`}
+                            className="text-gray-500 hover:text-gray-900" title="Edit"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   );

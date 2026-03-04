@@ -1,0 +1,81 @@
+═══════════════════════════════════════════════════════════
+        EMAIL TEMPLATE UNTUK QUICK APPLY (LinkedIn/Email)
+═══════════════════════════════════════════════════════════
+
+SUBJECT LINE OPTIONS (Pilih salah satu):
+1. "Application: [Job Title] - AI-Powered Developer with Proven Delivery"
+2. "Built 325k Line ERP in 7 Months - Applying for [Job Title]"
+3. "Product Builder - Application for [Job Title] at [Company]"
+
+═══════════════════════════════════════════════════════════
+
+EMAIL BODY:
+
+Dear [Hiring Manager/Team],
+
+Saya tertarik dengan posisi [Job Title] di [Company Name]. 
+
+Saya adalah AI-powered product builder dengan track record membangun 
+sistem ERP enterprise (325,000+ baris kode, 20+ modul) dalam 7 bulan 
+menggunakan modern AI development tools.
+
+KEY QUALIFICATIONS:
+✓ Full-stack development (React, TypeScript, Python, Flask, PostgreSQL)
+✓ AI-assisted rapid development expertise
+✓ System architecture & database design
+✓ Proven delivery: Production-ready ERP serving 10+ users
+✓ Manufacturing domain knowledge
+
+WHAT I BRING:
+• 80% faster development using AI tools
+• Strong product thinking & business understanding
+• End-to-end project execution capability
+• Modern tech stack aligned with industry standards
+
+Resume attached. Portfolio & demo available upon request.
+
+Available for interview anytime. Can start with 1-month notice.
+
+Best regards,
+[Nama Anda]
+[Phone]
+[Email]
+[LinkedIn]
+
+═══════════════════════════════════════════════════════════
+
+VERSI BAHASA INDONESIA:
+
+Dear [Hiring Manager/Team],
+
+Saya tertarik dengan posisi [Job Title] di [Company Name].
+
+Saya adalah product builder dengan pengalaman membangun sistem ERP 
+enterprise (325,000+ baris kode, 20+ modul) dalam 7 bulan menggunakan 
+AI-assisted development approach.
+
+KUALIFIKASI UTAMA:
+✓ Full-stack development (React, TypeScript, Python, Flask, PostgreSQL)
+✓ AI-assisted rapid development
+✓ System architecture & database design
+✓ Proven delivery: ERP system production-ready dengan 10+ users
+✓ Manufacturing domain expertise
+
+KONTRIBUSI SAYA:
+• Development 80% lebih cepat dengan AI tools
+• Strong product thinking & business understanding
+• End-to-end project execution
+• Modern tech stack
+
+Resume terlampir. Portfolio & demo tersedia jika diperlukan.
+
+Saya available untuk interview kapan saja dan dapat mulai dengan 
+notice period 1 bulan.
+
+Best regards,
+[Nama Anda]
+[Phone]
+[Email]
+[LinkedIn]
+
+═══════════════════════════════════════════════════════════

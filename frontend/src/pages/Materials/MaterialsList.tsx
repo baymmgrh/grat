@@ -10,6 +10,7 @@ import {
   TrashIcon as Trash2
 } from '@heroicons/react/24/outline';
 import { useLanguage } from '../../contexts/LanguageContext';
+import axiosInstance from '../../utils/axiosConfig';
 interface Material {
   id: number;
   code: string;
@@ -63,20 +64,9 @@ const MaterialsList: React.FC = () => {
         ...(selectedType && { type: selectedType })
       });
 
-      const response = await fetch(`http://localhost:5000/api/materials?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch materials');
-      }
-
-      const data: MaterialsResponse = await response.json();
-      setMaterials(data.materials);
-      setPagination(data.pagination);
+      const response = await axiosInstance.get(`/api/materials?${params}`);
+      setMaterials(response.data.materials);
+      setPagination(response.data.pagination);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       console.error('Error fetching materials:', err);

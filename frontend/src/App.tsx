@@ -7,7 +7,7 @@ import axiosInstance from './utils/axiosConfig'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { LanguageProvider } from './contexts/LanguageContext'
 import { PermissionProvider } from './contexts/PermissionContext'
-import { ToastProvider, ErrorBoundary } from './components/UI'
+import { ToastProvider, ErrorBoundary } from './components/ui'
 import SessionTimeoutModal from './components/SessionTimeoutModal'
 import Layout from './components/Layout/Layout'
 import Login from './pages/Auth/Login'
@@ -39,9 +39,11 @@ import AddProductToInventory from './pages/Warehouse/AddProductToInventory'
 import InventoryForm from './pages/Warehouse/InventoryForm'
 import LocationForm from './pages/Warehouse/LocationForm'
 import MovementForm from './pages/Warehouse/MovementForm'
+import MovementDetail from './pages/Warehouse/MovementDetail'
 import AdjustmentForm from './pages/Warehouse/AdjustmentForm'
 import TransferForm from './pages/Warehouse/TransferForm'
 import LocationList from './pages/Warehouse/LocationList'
+import LocationDetail from './pages/Warehouse/LocationDetail'
 import MovementList from './pages/Warehouse/MovementList'
 import ReorderList from './pages/Warehouse/ReorderList'
 import StockInput from './pages/Warehouse/StockInput'
@@ -55,6 +57,8 @@ import MaterialStockManagement from './pages/Warehouse/MaterialStockManagement'
 import StockOpnameList from './pages/Warehouse/StockOpnameList'
 import StockOpnameForm from './pages/Warehouse/StockOpnameForm'
 import StockOpnameDetail from './pages/Warehouse/StockOpnameDetail'
+import UoMList from './pages/Warehouse/UoMList'
+import StockAlerts from './pages/Warehouse/StockAlerts'
 import CustomerList from './pages/Sales/CustomerList'
 import CustomerForm from './pages/Sales/CustomerForm'
 import CustomerDetails from './pages/Sales/CustomerDetails'
@@ -113,6 +117,8 @@ import MonthlyProductionPlan from './pages/Production/MonthlyProductionPlan'
 import DailyController from './pages/Production/DailyController'
 import WeeklyController from './pages/Production/WeeklyController'
 import MonthlyController from './pages/Production/MonthlyController'
+import ConvertingDashboard from './pages/Production/ConvertingDashboard'
+import ConvertingInput from './pages/Production/ConvertingInput'
 import WorkOrderMonitoring from './pages/Production/WorkOrderMonitoring'
 import BreakdownSummary from './pages/Production/BreakdownSummary'
 import WorkOrderTimeline from './pages/Production/WorkOrderTimeline'
@@ -130,6 +136,7 @@ import QCToWarehouse from './pages/Quality/QCToWarehouse'
 import IncomingQC from './pages/Quality/IncomingQC'
 import InProcessQC from './pages/Quality/InProcessQC'
 import FinishGoodQC from './pages/Quality/FinishGoodQC'
+import QCPackingList from './pages/Quality/QCPackingList'
 import QualityObjectiveProduction from './pages/Quality/QualityObjectiveProduction'
 import DowntimeAnalysis from './pages/Quality/DowntimeAnalysis'
 import ShippingDashboard from './pages/Shipping/ShippingDashboard'
@@ -172,10 +179,18 @@ import WorkRosterWeekly from './pages/HR/WorkRosterWeekly'
 import HRDashboard from './pages/HR/HRDashboard'
 import PayrollList from './pages/HR/PayrollList'
 import PayrollPeriodForm from './pages/HR/PayrollPeriodForm'
+import PayrollRecordList from './pages/HR/PayrollRecordList'
 import AttendanceManagement from './pages/HR/AttendanceManagement'
+import AttendanceAdmin from './pages/HR/AttendanceAdmin'
+import FaceAdmin from './pages/HR/FaceAdmin'
 import AttendancePage from './pages/HR/AttendancePage'
 import AttendanceReport from './pages/HR/AttendanceReport'
 import PublicAttendance from './pages/Public/PublicAttendance'
+import StaffLeaveRequest from './pages/Public/StaffLeaveRequest'
+import FaceRegistration from './pages/Public/FaceRegistration'
+import AttendanceCalendar from './pages/HR/AttendanceCalendar'
+import AttendanceNotClockedOut from './pages/HR/AttendanceNotClockedOut'
+import StaffLeaveManagement from './pages/HR/StaffLeaveManagement'
 import LeaveManagement from './pages/HR/LeaveManagement'
 import LeaveRequestForm from './pages/HR/LeaveRequestForm'
 import AppraisalList from './pages/HR/AppraisalList'
@@ -184,6 +199,8 @@ import TrainingManagement from './pages/HR/TrainingManagement'
 import AttendanceForm from './pages/HR/AttendanceForm'
 import LeaveForm from './pages/HR/LeaveForm'
 import PayrollForm from './pages/HR/PayrollForm'
+import OutsourcingVendorList from './pages/HR/OutsourcingVendorList'
+import PieceworkLogList from './pages/HR/PieceworkLogList'
 import AppraisalForm from './pages/HR/AppraisalForm'
 import Departments from './pages/HR/Departments'
 import HRReports from './pages/HR/Reports'
@@ -241,6 +258,8 @@ import ExecutiveDashboard from './pages/Reports/ExecutiveDashboard'
 import ProductionByProductReport from './pages/Reports/ProductionByProductReport'
 import ExecutiveDashboardAdvanced from './pages/Executive/ExecutiveDashboard'
 import ProductionExecutiveDashboard from './pages/Executive/ProductionExecutiveDashboard'
+import ProductionMonitoringDashboard from './pages/Executive/ProductionMonitoringDashboard'
+import LiveMonitoringDashboard from './pages/Production/LiveMonitoringDashboard'
 import ReportGenerator from './pages/Reports/ReportGenerator'
 import CustomReportBuilder from './pages/Reports/CustomReportBuilder'
 import ReportScheduler from './pages/Reports/ReportScheduler'
@@ -367,6 +386,9 @@ function App() {
       {/* System Overview for non-authenticated users */}
       <Route path="/" element={!isAuthenticated ? <SystemOverview /> : <Navigate to="/app" />} />
       <Route path="/absensi" element={<PublicAttendance />} />
+      <Route path="/public/attendance" element={<PublicAttendance />} />
+      <Route path="/public/leave-request" element={<StaffLeaveRequest />} />
+      <Route path="/public/face-registration" element={<FaceRegistration />} />
       <Route path="/login" element={!isAuthenticated ? <Login /> : <Navigate to="/app" />} />
       <Route path="/forgot-password" element={!isAuthenticated ? <ForgotPassword /> : <Navigate to="/app" />} />
       <Route path="/reset-password" element={!isAuthenticated ? <ResetPassword /> : <Navigate to="/app" />} />
@@ -444,6 +466,10 @@ function App() {
       <Route path="/returns/new" element={<Navigate to="/app/returns/new" replace />} />
       <Route path="/returns/:id" element={<Navigate to="/app/returns" replace />} />
       
+      {/* Redirect old converting routes to app routes */}
+      <Route path="/production/converting" element={<Navigate to="/app/production/converting" replace />} />
+      <Route path="/production/converting/input" element={<Navigate to="/app/production/converting/input" replace />} />
+      
       {/* Bypass auth for specific debug route */}
       <Route path="/app/debug/roster" element={
         <div className="min-h-screen bg-gray-50">
@@ -473,6 +499,8 @@ function App() {
         {/* Executive Dashboard */}
         <Route path="executive" element={<ExecutiveDashboardAdvanced />} />
         <Route path="executive/production" element={<ProductionExecutiveDashboard />} />
+        <Route path="executive/production-monitoring" element={<ProductionMonitoringDashboard />} />
+        <Route path="production/live-monitoring" element={<LiveMonitoringDashboard />} />
         
         {/* Products */}
         <Route path="products" element={<ProductsNewPage />} />
@@ -504,24 +532,26 @@ function App() {
         <Route path="warehouse/zones/:id" element={<WarehouseZones />} />
         <Route path="warehouse/zones/:id/locations" element={<WarehouseLocations />} />
         <Route path="warehouse/zones/new" element={<WarehouseZones />} />
-        <Route path="warehouse/locations" element={<WarehouseLocations />} />
+        <Route path="warehouse/locations" element={<LocationList />} />
         <Route path="warehouse/locations/new" element={<LocationForm />} />
+        <Route path="warehouse/locations/:id" element={<LocationDetail />} />
         <Route path="warehouse/locations/:id/edit" element={<LocationForm />} />
         <Route path="warehouse/inventory" element={<InventoryListEnhanced />} />
         <Route path="warehouse/inventory/add-product" element={<AddProductToInventory />} />
         <Route path="warehouse/inventory/new" element={<InventoryForm />} />
         <Route path="warehouse/inventory/:id/edit" element={<InventoryForm />} />
         <Route path="warehouse/stock-input" element={<StockInput />} />
-        <Route path="warehouse/stock-summary" element={<InventoryList />} />
-        <Route path="warehouse/alerts" element={<InventoryList />} />
-        <Route path="warehouse/movements" element={<InventoryList />} />
+        <Route path="warehouse/stock-summary" element={<InventoryListEnhanced />} />
+        <Route path="warehouse/alerts" element={<StockAlerts />} />
+        <Route path="warehouse/uom" element={<UoMList />} />
+        <Route path="warehouse/material-issues" element={<MaterialIssueList />} />
+        <Route path="warehouse/movements" element={<MovementList />} />
         <Route path="warehouse/movements/new" element={<MovementForm />} />
+        <Route path="warehouse/movements/:id" element={<MovementDetail />} />
         <Route path="warehouse/movements/:id/edit" element={<MovementForm />} />
         <Route path="warehouse/adjustments/new" element={<AdjustmentForm />} />
         <Route path="warehouse/adjustments/:id/edit" element={<AdjustmentForm />} />
         <Route path="warehouse/transfers/new" element={<TransferForm />} />
-        <Route path="warehouse/locations" element={<LocationList />} />
-        <Route path="warehouse/movements" element={<MovementList />} />
         <Route path="warehouse/reorder-points" element={<ReorderList />} />
         <Route path="warehouse/transfers/:id/edit" element={<TransferForm />} />
         <Route path="warehouse/reports" element={<InventoryList />} />
@@ -533,6 +563,7 @@ function App() {
         <Route path="warehouse/materials/:id/edit" element={<MaterialEdit />} />
         <Route path="warehouse/stock-opname" element={<StockOpnameList />} />
         <Route path="warehouse/stock-opname/new" element={<StockOpnameForm />} />
+        <Route path="warehouse/stock-opname/results" element={<StockOpnameList />} />
         <Route path="warehouse/stock-opname/:id" element={<StockOpnameDetail />} />
         
         {/* Sales */}
@@ -611,6 +642,8 @@ function App() {
         <Route path="production/controller" element={<DailyController />} />
         <Route path="production/weekly-controller" element={<WeeklyController />} />
         <Route path="production/monthly-controller" element={<MonthlyController />} />
+        <Route path="production/converting" element={<ConvertingDashboard />} />
+        <Route path="production/converting/input" element={<ConvertingInput />} />
         <Route path="production/work-orders" element={<WorkOrderList />} />
         <Route path="production/work-orders-monitoring" element={<WorkOrderMonitoring />} />
         <Route path="production/breakdown-summary" element={<BreakdownSummary />} />
@@ -667,6 +700,7 @@ function App() {
         <Route path="quality/incoming" element={<IncomingQC />} />
         <Route path="quality/in-process" element={<InProcessQC />} />
         <Route path="quality/finish-good" element={<FinishGoodQC />} />
+        <Route path="quality/packing-list" element={<QCPackingList />} />
         <Route path="quality/finish-good/:woId/input" element={<WorkOrderQCForm />} />
         <Route path="quality/objective/production" element={<QualityObjectiveProduction />} />
         <Route path="quality/objective/downtime-analysis" element={<DowntimeAnalysis />} />
@@ -767,7 +801,12 @@ function App() {
         <Route path="hr/departments" element={<Departments />} />
         <Route path="hr/reports" element={<HRReports />} />
         <Route path="hr/attendance" element={<AttendanceManagement />} />
+        <Route path="hr/attendance-admin" element={<AttendanceAdmin />} />
+        <Route path="hr/face-admin" element={<FaceAdmin />} />
         <Route path="hr/attendance-report" element={<AttendanceReport />} />
+        <Route path="hr/attendance-calendar" element={<AttendanceCalendar />} />
+        <Route path="hr/attendance-not-clocked-out" element={<AttendanceNotClockedOut />} />
+        <Route path="hr/staff-leave" element={<StaffLeaveManagement />} />
         <Route path="hr/absensi" element={<AttendancePage />} />
         <Route path="hr/leaves" element={<LeaveManagement />} />
         <Route path="hr/leaves/new" element={<LeaveRequestForm />} />
@@ -778,11 +817,13 @@ function App() {
         <Route path="hr/payroll" element={<PayrollList />} />
         <Route path="hr/payroll/new" element={<PayrollForm />} />
         <Route path="hr/payroll/:id/edit" element={<PayrollForm />} />
+        <Route path="hr/payroll/periods/new" element={<PayrollPeriodForm />} />
+        <Route path="hr/payroll/periods/:periodId/records" element={<PayrollRecordList />} />
+        <Route path="hr/payroll/outsourcing-vendors" element={<OutsourcingVendorList />} />
+        <Route path="hr/payroll/piecework-logs" element={<PieceworkLogList />} />
         <Route path="hr/appraisals" element={<AppraisalList />} />
         <Route path="hr/appraisals/new" element={<AppraisalForm />} />
         <Route path="hr/appraisals/:id/edit" element={<AppraisalForm />} />
-        <Route path="hr/payroll" element={<PayrollList />} />
-        <Route path="hr/payroll/periods/new" element={<PayrollPeriodForm />} />
         <Route path="hr/appraisal" element={<AppraisalList />} />
         <Route path="hr/appraisal/cycles/new" element={<AppraisalCycleForm />} />
         <Route path="hr/training" element={<TrainingManagement />} />

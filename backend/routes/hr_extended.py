@@ -25,6 +25,8 @@ def get_employee_detail(employee_id):
             'employee': {
                 'id': employee.id,
                 'employee_number': employee.employee_number,
+                'nik': employee.nik,
+                'npwp': employee.npwp,
                 'user_id': employee.user_id,
                 'first_name': employee.first_name,
                 'last_name': employee.last_name,
@@ -43,12 +45,22 @@ def get_employee_detail(employee_id):
                     'code': employee.department.code,
                     'name': employee.department.name
                 } if employee.department else None,
+                'department_id': employee.department_id,
                 'position': employee.position,
                 'employment_type': employee.employment_type,
+                'pay_type': employee.pay_type or 'monthly',
+                'pay_rate': float(employee.pay_rate) if employee.pay_rate else None,
+                'outsourcing_vendor_id': employee.outsourcing_vendor_id,
+                'outsourcing_vendor': employee.outsourcing_vendor.name if employee.outsourcing_vendor else None,
                 'hire_date': employee.hire_date.isoformat() if employee.hire_date else None,
                 'termination_date': employee.termination_date.isoformat() if employee.termination_date else None,
                 'status': employee.status,
                 'salary': float(employee.salary) if employee.salary else None,
+                'ptkp_status': employee.ptkp_status or 'TK/0',
+                'dependents': employee.dependents or 0,
+                'has_allowance': employee.has_allowance or False,
+                'position_allowance_amount': float(employee.position_allowance_amount) if employee.position_allowance_amount else 0,
+                'transport_allowance_amount': float(employee.transport_allowance_amount) if employee.transport_allowance_amount else 0,
                 'emergency_contact_name': employee.emergency_contact_name,
                 'emergency_contact_phone': employee.emergency_contact_phone,
                 'is_active': employee.is_active,
@@ -68,6 +80,17 @@ def update_employee(employee_id):
         employee = Employee.query.get_or_404(employee_id)
         
         # Update fields if provided
+        if 'employee_number' in data and data['employee_number']:
+            # Check uniqueness only if changed
+            if data['employee_number'] != employee.employee_number:
+                existing = Employee.query.filter_by(employee_number=data['employee_number']).first()
+                if existing and existing.id != employee_id:
+                    return jsonify({'error': 'No. Karyawan sudah digunakan'}), 400
+                employee.employee_number = data['employee_number']
+        if 'npwp' in data:
+            employee.npwp = data['npwp']
+        if 'nik' in data:
+            employee.nik = data['nik']
         if 'first_name' in data:
             employee.first_name = data['first_name']
         if 'last_name' in data:
@@ -98,10 +121,26 @@ def update_employee(employee_id):
             employee.position = data['position']
         if 'employment_type' in data:
             employee.employment_type = data['employment_type']
+        if 'pay_type' in data:
+            employee.pay_type = data['pay_type']
+        if 'pay_rate' in data:
+            employee.pay_rate = Decimal(str(data['pay_rate'])) if data['pay_rate'] else None
+        if 'outsourcing_vendor_id' in data:
+            employee.outsourcing_vendor_id = data['outsourcing_vendor_id'] if data['outsourcing_vendor_id'] else None
         if 'hire_date' in data:
             employee.hire_date = datetime.fromisoformat(data['hire_date']).date() if data['hire_date'] else None
         if 'salary' in data:
             employee.salary = Decimal(str(data['salary'])) if data['salary'] else None
+        if 'ptkp_status' in data:
+            employee.ptkp_status = data['ptkp_status']
+        if 'dependents' in data:
+            employee.dependents = int(data['dependents']) if data['dependents'] is not None else 0
+        if 'has_allowance' in data:
+            employee.has_allowance = bool(data['has_allowance'])
+        if 'position_allowance_amount' in data:
+            employee.position_allowance_amount = Decimal(str(data['position_allowance_amount'])) if data['position_allowance_amount'] else Decimal('0')
+        if 'transport_allowance_amount' in data:
+            employee.transport_allowance_amount = Decimal(str(data['transport_allowance_amount'])) if data['transport_allowance_amount'] else Decimal('0')
         if 'emergency_contact_name' in data:
             employee.emergency_contact_name = data['emergency_contact_name']
         if 'emergency_contact_phone' in data:
@@ -113,6 +152,19 @@ def update_employee(employee_id):
         db.session.commit()
         
         return jsonify(success_response('api.success'))
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@hr_extended_bp.route('/employees/<int:employee_id>', methods=['DELETE'])
+@jwt_required()
+def delete_employee(employee_id):
+    """Hard-delete employee (permanent removal)"""
+    try:
+        employee = Employee.query.get_or_404(employee_id)
+        db.session.delete(employee)
+        db.session.commit()
+        return jsonify({'message': 'Karyawan berhasil dihapus permanen'}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

@@ -197,7 +197,7 @@ def get_production_approval_detail(id):
                     # Try by code first
                     if product_code:
                         product_new_data = db.session.execute(
-                            text('SELECT berat_kering, ingredient, pack_per_karton FROM products_new WHERE kode_produk = :code'),
+                            text('SELECT berat_kering, ingredient, pack_per_karton FROM products WHERE code = :code'),
                             {'code': product_code}
                         ).fetchone()
                     
@@ -209,7 +209,7 @@ def get_production_approval_detail(id):
                             search_name = search_name[4:]
                         
                         product_new_data = db.session.execute(
-                            text('SELECT berat_kering, ingredient, pack_per_karton FROM products_new WHERE nama_produk LIKE :name ORDER BY LENGTH(nama_produk) LIMIT 1'),
+                            text('SELECT berat_kering, ingredient, pack_per_karton FROM products WHERE name LIKE :name ORDER BY LENGTH(name) LIMIT 1'),
                             {'name': f'%{search_name}%'}
                         ).fetchone()
                     
@@ -439,7 +439,7 @@ def get_production_approval_detail(id):
                     'quality_rate': float(sp.quality_rate) if sp.quality_rate else 0,
                     'oee_score': float(sp.oee_score) if sp.oee_score else 0,
                     'downtime_minutes': sp.downtime_minutes or 0,
-                    'operator_name': sp.operator.name if sp.operator else None,
+                    'operator_name': sp.operator.full_name if sp.operator else None,
                     'notes': sp.notes,
                     'issues': sp.issues
                 })

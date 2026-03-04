@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosConfig';
 import { 
   ClipboardDocumentListIcon, 
   CubeIcon, 
@@ -98,9 +98,9 @@ const ProductionPlanningForm: React.FC = () => {
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
       const [productsRes, machinesRes, forecastsRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/production-planning/products', config),
-        axios.get('http://localhost:5000/api/production/machines', config),
-        axios.get('http://localhost:5000/api/production-planning/forecasts', config)
+        axiosInstance.get('/api/production-planning/products'),
+        axiosInstance.get('/api/production/machines'),
+        axiosInstance.get('/api/production-planning/forecasts')
       ]);
 
       setProducts(productsRes.data.products || []);
@@ -114,10 +114,7 @@ const ProductionPlanningForm: React.FC = () => {
   const fetchPlanData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(
-        `http://localhost:5000/api/production-planning/production-plans/${id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await axiosInstance.get(`/api/production-planning/production-plans/${id}`);
 
       const plan = response.data.plan;
       setFormData({
@@ -174,28 +171,16 @@ const ProductionPlanningForm: React.FC = () => {
   const fetchBOMForProduct = async (productId: number) => {
     try {
       setLoadingBOM(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/boms?product_id=${productId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const response = await axiosInstance.get(`/api/boms?product_id=${productId}`);
+      const data = response.data;
+      const activeBOM = data.boms?.find((b: any) => b.product_id === productId && b.is_active);
       
-      if (response.ok) {
-        const data = await response.json();
-        const activeBOM = data.boms?.find((b: any) => b.product_id === productId && b.is_active);
-        
-        if (activeBOM) {
-          const bomDetailResponse = await fetch(`http://localhost:5000/api/boms/${activeBOM.id}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          
-          if (bomDetailResponse.ok) {
-            const bomDetail = await bomDetailResponse.json();
-            setBomData(bomDetail.bom);
-            setShowMaterialDetails(true);
-          }
-        } else {
-          setBomData(null);
-        }
+      if (activeBOM) {
+        const bomDetailResponse = await axiosInstance.get(`/api/boms/${activeBOM.id}`);
+        setBomData(bomDetailResponse.data.bom);
+        setShowMaterialDetails(true);
+      } else {
+        setBomData(null);
       }
     } catch (error) {
       console.error('Error fetching BOM:', error);
@@ -251,18 +236,10 @@ const ProductionPlanningForm: React.FC = () => {
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
       if (isEditMode) {
-        await axios.put(
-          `http://localhost:5000/api/production-planning/production-plans/${id}`,
-          formData,
-          config
-        );
+        await axiosInstance.put(`/api/production-planning/production-plans/${id}`, formData);
         alert('Production plan updated successfully!');
       } else {
-        await axios.post(
-          'http://localhost:5000/api/production-planning/production-plans',
-          formData,
-          config
-        );
+        await axiosInstance.post('/api/production-planning/production-plans', formData);
         alert('Production plan created successfully!');
       }
 

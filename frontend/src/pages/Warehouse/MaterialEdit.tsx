@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   ArrowLeftIcon,
   BookmarkIcon,
@@ -78,19 +79,8 @@ const MaterialEdit: React.FC = () => {
   const fetchMaterial = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/materials/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch material');
-      }
-
-      const data = await response.json();
-      setMaterial(data.material);
+      const response = await axiosInstance.get(`/api/materials/${id}`);
+      setMaterial(response.data.material);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       console.error('Error fetching material:', err);
@@ -124,20 +114,7 @@ const MaterialEdit: React.FC = () => {
 
     setSaving(true);
     try {
-      const response = await fetch(`http://localhost:5000/api/materials/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(material)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update material');
-      }
-
+      await axiosInstance.put(`/api/materials/${id}`, material);
       alert('Material updated successfully');
       navigate(`/app/warehouse/materials/${id}`);
     } catch (err) {

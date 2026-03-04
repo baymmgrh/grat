@@ -1,0 +1,1632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ERP System - Entity Relationship Diagram</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 20px 32px; border-bottom: 1px solid #334155; }
+        .header h1 { font-size: 22px; font-weight: 700; color: #f8fafc; }
+        .header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .controls { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 32px; background: #1e293b; border-bottom: 1px solid #334155; position: sticky; top: 0; z-index: 100; align-items: center; }
+        .btn { padding: 7px 14px; border: 1px solid #475569; border-radius: 6px; background: #1e293b; color: #cbd5e1; cursor: pointer; font-size: 12px; transition: all 0.15s; }
+        .btn:hover { background: #334155; color: #f1f5f9; }
+        .btn.active { background: #3b82f6; border-color: #3b82f6; color: white; }
+        .zoom-controls { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+        .zoom-controls .btn { font-size: 16px; padding: 4px 10px; font-weight: bold; }
+        .zoom-label { font-size: 11px; color: #94a3b8; }
+        .diagram-wrap { position: relative; overflow: hidden; height: calc(100vh - 120px); background: #f8fafc; margin: 0; cursor: grab; }
+        .diagram-wrap:active { cursor: grabbing; }
+        .diagram-inner { transform-origin: 0 0; position: absolute; top: 0; left: 0; padding: 40px; }
+        .diagram-inner svg { display: block; }
+        .hint { position: fixed; bottom: 16px; right: 16px; background: #1e293b; color: #94a3b8; padding: 8px 14px; border-radius: 8px; font-size: 11px; border: 1px solid #334155; z-index: 200; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>ERP System &mdash; Entity Relationship Diagram</h1>
+        <p>Complete database schema &bull; Scroll to zoom &bull; Drag to pan</p>
+    </div>
+    <div class="controls">
+        <button class="btn active" data-mod="all">All Modules</button>
+        <button class="btn" data-mod="core">Core</button>
+        <button class="btn" data-mod="production">Production</button>
+        <button class="btn" data-mod="sales">Sales &amp; CRM</button>
+        <button class="btn" data-mod="purchasing">Purchasing</button>
+        <button class="btn" data-mod="finance">Finance</button>
+        <button class="btn" data-mod="hr">HR</button>
+        <button class="btn" data-mod="quality">Quality</button>
+        <button class="btn" data-mod="shipping">Shipping</button>
+        <button class="btn" data-mod="maintenance">Maintenance</button>
+        <div class="zoom-controls">
+            <span class="zoom-label" id="zoomLevel">100%</span>
+            <button class="btn" id="zoomIn">+</button>
+            <button class="btn" id="zoomOut">&minus;</button>
+            <button class="btn" id="zoomFit">Fit</button>
+        </div>
+    </div>
+    <div class="diagram-wrap" id="diagramWrap">
+        <div class="diagram-inner" id="diagramInner">
+            <div id="mermaidTarget"></div>
+        </div>
+    </div>
+    <div class="hint">Scroll = Zoom &bull; Drag = Pan &bull; Buttons = Filter modules</div>
+
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    er: { layoutDirection: 'TB', useMaxWidth: false },
+    themeVariables: { fontSize: '13px' }
+});
+
+const diagrams = {};
+
+diagrams.all = `erDiagram
+
+    users {
+        int id PK
+        string username
+        string email
+        string full_name
+        boolean is_active
+        boolean is_admin
+    }
+    roles {
+        int id PK
+        string name
+    }
+    user_roles {
+        int id PK
+        int user_id FK
+        int role_id FK
+    }
+    permissions {
+        int id PK
+        string name
+        string resource
+        string action
+    }
+    role_permissions {
+        int id PK
+        int role_id FK
+        int permission_id FK
+    }
+
+    users ||--o{ user_roles : has
+    roles ||--o{ user_roles : assigned
+    roles ||--o{ role_permissions : has
+    permissions ||--o{ role_permissions : granted
+
+    product_categories {
+        int id PK
+        string code
+        string name
+        int parent_id FK
+    }
+    products {
+        int id PK
+        string code
+        string name
+        int category_id FK
+        string primary_uom
+        string secondary_uom
+        decimal price
+        decimal cost
+        string material_type
+    }
+    product_specifications {
+        int id PK
+        int product_id FK
+        decimal gsm
+        decimal width_cm
+    }
+    product_packaging {
+        int id PK
+        int product_id FK
+        int sheets_per_pack
+        int packs_per_karton
+    }
+    materials {
+        int id PK
+        string code
+        string name
+        string material_type
+        string category
+        int supplier_id FK
+        decimal cost_per_unit
+    }
+
+    product_categories ||--o{ products : categorizes
+    products ||--o| product_specifications : has
+    products ||--o| product_packaging : has
+
+    warehouse_zones {
+        int id PK
+        string code
+        string name
+        string material_type
+        string zone_type
+    }
+    warehouse_locations {
+        int id PK
+        int zone_id FK
+        string location_code
+        string rack
+        string level
+        string position
+    }
+    inventory {
+        int id PK
+        int product_id FK
+        int material_id FK
+        int location_id FK
+        decimal quantity_on_hand
+        decimal quantity_reserved
+        decimal quantity_available
+        string batch_number
+        date expiry_date
+        string stock_status
+    }
+    inventory_movements {
+        int id PK
+        int inventory_id FK
+        int product_id FK
+        int material_id FK
+        string movement_type
+        decimal quantity
+        string reference_type
+        decimal unit_cost
+    }
+
+    warehouse_zones ||--o{ warehouse_locations : contains
+    warehouse_locations ||--o{ inventory : stores
+    products ||--o{ inventory : stocked
+    materials ||--o{ inventory : stocked
+    inventory ||--o{ inventory_movements : tracked
+
+    machines {
+        int id PK
+        string code
+        string name
+        string machine_type
+        string status
+        int default_speed
+    }
+    bill_of_materials {
+        int id PK
+        string bom_number
+        int product_id FK
+        string version
+        boolean is_active
+        decimal batch_size
+    }
+    bom_items {
+        int id PK
+        int bom_id FK
+        int material_id FK
+        int product_id FK
+        decimal quantity
+        decimal unit_cost
+        decimal scrap_percent
+    }
+    work_orders {
+        int id PK
+        string wo_number
+        int product_id FK
+        int bom_id FK
+        int machine_id FK
+        int sales_order_id FK
+        decimal quantity
+        decimal quantity_produced
+        decimal quantity_good
+        string status
+    }
+    production_records {
+        int id PK
+        int work_order_id FK
+        int machine_id FK
+        decimal quantity_produced
+        decimal quantity_good
+        decimal quantity_scrap
+    }
+    shift_productions {
+        int id PK
+        int work_order_id FK
+        int machine_id FK
+        int product_id FK
+        decimal actual_quantity
+        decimal good_quantity
+        decimal efficiency_rate
+        decimal oee_score
+    }
+    downtime_records {
+        int id PK
+        int shift_production_id FK
+        int machine_id FK
+        string downtime_category
+        int duration_minutes
+    }
+    production_approvals {
+        int id PK
+        string approval_number
+        int work_order_id FK
+        int wip_batch_id FK
+        decimal material_cost
+        decimal labor_cost
+        decimal overhead_cost
+        decimal cost_per_unit
+        string status
+    }
+    material_issues {
+        int id PK
+        string issue_number
+        int work_order_id FK
+        string status
+    }
+    material_issue_items {
+        int id PK
+        int material_issue_id FK
+        int material_id FK
+        decimal required_quantity
+        decimal issued_quantity
+    }
+    wip_batches {
+        int id PK
+        string batch_number
+        int work_order_id FK
+        float material_cost
+        float labor_cost
+        float overhead_cost
+    }
+    job_cost_entries {
+        int id PK
+        int wip_batch_id FK
+        string cost_category
+        float amount
+    }
+    wip_stocks {
+        int id PK
+        int product_id FK
+        int quantity_pcs
+        int quantity_carton
+    }
+    wip_stock_movements {
+        int id PK
+        int wip_stock_id FK
+        string movement_type
+        int quantity_pcs
+    }
+    packing_lists {
+        int id PK
+        int work_order_id FK
+        string product_name
+        int total_karton
+    }
+    packing_list_items {
+        int id PK
+        int packing_list_id FK
+        int carton_number
+        decimal weight_kg
+    }
+    packing_lists_new {
+        int id PK
+        string packing_number
+        int product_id FK
+        int customer_id FK
+        int total_carton
+        string status
+        string qc_status
+    }
+    packing_list_new_items {
+        int id PK
+        int packing_list_id FK
+        int carton_number
+        decimal weight_kg
+        string batch_mixing
+    }
+    weekly_production_plans {
+        int id PK
+        string plan_number
+        int week_number
+        int year
+        string status
+    }
+    weekly_plan_items {
+        int id PK
+        int plan_id FK
+        int product_id FK
+        decimal planned_quantity
+        int work_order_id FK
+    }
+    product_changeovers {
+        int id PK
+        string changeover_number
+        int from_wo_id FK
+        int to_wo_id FK
+        int machine_id FK
+        string reason
+    }
+    production_plans {
+        int id PK
+        string plan_number
+        int product_id FK
+        decimal planned_quantity
+        string status
+    }
+    wo_status_history {
+        int id PK
+        int work_order_id FK
+        string from_status
+        string to_status
+    }
+    stock_opname_orders {
+        int id PK
+        string opname_number
+        string status
+    }
+    stock_opname_items {
+        int id PK
+        int opname_id FK
+        int inventory_id FK
+        decimal system_qty
+        decimal physical_qty
+    }
+
+    products ||--o{ bill_of_materials : has_bom
+    bill_of_materials ||--o{ bom_items : contains
+    bom_items }o--|| materials : uses
+    products ||--o{ work_orders : produced
+    bill_of_materials ||--o{ work_orders : based_on
+    machines ||--o{ work_orders : runs
+    work_orders ||--o{ production_records : records
+    work_orders ||--o{ shift_productions : shifts
+    shift_productions ||--o{ downtime_records : has
+    machines ||--o{ shift_productions : runs
+    work_orders ||--o{ production_approvals : approved
+    work_orders ||--o{ material_issues : requires
+    material_issues ||--o{ material_issue_items : contains
+    material_issue_items }o--|| materials : issues
+    work_orders ||--o| wip_batches : creates
+    wip_batches ||--o{ job_cost_entries : costs
+    products ||--o{ wip_stocks : wip
+    wip_stocks ||--o{ wip_stock_movements : movements
+    work_orders ||--o| packing_lists : packed
+    packing_lists ||--o{ packing_list_items : contains
+    packing_lists_new ||--o{ packing_list_new_items : contains
+    weekly_production_plans ||--o{ weekly_plan_items : contains
+    work_orders ||--o{ wo_status_history : history
+    stock_opname_orders ||--o{ stock_opname_items : contains
+
+    leads {
+        int id PK
+        string lead_number
+        string company_name
+        string lead_status
+        int lead_score
+    }
+    customers {
+        int id PK
+        string code
+        string company_name
+        string customer_type
+        decimal credit_limit
+    }
+    customer_contacts {
+        int id PK
+        int customer_id FK
+        string name
+        boolean is_primary
+    }
+    sales_pipelines {
+        int id PK
+        string name
+    }
+    pipeline_stages {
+        int id PK
+        int pipeline_id FK
+        string name
+        int probability
+    }
+    opportunities {
+        int id PK
+        string opp_number
+        int lead_id FK
+        int customer_id FK
+        int stage_id FK
+        decimal value
+        string status
+    }
+    quotations {
+        int id PK
+        string quote_number
+        int customer_id FK
+        int opportunity_id FK
+        decimal total_amount
+        string status
+    }
+    quotation_items {
+        int id PK
+        int quotation_id FK
+        int product_id FK
+        decimal quantity
+        decimal unit_price
+    }
+    sales_orders {
+        int id PK
+        string order_number
+        int customer_id FK
+        decimal total_amount
+        string status
+    }
+    sales_order_items {
+        int id PK
+        int order_id FK
+        int product_id FK
+        decimal quantity
+        decimal unit_price
+    }
+    sales_activities {
+        int id PK
+        string activity_number
+        string activity_type
+        int lead_id FK
+        int customer_id FK
+    }
+    sales_forecasts {
+        int id PK
+        string forecast_number
+        decimal best_case
+        decimal most_likely
+    }
+
+    leads ||--o{ opportunities : converts
+    customers ||--o{ opportunities : has
+    customers ||--o{ customer_contacts : contacts
+    customers ||--o{ quotations : quoted
+    customers ||--o{ sales_orders : orders
+    sales_pipelines ||--o{ pipeline_stages : stages
+    pipeline_stages ||--o{ opportunities : at
+    opportunities ||--o{ quotations : generates
+    quotations ||--o{ quotation_items : contains
+    sales_orders ||--o{ sales_order_items : contains
+    products ||--o{ sales_order_items : sold
+    sales_orders ||--o{ work_orders : triggers
+
+    suppliers {
+        int id PK
+        string code
+        string company_name
+        string supplier_type
+        string rating
+    }
+    purchase_orders {
+        int id PK
+        string po_number
+        int supplier_id FK
+        decimal total_amount
+        string status
+    }
+    purchase_order_items {
+        int id PK
+        int po_id FK
+        int material_id FK
+        decimal quantity
+        decimal unit_price
+    }
+    goods_received_notes {
+        int id PK
+        string grn_number
+        int po_id FK
+        int supplier_id FK
+        string status
+    }
+    grn_items {
+        int id PK
+        int grn_id FK
+        int po_item_id FK
+        decimal quantity_received
+        string batch_number
+        int location_id FK
+    }
+    purchase_rfqs {
+        int id PK
+        string rfq_number
+        string title
+        string status
+    }
+    supplier_quotes {
+        int id PK
+        string quote_number
+        int supplier_id FK
+        int rfq_id FK
+        decimal total_amount
+    }
+    supplier_contracts {
+        int id PK
+        string contract_number
+        int supplier_id FK
+        string contract_type
+        string status
+    }
+    price_history {
+        int id PK
+        int supplier_id FK
+        int material_id FK
+        decimal unit_price
+        string source_type
+    }
+
+    suppliers ||--o{ materials : supplies
+    suppliers ||--o{ purchase_orders : receives
+    purchase_orders ||--o{ purchase_order_items : contains
+    purchase_orders ||--o{ goods_received_notes : received
+    goods_received_notes ||--o{ grn_items : contains
+    suppliers ||--o{ supplier_quotes : quotes
+    purchase_rfqs ||--o{ supplier_quotes : responses
+    suppliers ||--o{ supplier_contracts : contracted
+    suppliers ||--o{ price_history : prices
+
+    accounts {
+        int id PK
+        string account_code
+        string account_name
+        string account_type
+        string normal_balance
+    }
+    accounting_entries {
+        int id PK
+        string entry_number
+        int account_id FK
+        decimal debit_amount
+        decimal credit_amount
+        string status
+    }
+    invoices {
+        int id PK
+        string invoice_number
+        string invoice_type
+        int customer_id FK
+        int supplier_id FK
+        decimal total_amount
+        string status
+    }
+    invoice_items {
+        int id PK
+        int invoice_id FK
+        int product_id FK
+        decimal quantity
+        decimal unit_price
+    }
+    payments {
+        int id PK
+        string payment_number
+        int invoice_id FK
+        decimal amount
+        string payment_method
+        string status
+    }
+    cost_centers {
+        int id PK
+        string code
+        string name
+    }
+    budgets {
+        int id PK
+        string budget_name
+        int budget_year
+        decimal total_budget
+    }
+    budget_lines {
+        int id PK
+        int budget_id FK
+        int account_id FK
+        decimal budget_amount
+        decimal actual_amount
+    }
+    fixed_assets {
+        int id PK
+        string asset_code
+        string asset_name
+        decimal acquisition_cost
+        string status
+    }
+    tax_transactions {
+        int id PK
+        string tx_number
+        string tax_type
+        decimal tax_amount
+    }
+    cost_analysis {
+        int id PK
+        string analysis_code
+        decimal material_cost
+        decimal labor_cost
+        decimal overhead
+        decimal variance
+    }
+
+    accounts ||--o{ accounting_entries : posted
+    invoices ||--o{ invoice_items : contains
+    invoices ||--o{ payments : paid
+    sales_orders ||--o{ invoices : invoiced
+    production_approvals ||--o| invoices : forwarded
+    budgets ||--o{ budget_lines : contains
+
+    departments {
+        int id PK
+        string code
+        string name
+        int manager_id FK
+    }
+    employees {
+        int id PK
+        string employee_number
+        int user_id FK
+        string full_name
+        int department_id FK
+        string position
+        decimal salary
+        string status
+    }
+    shift_schedules {
+        int id PK
+        string name
+        string shift_type
+    }
+    attendances {
+        int id PK
+        int employee_id FK
+        date attendance_date
+        string status
+    }
+    leaves {
+        int id PK
+        int employee_id FK
+        string leave_type
+        string status
+    }
+    employee_rosters {
+        int id PK
+        int employee_id FK
+        int machine_id FK
+        int shift_id FK
+        date roster_date
+    }
+
+    departments ||--o{ employees : employs
+    employees ||--o{ attendances : records
+    employees ||--o{ leaves : takes
+    employees ||--o{ employee_rosters : assigned
+    users ||--o| employees : linked
+
+    quality_standards {
+        int id PK
+        string code
+        string name
+        int product_id FK
+    }
+    quality_tests {
+        int id PK
+        string test_number
+        int product_id FK
+        string result
+    }
+    quality_inspections {
+        int id PK
+        string inspection_number
+        int product_id FK
+        int work_order_id FK
+        string result
+    }
+    capas {
+        int id PK
+        string capa_number
+        string capa_type
+        string status
+    }
+
+    products ||--o{ quality_tests : tested
+    products ||--o{ quality_inspections : inspected
+    work_orders ||--o{ quality_inspections : qc
+
+    logistics_providers {
+        int id PK
+        string code
+        string company_name
+    }
+    shipping_orders {
+        int id PK
+        string shipping_number
+        int sales_order_id FK
+        int customer_id FK
+        int provider_id FK
+        string status
+    }
+    shipping_items {
+        int id PK
+        int shipping_order_id FK
+        int product_id FK
+        decimal quantity
+    }
+    delivery_tracking {
+        int id PK
+        int shipping_order_id FK
+        string status
+        string location
+    }
+    customer_returns {
+        int id PK
+        string return_number
+        int sales_order_id FK
+        int customer_id FK
+        string status
+    }
+    return_items {
+        int id PK
+        int return_id FK
+        int product_id FK
+        int quantity_returned
+    }
+
+    sales_orders ||--o{ shipping_orders : shipped
+    logistics_providers ||--o{ shipping_orders : delivers
+    shipping_orders ||--o{ shipping_items : contains
+    shipping_orders ||--o{ delivery_tracking : tracked
+    sales_orders ||--o{ customer_returns : returned
+    customer_returns ||--o{ return_items : contains
+
+    maintenance_schedules {
+        int id PK
+        string schedule_number
+        int machine_id FK
+        string maintenance_type
+        string frequency
+    }
+    maintenance_records {
+        int id PK
+        string record_number
+        int machine_id FK
+        string maintenance_type
+        string status
+        decimal cost
+    }
+    maintenance_tasks {
+        int id PK
+        int record_id FK
+        string description
+        string status
+    }
+    equipment_history {
+        int id PK
+        int machine_id FK
+        string event_type
+    }
+
+    machines ||--o{ maintenance_schedules : scheduled
+    machines ||--o{ maintenance_records : maintained
+    maintenance_records ||--o{ maintenance_tasks : tasks
+    machines ||--o{ equipment_history : history
+`;
+
+diagrams.core = `erDiagram
+    users {
+        int id PK
+        string username
+        string email
+        string full_name
+        boolean is_active
+        boolean is_admin
+        boolean is_super_admin
+    }
+    roles {
+        int id PK
+        string name
+    }
+    user_roles {
+        int id PK
+        int user_id FK
+        int role_id FK
+    }
+    permissions {
+        int id PK
+        string name
+        string resource
+        string module
+        string action
+    }
+    role_permissions {
+        int id PK
+        int role_id FK
+        int permission_id FK
+    }
+    product_categories {
+        int id PK
+        string code
+        string name
+        int parent_id FK
+    }
+    products {
+        int id PK
+        string code
+        string name
+        int category_id FK
+        string primary_uom
+        string secondary_uom
+        decimal price
+        decimal cost
+        string material_type
+        boolean is_sellable
+        boolean is_producible
+    }
+    product_specifications {
+        int id PK
+        int product_id FK
+        decimal gsm
+        decimal width_cm
+        decimal length_m
+        string color
+    }
+    product_packaging {
+        int id PK
+        int product_id FK
+        int sheets_per_pack
+        int packs_per_karton
+        int sheets_per_karton
+    }
+    materials {
+        int id PK
+        string code
+        string name
+        string material_type
+        string category
+        string primary_uom
+        int supplier_id FK
+        decimal cost_per_unit
+        decimal min_stock_level
+        decimal reorder_point
+    }
+    warehouse_zones {
+        int id PK
+        string code
+        string name
+        string material_type
+        string zone_type
+    }
+    warehouse_locations {
+        int id PK
+        int zone_id FK
+        string location_code
+        string rack
+        string level
+        string position
+        decimal capacity
+    }
+    inventory {
+        int id PK
+        int product_id FK
+        int material_id FK
+        int location_id FK
+        decimal quantity_on_hand
+        decimal quantity_reserved
+        decimal quantity_available
+        string batch_number
+        date expiry_date
+        string stock_status
+        int grn_id FK
+    }
+    inventory_movements {
+        int id PK
+        int inventory_id FK
+        string movement_type
+        decimal quantity
+        string reference_type
+        int reference_id
+        decimal unit_cost
+        decimal total_cost
+    }
+
+    users ||--o{ user_roles : has
+    roles ||--o{ user_roles : assigned
+    roles ||--o{ role_permissions : has
+    permissions ||--o{ role_permissions : granted
+    product_categories ||--o{ products : categorizes
+    products ||--o| product_specifications : spec
+    products ||--o| product_packaging : packaging
+    products ||--o{ inventory : stocked
+    materials ||--o{ inventory : stocked
+    warehouse_zones ||--o{ warehouse_locations : contains
+    warehouse_locations ||--o{ inventory : stores
+    inventory ||--o{ inventory_movements : tracked
+`;
+
+diagrams.production = `erDiagram
+    products {
+        int id PK
+        string code
+        string name
+    }
+    materials {
+        int id PK
+        string code
+        string name
+    }
+    machines {
+        int id PK
+        string code
+        string name
+        string status
+        int default_speed
+    }
+    bill_of_materials {
+        int id PK
+        string bom_number
+        int product_id FK
+        string version
+        decimal batch_size
+    }
+    bom_items {
+        int id PK
+        int bom_id FK
+        int material_id FK
+        decimal quantity
+        decimal unit_cost
+        decimal scrap_percent
+    }
+    work_orders {
+        int id PK
+        string wo_number
+        int product_id FK
+        int bom_id FK
+        int machine_id FK
+        decimal quantity
+        decimal quantity_produced
+        decimal quantity_good
+        string status
+    }
+    production_records {
+        int id PK
+        int work_order_id FK
+        int machine_id FK
+        decimal quantity_produced
+        decimal quantity_good
+        decimal quantity_scrap
+    }
+    shift_productions {
+        int id PK
+        int work_order_id FK
+        int machine_id FK
+        decimal actual_quantity
+        decimal good_quantity
+        decimal efficiency_rate
+        decimal oee_score
+        int downtime_minutes
+    }
+    downtime_records {
+        int id PK
+        int shift_production_id FK
+        int machine_id FK
+        string downtime_category
+        int duration_minutes
+    }
+    production_approvals {
+        int id PK
+        string approval_number
+        int work_order_id FK
+        int wip_batch_id FK
+        decimal material_cost
+        decimal labor_cost
+        decimal overhead_cost
+        decimal cost_per_unit
+        string status
+    }
+    material_issues {
+        int id PK
+        string issue_number
+        int work_order_id FK
+        string status
+    }
+    material_issue_items {
+        int id PK
+        int material_issue_id FK
+        int material_id FK
+        decimal required_quantity
+        decimal issued_quantity
+    }
+    wip_batches {
+        int id PK
+        string batch_number
+        int work_order_id FK
+        float material_cost
+        float labor_cost
+        float overhead_cost
+    }
+    job_cost_entries {
+        int id PK
+        int wip_batch_id FK
+        string cost_category
+        float amount
+    }
+    wip_stocks {
+        int id PK
+        int product_id FK
+        int quantity_pcs
+        int quantity_carton
+    }
+    packing_lists_new {
+        int id PK
+        string packing_number
+        int product_id FK
+        int total_carton
+        string status
+        string qc_status
+    }
+    product_changeovers {
+        int id PK
+        int from_wo_id FK
+        int to_wo_id FK
+        int machine_id FK
+        string reason
+    }
+
+    products ||--o{ bill_of_materials : has_bom
+    bill_of_materials ||--o{ bom_items : contains
+    bom_items }o--|| materials : uses
+    products ||--o{ work_orders : produced
+    bill_of_materials ||--o{ work_orders : based_on
+    machines ||--o{ work_orders : runs
+    work_orders ||--o{ production_records : records
+    work_orders ||--o{ shift_productions : shifts
+    shift_productions ||--o{ downtime_records : has
+    work_orders ||--o{ production_approvals : approved
+    work_orders ||--o{ material_issues : requires
+    material_issues ||--o{ material_issue_items : items
+    material_issue_items }o--|| materials : issues
+    work_orders ||--o| wip_batches : creates
+    wip_batches ||--o{ job_cost_entries : costs
+    products ||--o{ wip_stocks : wip
+    products ||--o{ packing_lists_new : packed
+`;
+
+diagrams.sales = `erDiagram
+    leads {
+        int id PK
+        string lead_number
+        string company_name
+        string lead_status
+        int lead_score
+    }
+    customers {
+        int id PK
+        string code
+        string company_name
+        string customer_type
+        decimal credit_limit
+    }
+    customer_contacts {
+        int id PK
+        int customer_id FK
+        string name
+        boolean is_primary
+    }
+    sales_pipelines {
+        int id PK
+        string name
+    }
+    pipeline_stages {
+        int id PK
+        int pipeline_id FK
+        string name
+        int probability
+    }
+    opportunities {
+        int id PK
+        string opp_number
+        int lead_id FK
+        int customer_id FK
+        int stage_id FK
+        decimal value
+        string status
+    }
+    quotations {
+        int id PK
+        string quote_number
+        int customer_id FK
+        int opportunity_id FK
+        decimal total_amount
+        string status
+    }
+    quotation_items {
+        int id PK
+        int quotation_id FK
+        int product_id FK
+        decimal quantity
+        decimal unit_price
+    }
+    sales_orders {
+        int id PK
+        string order_number
+        int customer_id FK
+        decimal total_amount
+        string status
+    }
+    sales_order_items {
+        int id PK
+        int order_id FK
+        int product_id FK
+        decimal quantity
+        decimal unit_price
+    }
+    sales_activities {
+        int id PK
+        string activity_number
+        string activity_type
+        int lead_id FK
+        int customer_id FK
+    }
+    sales_forecasts {
+        int id PK
+        string forecast_number
+        decimal best_case
+        decimal most_likely
+    }
+
+    leads ||--o{ opportunities : converts
+    customers ||--o{ opportunities : has
+    customers ||--o{ customer_contacts : contacts
+    customers ||--o{ quotations : quoted
+    customers ||--o{ sales_orders : orders
+    sales_pipelines ||--o{ pipeline_stages : stages
+    pipeline_stages ||--o{ opportunities : at
+    opportunities ||--o{ quotations : generates
+    quotations ||--o{ quotation_items : contains
+    sales_orders ||--o{ sales_order_items : contains
+`;
+
+diagrams.purchasing = `erDiagram
+    suppliers {
+        int id PK
+        string code
+        string company_name
+        string supplier_type
+        string rating
+    }
+    purchase_rfqs {
+        int id PK
+        string rfq_number
+        string title
+        string status
+    }
+    supplier_quotes {
+        int id PK
+        string quote_number
+        int supplier_id FK
+        int rfq_id FK
+        decimal total_amount
+    }
+    purchase_orders {
+        int id PK
+        string po_number
+        int supplier_id FK
+        decimal total_amount
+        string status
+    }
+    purchase_order_items {
+        int id PK
+        int po_id FK
+        int material_id FK
+        decimal quantity
+        decimal unit_price
+        decimal quantity_received
+    }
+    goods_received_notes {
+        int id PK
+        string grn_number
+        int po_id FK
+        int supplier_id FK
+        string status
+    }
+    grn_items {
+        int id PK
+        int grn_id FK
+        int po_item_id FK
+        decimal quantity_received
+        decimal quantity_accepted
+        string batch_number
+    }
+    supplier_contracts {
+        int id PK
+        string contract_number
+        int supplier_id FK
+        string contract_type
+        string status
+    }
+    price_history {
+        int id PK
+        int supplier_id FK
+        int material_id FK
+        decimal unit_price
+        string source_type
+    }
+
+    suppliers ||--o{ purchase_orders : receives
+    suppliers ||--o{ supplier_quotes : quotes
+    suppliers ||--o{ supplier_contracts : contracted
+    suppliers ||--o{ price_history : prices
+    purchase_rfqs ||--o{ supplier_quotes : responses
+    purchase_orders ||--o{ purchase_order_items : contains
+    purchase_orders ||--o{ goods_received_notes : received
+    goods_received_notes ||--o{ grn_items : contains
+`;
+
+diagrams.finance = `erDiagram
+    accounts {
+        int id PK
+        string account_code
+        string account_name
+        string account_type
+        string normal_balance
+        int parent_id FK
+    }
+    accounting_entries {
+        int id PK
+        string entry_number
+        int account_id FK
+        decimal debit_amount
+        decimal credit_amount
+        string reference_type
+        string status
+    }
+    invoices {
+        int id PK
+        string invoice_number
+        string invoice_type
+        int customer_id FK
+        int supplier_id FK
+        int production_approval_id FK
+        decimal total_amount
+        decimal paid_amount
+        string status
+    }
+    invoice_items {
+        int id PK
+        int invoice_id FK
+        int product_id FK
+        decimal quantity
+        decimal unit_price
+    }
+    payments {
+        int id PK
+        string payment_number
+        int invoice_id FK
+        decimal amount
+        string payment_method
+        string status
+    }
+    cost_centers {
+        int id PK
+        string code
+        string name
+    }
+    budgets {
+        int id PK
+        string budget_name
+        int budget_year
+        decimal total_budget
+        string status
+    }
+    budget_lines {
+        int id PK
+        int budget_id FK
+        int account_id FK
+        decimal budget_amount
+        decimal actual_amount
+        decimal variance_amount
+    }
+    fixed_assets {
+        int id PK
+        string asset_code
+        string asset_name
+        string category
+        decimal acquisition_cost
+        decimal accumulated_depreciation
+        string status
+    }
+    tax_transactions {
+        int id PK
+        string tx_number
+        string tax_type
+        decimal base_amount
+        decimal tax_amount
+        string status
+    }
+    cost_analysis {
+        int id PK
+        string analysis_code
+        decimal direct_material
+        decimal direct_labor
+        decimal overhead
+        decimal total_cost
+        decimal variance
+    }
+
+    accounts ||--o{ accounting_entries : posted
+    accounts ||--o{ accounts : parent
+    invoices ||--o{ invoice_items : contains
+    invoices ||--o{ payments : paid
+    budgets ||--o{ budget_lines : contains
+    accounts ||--o{ budget_lines : budgeted
+`;
+
+diagrams.hr = `erDiagram
+    departments {
+        int id PK
+        string code
+        string name
+        int manager_id FK
+    }
+    employees {
+        int id PK
+        string employee_number
+        int user_id FK
+        string full_name
+        int department_id FK
+        string position
+        string employment_type
+        decimal salary
+        string status
+    }
+    shift_schedules {
+        int id PK
+        string name
+        string shift_type
+        time start_time
+        time end_time
+    }
+    attendances {
+        int id PK
+        int employee_id FK
+        date attendance_date
+        time clock_in
+        time clock_out
+        string status
+    }
+    leaves {
+        int id PK
+        int employee_id FK
+        string leave_type
+        date start_date
+        date end_date
+        string status
+    }
+    employee_rosters {
+        int id PK
+        int employee_id FK
+        int machine_id FK
+        int shift_id FK
+        date roster_date
+    }
+
+    departments ||--o{ employees : employs
+    employees ||--o{ attendances : records
+    employees ||--o{ leaves : takes
+    employees ||--o{ employee_rosters : assigned
+    shift_schedules ||--o{ employee_rosters : shift
+`;
+
+diagrams.quality = `erDiagram
+    quality_standards {
+        int id PK
+        string code
+        string name
+        int product_id FK
+        string standard_type
+    }
+    quality_tests {
+        int id PK
+        string test_number
+        int product_id FK
+        string test_type
+        string result
+    }
+    quality_inspections {
+        int id PK
+        string inspection_number
+        int product_id FK
+        int work_order_id FK
+        string inspection_type
+        string result
+        string status
+    }
+    capas {
+        int id PK
+        string capa_number
+        string capa_type
+        string status
+        string priority
+    }
+
+    quality_standards ||--o{ quality_tests : defines
+`;
+
+diagrams.shipping = `erDiagram
+    logistics_providers {
+        int id PK
+        string code
+        string company_name
+        string service_type
+    }
+    shipping_orders {
+        int id PK
+        string shipping_number
+        int sales_order_id FK
+        int customer_id FK
+        int provider_id FK
+        string delivery_method
+        string status
+    }
+    shipping_items {
+        int id PK
+        int shipping_order_id FK
+        int product_id FK
+        decimal quantity
+    }
+    delivery_tracking {
+        int id PK
+        int shipping_order_id FK
+        string status
+        string location
+    }
+    customer_returns {
+        int id PK
+        string return_number
+        int sales_order_id FK
+        int customer_id FK
+        string reason
+        string status
+    }
+    return_items {
+        int id PK
+        int return_id FK
+        int product_id FK
+        int quantity_returned
+        string disposition
+    }
+    return_qc_records {
+        int id PK
+        int return_id FK
+        string result
+    }
+
+    logistics_providers ||--o{ shipping_orders : delivers
+    shipping_orders ||--o{ shipping_items : contains
+    shipping_orders ||--o{ delivery_tracking : tracked
+    customer_returns ||--o{ return_items : contains
+    customer_returns ||--o{ return_qc_records : qc
+`;
+
+diagrams.maintenance = `erDiagram
+    machines {
+        int id PK
+        string code
+        string name
+        string machine_type
+        string status
+    }
+    maintenance_schedules {
+        int id PK
+        string schedule_number
+        int machine_id FK
+        string maintenance_type
+        string frequency
+        date next_date
+    }
+    maintenance_records {
+        int id PK
+        string record_number
+        int machine_id FK
+        int schedule_id FK
+        string maintenance_type
+        string status
+        decimal cost
+    }
+    maintenance_tasks {
+        int id PK
+        int record_id FK
+        string description
+        string status
+    }
+    equipment_history {
+        int id PK
+        int machine_id FK
+        string event_type
+        string description
+    }
+
+    machines ||--o{ maintenance_schedules : scheduled
+    machines ||--o{ maintenance_records : maintained
+    maintenance_schedules ||--o{ maintenance_records : generates
+    maintenance_records ||--o{ maintenance_tasks : tasks
+    machines ||--o{ equipment_history : history
+`;
+
+// =====================
+// RENDER + ZOOM/PAN
+// =====================
+let currentScale = 0.7;
+let panX = 0, panY = 0;
+let isPanning = false, startX, startY;
+const inner = document.getElementById('diagramInner');
+const wrap = document.getElementById('diagramWrap');
+const target = document.getElementById('mermaidTarget');
+
+function applyTransform() {
+    inner.style.transform = `translate(${panX}px, ${panY}px) scale(${currentScale})`;
+    document.getElementById('zoomLevel').textContent = Math.round(currentScale * 100) + '%';
+}
+
+async function renderDiagram(key) {
+    target.innerHTML = '';
+    const id = 'mermaid-' + Date.now();
+    try {
+        const { svg } = await mermaid.render(id, diagrams[key]);
+        target.innerHTML = svg;
+        panX = 20; panY = 20;
+        currentScale = 0.7;
+        applyTransform();
+    } catch(e) {
+        target.innerHTML = '<div style="color:red;padding:40px;font-size:16px;">Render error: ' + e.message + '</div>';
+        console.error(e);
+    }
+}
+
+// Zoom with scroll
+wrap.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    currentScale = Math.max(0.1, Math.min(3, currentScale + delta));
+    applyTransform();
+}, { passive: false });
+
+// Pan with drag
+wrap.addEventListener('mousedown', (e) => {
+    isPanning = true; startX = e.clientX - panX; startY = e.clientY - panY;
+});
+wrap.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = e.clientX - startX; panY = e.clientY - startY;
+    applyTransform();
+});
+wrap.addEventListener('mouseup', () => isPanning = false);
+wrap.addEventListener('mouseleave', () => isPanning = false);
+
+// Zoom buttons
+document.getElementById('zoomIn').addEventListener('click', () => {
+    currentScale = Math.min(3, currentScale + 0.15); applyTransform();
+});
+document.getElementById('zoomOut').addEventListener('click', () => {
+    currentScale = Math.max(0.1, currentScale - 0.15); applyTransform();
+});
+document.getElementById('zoomFit').addEventListener('click', () => {
+    currentScale = 0.5; panX = 20; panY = 20; applyTransform();
+});
+
+// Module buttons
+document.querySelectorAll('.controls .btn[data-mod]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.controls .btn[data-mod]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderDiagram(btn.dataset.mod);
+    });
+});
+
+// Initial render
+renderDiagram('all');
+
+</script>
+</body>
+</html>

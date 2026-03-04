@@ -30,8 +30,8 @@ def export_products():
         if search:
             query = query.filter(
                 db.or_(
-                    ProductNew.kode_produk.ilike(f'%{search}%'),
-                    ProductNew.nama_produk.ilike(f'%{search}%'),
+                    ProductNew.code.ilike(f'%{search}%'),
+                    ProductNew.name.ilike(f'%{search}%'),
                     ProductNew.spunlace.ilike(f'%{search}%'),
                     ProductNew.process_produksi.ilike(f'%{search}%')
                 )
@@ -53,8 +53,8 @@ def export_products():
         data = []
         for product in products:
             data.append({
-                'KODE PRODUK': product.kode_produk,
-                'NAMA PRODUK': product.nama_produk,
+                'KODE PRODUK': product.code,
+                'NAMA PRODUK': product.name,
                 'GRAMASI': product.gramasi,
                 'CD': product.cd,
                 'MD': product.md,
@@ -213,7 +213,7 @@ def validate_product():
         
         # Check for duplicate kode_produk (for new products)
         if 'kode_produk' in data and data['kode_produk']:
-            existing = ProductNew.query.filter_by(kode_produk=data['kode_produk']).first()
+            existing = ProductNew.query.filter_by(code=data['kode_produk']).first()
             if existing and ('id' not in data or existing.id != data.get('id')):
                 errors['kode_produk'] = 'Kode Produk sudah digunakan'
         
@@ -235,7 +235,7 @@ def check_kode_availability():
         if not kode:
             return jsonify({'available': False})
         
-        query = ProductNew.query.filter_by(kode_produk=kode)
+        query = ProductNew.query.filter_by(code=kode)
         if exclude_id:
             query = query.filter(ProductNew.id != exclude_id)
         
@@ -277,8 +277,8 @@ def get_product_suggestions():
         
         products = ProductNew.query.filter(
             db.or_(
-                ProductNew.kode_produk.ilike(f'%{query}%'),
-                ProductNew.nama_produk.ilike(f'%{query}%')
+                ProductNew.code.ilike(f'%{query}%'),
+                ProductNew.name.ilike(f'%{query}%')
             )
         ).limit(limit).all()
         

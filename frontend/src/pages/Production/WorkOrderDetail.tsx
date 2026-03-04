@@ -12,11 +12,13 @@ interface ProductionRecord {
   id: number;
   production_date: string;
   shift: string;
+  product_id?: number;
+  product_name?: string;
   quantity_produced: number;
   quantity_good: number;
   quantity_reject: number;
-  setting_sticker: number;
-  setting_packaging: number;
+  setting_sticker?: number;
+  setting_packaging?: number;
   downtime_minutes: number;
   operator_name: string;
   notes: string;
@@ -37,14 +39,14 @@ export default function WorkOrderDetail() {
   const [showActivityLog, setShowActivityLog] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [completing, setCompleting] = useState(false);
-  
+
   useEffect(() => {
     if (id) {
       fetchProductionRecords();
       fetchWIPBatch();
     }
   }, [id]);
-  
+
   const fetchWIPBatch = async () => {
     try {
       const response = await axiosInstance.get(`/api/wip/wip-batches?work_order_id=${id}`);
@@ -55,7 +57,7 @@ export default function WorkOrderDetail() {
       console.error('Error fetching WIP batch:', error);
     }
   };
-  
+
   const fetchApprovalStatus = async () => {
     try {
       const response = await axiosInstance.get('/api/production/production-approvals', {
@@ -68,13 +70,13 @@ export default function WorkOrderDetail() {
       console.error('Error fetching approval status:', error);
     }
   };
-  
+
   useEffect(() => {
     if (id && workOrder?.status === 'completed') {
       fetchApprovalStatus();
     }
   }, [id, workOrder?.status]);
-  
+
   const handleSubmitForApproval = async () => {
     try {
       setSubmittingApproval(true);
@@ -103,7 +105,7 @@ export default function WorkOrderDetail() {
       setCompleting(false);
     }
   };
-  
+
   const fetchProductionRecords = async () => {
     try {
       setLoadingRecords(true);
@@ -119,10 +121,10 @@ export default function WorkOrderDetail() {
   const handleDelete = async () => {
     try {
       setDeleting(true);
-      const url = forceDelete 
+      const url = forceDelete
         ? `/api/production/work-orders/${id}?force=true`
         : `/api/production/work-orders/${id}`;
-      
+
       await axiosInstance.delete(url);
       toast.success('Work Order berhasil dihapus');
       navigate('/app/production/work-orders');
@@ -137,7 +139,7 @@ export default function WorkOrderDetail() {
       setDeleting(false);
     }
   };
-  
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -153,7 +155,7 @@ export default function WorkOrderDetail() {
       </div>
     );
   }
-  
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       'draft': 'bg-gray-100 text-gray-800',
@@ -168,20 +170,20 @@ export default function WorkOrderDetail() {
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
   };
-  
+
   // Use production records if available, otherwise fall back to work order totals
   const recordsProduced = productionRecords.reduce((sum, r) => sum + r.quantity_produced, 0);
   const recordsGood = productionRecords.reduce((sum, r) => sum + r.quantity_good, 0);
   const recordsReject = productionRecords.reduce((sum, r) => sum + r.quantity_reject, 0);
   const recordsDowntime = productionRecords.reduce((sum, r) => sum + r.downtime_minutes, 0);
-  
+
   // Use work order totals as primary source (updated by backend), fall back to records sum
   const totalProduced = workOrder.quantity_produced || recordsProduced;
   const totalGood = workOrder.quantity_good || recordsGood;
   const totalReject = workOrder.quantity_scrap || recordsReject;
   const totalDowntime = recordsDowntime; // Downtime only from records
   const progress = workOrder.quantity ? (totalProduced / workOrder.quantity * 100) : 0;
-  
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -265,7 +267,7 @@ export default function WorkOrderDetail() {
             <p className="text-xs text-orange-500">minutes</p>
           </div>
         </div>
-        
+
         {/* Progress Bar */}
         <div className="mt-4">
           <div className="flex justify-between text-sm mb-1">
@@ -273,7 +275,7 @@ export default function WorkOrderDetail() {
             <span className="font-medium">{progress.toFixed(1)}%</span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-3">
-            <div 
+            <div
               className={`h-3 rounded-full ${progress >= 100 ? 'bg-green-600' : 'bg-blue-600'}`}
               style={{ width: `${Math.min(progress, 100)}%` }}
             />
@@ -359,11 +361,10 @@ export default function WorkOrderDetail() {
           <div>
             <label className="text-sm font-medium text-gray-500">Priority</label>
             <p className="mt-1">
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                workOrder.priority === 'high' ? 'bg-red-100 text-red-800' :
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${workOrder.priority === 'high' ? 'bg-red-100 text-red-800' :
                 workOrder.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-green-100 text-green-800'
-              }`}>
+                  'bg-green-100 text-green-800'
+                }`}>
                 {workOrder.priority?.toUpperCase() || 'NORMAL'}
               </span>
             </p>
@@ -409,7 +410,7 @@ export default function WorkOrderDetail() {
               </Link>
             </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-purple-50">
@@ -434,12 +435,11 @@ export default function WorkOrderDetail() {
                     <td className="px-4 py-3 text-sm font-mono text-gray-900">{material.item_code}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{material.item_name}</td>
                     <td className="px-4 py-3 text-sm">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        material.item_type === 'raw_materials' ? 'bg-blue-100 text-blue-700' :
+                      <span className={`px-2 py-1 rounded text-xs ${material.item_type === 'raw_materials' ? 'bg-blue-100 text-blue-700' :
                         material.item_type === 'packaging_materials' ? 'bg-green-100 text-green-700' :
-                        material.item_type === 'chemical_materials' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
+                          material.item_type === 'chemical_materials' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-gray-100 text-gray-700'
+                        }`}>
                         {material.item_type?.replace('_', ' ')}
                       </span>
                     </td>
@@ -482,7 +482,7 @@ export default function WorkOrderDetail() {
             </Link>
           )}
         </div>
-        
+
         {loadingRecords ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -494,6 +494,7 @@ export default function WorkOrderDetail() {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Shift</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produk</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Produced</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Good</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Reject</th>
@@ -506,29 +507,49 @@ export default function WorkOrderDetail() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {productionRecords.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm">{new Date(record.production_date).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-sm">{record.shift}</td>
-                    <td className="px-4 py-3 text-sm text-right font-medium">{record.quantity_produced}</td>
-                    <td className="px-4 py-3 text-sm text-right text-green-600">{record.quantity_good}</td>
-                    <td className="px-4 py-3 text-sm text-right text-red-600">{record.quantity_reject}</td>
-                    <td className="px-4 py-3 text-sm text-right text-purple-600">{record.setting_sticker || 0}</td>
-                    <td className="px-4 py-3 text-sm text-right text-indigo-600">{record.setting_packaging || 0}</td>
-                    <td className="px-4 py-3 text-sm text-right text-orange-600">{record.downtime_minutes} min</td>
-                    <td className="px-4 py-3 text-sm">{record.operator_name || '-'}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">{record.notes || '-'}</td>
-                    <td className="px-4 py-3 text-center">
-                      <Link
-                        to={`/app/production/work-orders/${id}/records/${record.id}/edit`}
-                        className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
-                      >
-                        <PencilIcon className="h-3 w-3 mr-1" />
-                        Edit
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
+                {productionRecords.map((record, index) => {
+                  // Generate shift sub-label (1a, 1b, etc.) for multi-product shifts
+                  const sameShiftRecords = productionRecords.filter(r =>
+                    new Date(r.production_date).toLocaleDateString() === new Date(record.production_date).toLocaleDateString() &&
+                    r.shift === record.shift
+                  ).sort((a, b) => a.id - b.id); // Sort by ID so first-created = 'a'
+                  const isMultiProduct = sameShiftRecords.length > 1;
+                  const subIndex = isMultiProduct ? sameShiftRecords.findIndex(r => r.id === record.id) : -1;
+                  const subLabel = subIndex >= 0 ? String.fromCharCode(97 + subIndex) : ''; // a, b, c...
+                  const shiftLabel = isMultiProduct ? `${record.shift}${subLabel}` : record.shift;
+                  const isOverrideProduct = record.product_id && record.product_id !== workOrder.product_id;
+
+                  return (
+                    <tr key={record.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-sm">{new Date(record.production_date).toLocaleDateString()}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`font-medium ${isMultiProduct ? 'text-blue-700' : ''}`}>{shiftLabel}</span>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`text-xs ${isOverrideProduct ? 'text-orange-600 font-medium' : 'text-gray-600'}`}>
+                          {record.product_name || workOrder.product_name}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-right font-medium">{record.quantity_produced}</td>
+                      <td className="px-4 py-3 text-sm text-right text-green-600">{record.quantity_good}</td>
+                      <td className="px-4 py-3 text-sm text-right text-red-600">{record.quantity_reject}</td>
+                      <td className="px-4 py-3 text-sm text-right text-purple-600">{record.setting_sticker || 0}</td>
+                      <td className="px-4 py-3 text-sm text-right text-indigo-600">{record.setting_packaging || 0}</td>
+                      <td className="px-4 py-3 text-sm text-right text-orange-600">{record.downtime_minutes} min</td>
+                      <td className="px-4 py-3 text-sm">{record.operator_name || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">{record.notes || '-'}</td>
+                      <td className="px-4 py-3 text-center">
+                        <Link
+                          to={`/app/production/work-orders/${id}/records/${record.id}/edit`}
+                          className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                        >
+                          <PencilIcon className="h-3 w-3 mr-1" />
+                          Edit
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -549,26 +570,218 @@ export default function WorkOrderDetail() {
         )}
       </div>
 
-      {/* Packing List Section - Only show when WO has production */}
-      {totalGood > 0 && workOrder.pack_per_carton > 0 && (
-        <div className="bg-white shadow rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900 flex items-center">
-              <ClipboardDocumentListIcon className="h-5 w-5 mr-2 text-green-600" />
-              Packing List (Grade A)
-            </h2>
-            <div className="text-sm text-gray-500">
-              Total Karton: <span className="font-bold text-green-600">{Math.floor(totalGood / workOrder.pack_per_carton)}</span>
+      {/* Packing List Section - Per Shift */}
+      {totalGood > 0 && (() => {
+        // Check if this is WIP ALFA multi-variant (requires 3 variants per carton)
+        const WIP_ALFA_VARIANTS = ['KUROMI', 'HELLOKITTY', 'CINAMOROLL'];
+        const PCS_PER_VARIANT_PER_CARTON = 27; // 27 pcs dari setiap variant = 1 karton ALFAMART
+        
+        const isWipAlfa = (name: string) => {
+          const upper = name.toUpperCase();
+          return upper.includes('WIP ALFA') && WIP_ALFA_VARIANTS.some(v => upper.includes(v));
+        };
+        
+        const getVariantName = (name: string) => {
+          const upper = name.toUpperCase();
+          for (const v of WIP_ALFA_VARIANTS) {
+            if (upper.includes(v)) return v;
+          }
+          return 'UNKNOWN';
+        };
+
+        // Check if any product is WIP ALFA
+        const hasWipAlfa = productionRecords.some(rec => 
+          isWipAlfa(rec.product_name || workOrder.product_name || '')
+        );
+
+        const formatShift = (shift: string) => {
+          const num = shift.replace('shift_', '');
+          return `Shift ${num}`;
+        };
+
+        const formatDate = (dateStr: string) => {
+          const date = new Date(dateStr);
+          return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+        };
+
+        // WIP ALFA Special Logic: 3 variants = 1 karton ALFAMART
+        if (hasWipAlfa) {
+          // Group by shift, then by variant
+          const shiftVariantGroups: Record<string, {
+            date: string;
+            shift: string;
+            variants: Record<string, number>; // variant name -> total_good
+          }> = {};
+
+          productionRecords.forEach(rec => {
+            const shiftKey = `${rec.production_date}_${rec.shift}`;
+            const pname = rec.product_name || workOrder.product_name || 'Unknown';
+            const variant = getVariantName(pname);
+            
+            if (!shiftVariantGroups[shiftKey]) {
+              shiftVariantGroups[shiftKey] = {
+                date: rec.production_date,
+                shift: rec.shift,
+                variants: {}
+              };
+            }
+            
+            if (!shiftVariantGroups[shiftKey].variants[variant]) {
+              shiftVariantGroups[shiftKey].variants[variant] = 0;
+            }
+            shiftVariantGroups[shiftKey].variants[variant] += rec.quantity_good;
+          });
+
+          // Sort by date and shift
+          const shiftEntries = Object.entries(shiftVariantGroups).sort((a, b) => {
+            const dateCompare = a[1].date.localeCompare(b[1].date);
+            if (dateCompare !== 0) return dateCompare;
+            return a[1].shift.localeCompare(b[1].shift);
+          });
+
+          // Calculate total karton (bottleneck logic)
+          let grandTotalKarton = 0;
+          const shiftResults = shiftEntries.map(([shiftKey, group]) => {
+            const variantCounts = WIP_ALFA_VARIANTS.map(v => ({
+              variant: v,
+              total: group.variants[v] || 0,
+              sets: Math.floor((group.variants[v] || 0) / PCS_PER_VARIANT_PER_CARTON)
+            }));
+            
+            // Karton = minimum sets across all variants (bottleneck)
+            const karton = Math.min(...variantCounts.map(v => v.sets));
+            grandTotalKarton += karton;
+            
+            // Calculate remaining after making kartons
+            const remaining = variantCounts.map(v => ({
+              ...v,
+              remaining: v.total - (karton * PCS_PER_VARIANT_PER_CARTON)
+            }));
+            
+            // Find bottleneck variant
+            const bottleneck = variantCounts.reduce((min, v) => v.sets < min.sets ? v : min, variantCounts[0]);
+            
+            return { shiftKey, group, karton, remaining, bottleneck };
+          });
+
+          return (
+            <div className="bg-white shadow rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-medium text-gray-900 flex items-center">
+                  <ClipboardDocumentListIcon className="h-5 w-5 mr-2 text-green-600" />
+                  Packing List ALFAMART @27X3
+                  <span className="ml-2 text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-full">
+                    3 Variant
+                  </span>
+                </h2>
+                <div className="text-sm text-gray-500">
+                  Total Karton: <span className="font-bold text-green-600">{grandTotalKarton}</span>
+                </div>
+              </div>
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                <strong>Info:</strong> 1 Karton ALFAMART = 27 pcs × 3 variant (Kuromi + Hello Kitty + Cinamoroll)
+              </div>
+              {shiftResults.map(({ shiftKey, group, karton, remaining, bottleneck }) => (
+                <div key={shiftKey} className="mb-4 p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-800">
+                      📅 {formatDate(group.date)} - {formatShift(group.shift)}
+                    </span>
+                    <span className="text-sm font-bold text-green-600">
+                      {karton} Karton ALFAMART
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {remaining.map(v => (
+                      <div key={v.variant} className={`p-2 rounded text-xs ${v.variant === bottleneck.variant ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+                        <div className="font-medium text-gray-700">{v.variant}</div>
+                        <div className="text-gray-600">{v.total.toLocaleString()} pcs</div>
+                        <div className="text-gray-500">Sisa: <span className={v.remaining > 0 ? 'text-orange-600 font-medium' : 'text-gray-400'}>{v.remaining} pcs</span></div>
+                        {v.variant === bottleneck.variant && <div className="text-red-500 text-[10px] mt-1">⚠️ Bottleneck</div>}
+                      </div>
+                    ))}
+                  </div>
+                  <PackingListTab
+                    workOrderId={parseInt(id || '0')}
+                    productName="ALFAMART WET WIPES @27X3"
+                    totalAktualKarton={karton}
+                    packPerCarton={81}
+                  />
+                </div>
+              ))}
             </div>
+          );
+        }
+
+        // Normal packing list (non-WIP ALFA)
+        const shiftGroups: Record<string, { 
+          date: string; 
+          shift: string; 
+          product_name: string; 
+          total_good: number; 
+          pack_per_carton: number 
+        }> = {};
+
+        productionRecords.forEach(rec => {
+          const shiftKey = `${rec.production_date}_${rec.shift}`;
+          const pname = rec.product_name || workOrder.product_name || 'Unknown';
+          if (!shiftGroups[shiftKey]) {
+            shiftGroups[shiftKey] = { 
+              date: rec.production_date,
+              shift: rec.shift,
+              product_name: pname, 
+              total_good: 0, 
+              pack_per_carton: workOrder.pack_per_carton || 0 
+            };
+          }
+          shiftGroups[shiftKey].total_good += rec.quantity_good;
+        });
+
+        // Sort by date and shift
+        const shiftEntries = Object.entries(shiftGroups).sort((a, b) => {
+          const dateCompare = a[1].date.localeCompare(b[1].date);
+          if (dateCompare !== 0) return dateCompare;
+          return a[1].shift.localeCompare(b[1].shift);
+        });
+
+        // Only show if pack_per_carton is set
+        if (workOrder.pack_per_carton <= 0) return null;
+
+        return (
+          <div className="bg-white shadow rounded-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-medium text-gray-900 flex items-center">
+                <ClipboardDocumentListIcon className="h-5 w-5 mr-2 text-green-600" />
+                Packing List per Shift (Grade A)
+                <span className="ml-2 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                  {shiftEntries.length} shift
+                </span>
+              </h2>
+              <div className="text-sm text-gray-500">
+                Total Karton: <span className="font-bold text-green-600">{Math.floor(totalGood / workOrder.pack_per_carton)}</span>
+              </div>
+            </div>
+            {shiftEntries.map(([shiftKey, group]) => (
+              <div key={shiftKey} className="mb-4 p-4 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-semibold text-gray-800">
+                    📅 {formatDate(group.date)} - {formatShift(group.shift)}
+                  </span>
+                  <span className="text-xs text-gray-500">
+                    {group.product_name} | Grade A: {group.total_good.toLocaleString()} pcs = {Math.floor(group.total_good / group.pack_per_carton)} karton
+                  </span>
+                </div>
+                <PackingListTab
+                  workOrderId={parseInt(id || '0')}
+                  productName={group.product_name}
+                  totalAktualKarton={Math.floor(group.total_good / group.pack_per_carton)}
+                  packPerCarton={group.pack_per_carton}
+                />
+              </div>
+            ))}
           </div>
-          <PackingListTab
-            workOrderId={parseInt(id || '0')}
-            productName={workOrder.product_name || 'Unknown'}
-            totalAktualKarton={Math.floor(totalGood / workOrder.pack_per_carton)}
-            packPerCarton={workOrder.pack_per_carton}
-          />
-        </div>
-      )}
+        );
+      })()}
 
       {/* Action Buttons */}
       <div className="bg-white shadow rounded-lg p-6">
@@ -629,25 +842,24 @@ export default function WorkOrderDetail() {
               {submittingApproval ? 'Submitting...' : 'Submit for Approval'}
             </button>
           )}
-          
+
           {/* View Approval Status */}
           {approvalStatus && (
             <Link
               to={`/app/production/approvals/${approvalStatus.id}`}
-              className={`px-4 py-2 rounded-lg inline-flex items-center ${
-                approvalStatus.status === 'approved' 
-                  ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                  : approvalStatus.status === 'rejected'
+              className={`px-4 py-2 rounded-lg inline-flex items-center ${approvalStatus.status === 'approved'
+                ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                : approvalStatus.status === 'rejected'
                   ? 'bg-red-100 text-red-800 hover:bg-red-200'
                   : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-              }`}
+                }`}
             >
               <DocumentCheckIcon className="h-4 w-4 mr-2" />
-              {approvalStatus.status === 'approved' ? 'Approved' : 
-               approvalStatus.status === 'rejected' ? 'Rejected' : 'Pending Approval'}
+              {approvalStatus.status === 'approved' ? 'Approved' :
+                approvalStatus.status === 'rejected' ? 'Rejected' : 'Pending Approval'}
             </Link>
           )}
-          
+
           {/* Delete Button */}
           <button
             onClick={() => setShowDeleteModal(true)}
@@ -676,11 +888,11 @@ export default function WorkOrderDetail() {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">Hapus Work Order</h3>
               </div>
-              
+
               <p className="text-gray-600 mb-4">
                 Apakah Anda yakin ingin menghapus Work Order <strong>{workOrder.wo_number}</strong>?
               </p>
-              
+
               {productionRecords.length > 0 && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
                   <p className="text-sm text-yellow-800">
@@ -697,7 +909,7 @@ export default function WorkOrderDetail() {
                   </label>
                 </div>
               )}
-              
+
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => {
@@ -745,11 +957,11 @@ export default function WorkOrderDetail() {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">Selesaikan Work Order</h3>
               </div>
-              
+
               <p className="text-gray-600 mb-4">
                 Apakah Anda yakin ingin menyelesaikan Work Order <strong>{workOrder.wo_number}</strong>?
               </p>
-              
+
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
                 <p className="text-sm text-blue-800">
                   <strong>Info:</strong> Setelah diselesaikan, Anda dapat melanjutkan ke input Packing List dan Submit for Approval.
@@ -771,7 +983,7 @@ export default function WorkOrderDetail() {
                   <span className="font-medium">{productionRecords.length} records</span>
                 </div>
               </div>
-              
+
               <div className="flex justify-end gap-3">
                 <button
                   onClick={() => setShowCompleteModal(false)}

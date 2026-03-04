@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosConfig';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import { Calendar, Package, TrendingUp, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 
@@ -45,9 +45,8 @@ const ProductionPlanningDashboard: React.FC = () => {
       const token = localStorage.getItem('token');
       const params = new URLSearchParams(dateRange);
       
-      const response = await axios.get(
-        `http://localhost:5000/api/production-planning/production-plans/dashboard?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await axiosInstance.get(
+        `/api/production-planning/production-plans/dashboard?${params.toString()}`
       );
 
       setDashboardData(response.data);

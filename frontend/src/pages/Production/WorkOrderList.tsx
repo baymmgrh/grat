@@ -59,6 +59,8 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
   })
   const [showActivityLog, setShowActivityLog] = useState(false)
   const [showProductionOutput, setShowProductionOutput] = useState(false)
+  const [bulkCompleting, setBulkCompleting] = useState(false)
+  const [summary, setSummary] = useState({ total: 0, in_progress: 0, completed: 0, total_produced: 0 })
 
   useEffect(() => {
     loadWorkOrders()
@@ -78,6 +80,9 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
       const response = await axiosInstance.get(`/api/production/work-orders?${params}`)
       setWorkOrders(response.data.work_orders || [])
       setTotalPages(response.data.pages || 1)
+      if (response.data.summary) {
+        setSummary(response.data.summary)
+      }
     } catch (error) {
       console.error('Error loading work orders:', error)
     } finally {
@@ -106,6 +111,28 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
     } catch (error: any) {
       console.error('Error deleting work order:', error)
       alert(error.response?.data?.error || 'Failed to delete work order')
+    }
+  }
+
+  const handleBulkComplete = async () => {
+    const inProgressCount = workOrders.filter(wo => wo.status === 'in_progress').length
+    if (inProgressCount === 0) {
+      alert('Tidak ada Work Order dengan status In Progress')
+      return
+    }
+    if (!window.confirm(`Selesaikan semua ${inProgressCount} Work Order yang In Progress?`)) {
+      return
+    }
+    try {
+      setBulkCompleting(true)
+      const response = await axiosInstance.put('/api/production/work-orders/bulk-complete')
+      alert(response.data.message || `${response.data.completed} WO berhasil diselesaikan`)
+      loadWorkOrders()
+    } catch (error: any) {
+      console.error('Error bulk completing:', error)
+      alert(error.response?.data?.error || 'Gagal menyelesaikan Work Orders')
+    } finally {
+      setBulkCompleting(false)
     }
   }
 
@@ -184,6 +211,14 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
         </div>
         <div className="flex gap-3">
           <button
+            onClick={handleBulkComplete}
+            disabled={bulkCompleting || summary.in_progress === 0}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <CheckCircleIcon className="h-5 w-5" />
+            {bulkCompleting ? 'Memproses...' : 'Selesaikan Semua'}
+          </button>
+          <button
             onClick={() => setShowActivityLog(true)}
             className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 flex items-center gap-2"
           >
@@ -206,7 +241,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Orders</p>
-              <p className="text-2xl font-bold text-gray-900">{workOrders.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{summary.total}</p>
             </div>
           </div>
         </div>
@@ -219,7 +254,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">In Progress</p>
               <p className="text-2xl font-bold text-gray-900">
-                {workOrders.filter(wo => wo.status === 'in_progress').length}
+                {summary.in_progress}
               </p>
             </div>
           </div>
@@ -233,7 +268,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Completed</p>
               <p className="text-2xl font-bold text-gray-900">
-                {workOrders.filter(wo => wo.status === 'completed').length}
+                {summary.completed}
               </p>
             </div>
           </div>
@@ -251,7 +286,7 @@ const [workOrders, setWorkOrders] = useState<WorkOrder[]>([])
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Produced</p>
               <p className="text-2xl font-bold text-gray-900">
-                {workOrders.reduce((sum, wo) => sum + wo.quantity_produced, 0).toLocaleString()}
+                {summary.total_produced.toLocaleString()}
               </p>
               <p className="text-xs text-purple-500 mt-1">Klik untuk detail →</p>
             </div>

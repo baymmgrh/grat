@@ -1,0 +1,68 @@
+[YOUR NAME]
+[Email] | [Phone] | [LinkedIn]
+[Location], Indonesia
+
+[Date]
+
+[Hiring Manager Name]
+[Company Name]
+Remote Position
+
+Dear Hiring Team,
+
+I am writing to apply for the [Job Title] position at [Company Name]. 
+As an AI-powered product builder with a proven track record of delivering 
+enterprise-level solutions, I am excited about the opportunity to contribute 
+to your remote team.
+
+WHY I'M A GREAT FIT:
+
+1. Proven Remote Work Capability
+   I successfully delivered a complete ERP system (325,000+ lines of code) 
+   working independently, demonstrating strong self-management, communication, 
+   and execution skills essential for remote work.
+
+2. AI-Assisted Development Expertise
+   I leverage modern AI development tools (Windsurf AI, GitHub Copilot) to 
+   deliver solutions 80% faster while maintaining high quality. This approach 
+   aligns with forward-thinking companies that embrace modern methodologies.
+
+3. Full-Stack Technical Skills
+   My tech stack (React, TypeScript, Python, Flask, PostgreSQL) matches your 
+   requirements. I've architected and implemented complex systems including:
+   - 30+ database tables with intricate relationships
+   - 80+ REST API endpoints
+   - 20+ integrated business modules
+   - Real-time monitoring dashboards
+
+4. Product Thinking & Business Focus
+   Beyond coding, I understand business requirements and deliver solutions 
+   that create real value. My ERP system automated 15+ manual processes and 
+   improved operational visibility across departments.
+
+WHAT I BRING TO YOUR TEAM:
+
+• Rapid prototyping and MVP development capability
+• System architecture and database design expertise
+• Strong async communication skills
+• Self-motivated and results-oriented
+• Experience working across time zones
+• Proven ability to deliver complex projects independently
+
+I'm particularly interested in [specific aspect from job posting] and 
+would love to contribute to [company mission/product]. My portfolio and 
+ERP system demo are available for review.
+
+I'm available for video interviews at your convenience and can start 
+with a 1-month notice period.
+
+Thank you for your consideration.
+
+Best regards,
+[Your Name]
+
+---
+Portfolio: [link]
+LinkedIn: [link]
+GitHub: [link if any]
+Time Zone: GMT+7 (Indonesia)

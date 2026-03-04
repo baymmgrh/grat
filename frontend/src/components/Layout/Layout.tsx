@@ -4,7 +4,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import Breadcrumb from '../ui/Breadcrumb'
 import AIAssistant from '../AIAssistant/AIAssistant'
-import SkipLink from '../UI/SkipLink'
+import SkipLink from '../ui/SkipLink'
 
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true) // Default open for better UX

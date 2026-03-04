@@ -101,8 +101,8 @@ def get_shift_productions():
                 'machine_speed': prod.machine_speed or 0,
                 'average_time': prod.planned_runtime or 510,
                 'runtime': prod.actual_runtime or 0,
-                'waktu_tercatat': (prod.actual_runtime or 0) + (prod.downtime_minutes or 0),
-                'waktu_tidak_tercatat': max(0, (prod.planned_runtime or 510) - (prod.actual_runtime or 0) - (prod.downtime_minutes or 0)),
+                'waktu_tercatat': float(prod.actual_runtime or 0) + float(prod.downtime_minutes or 0),
+                'waktu_tidak_tercatat': max(0, float(prod.planned_runtime or 510) - float(prod.actual_runtime or 0) - float(prod.downtime_minutes or 0)),
                 'rework_quantity': float(prod.rework_quantity or 0),
                 # Work order info
                 'work_order_id': prod.work_order_id,
@@ -110,8 +110,8 @@ def get_shift_productions():
                     'id': prod.work_order.id,
                     'wo_number': prod.work_order.wo_number
                 } if prod.work_order else None,
-                'operator_name': prod.operator.name if prod.operator else None,
-                'supervisor': prod.supervisor.name if prod.supervisor else None,
+                'operator_name': prod.operator.full_name if prod.operator else None,
+                'supervisor': prod.supervisor.full_name if prod.supervisor else None,
                 'status': prod.status,
                 'notes': prod.notes,
                 'issues': prod.issues,
@@ -358,10 +358,16 @@ def update_shift_production(production_id):
         if 'issues' in data:
             shift_production.issues = data['issues']
         
-        # Recalculate metrics
-        quality_rate = (shift_production.good_quantity / shift_production.actual_quantity * 100) if shift_production.actual_quantity > 0 else 0
-        efficiency_rate = (shift_production.actual_quantity / shift_production.target_quantity * 100) if shift_production.target_quantity > 0 else 0
-        availability_rate = ((shift_production.planned_runtime - shift_production.downtime_minutes) / shift_production.planned_runtime * 100) if shift_production.planned_runtime > 0 else 0
+        # Recalculate metrics - convert to float to avoid Decimal conflicts
+        actual_qty = float(shift_production.actual_quantity or 0)
+        good_qty = float(shift_production.good_quantity or 0)
+        target_qty = float(shift_production.target_quantity or 0)
+        planned_rt = float(shift_production.planned_runtime or 0)
+        downtime_rt = float(shift_production.downtime_minutes or 0)
+        
+        quality_rate = (good_qty / actual_qty * 100) if actual_qty > 0 else 0
+        efficiency_rate = (actual_qty / target_qty * 100) if target_qty > 0 else 0
+        availability_rate = ((planned_rt - downtime_rt) / planned_rt * 100) if planned_rt > 0 else 0
         
         shift_production.quality_rate = quality_rate
         shift_production.efficiency_rate = efficiency_rate
@@ -496,11 +502,18 @@ def create_downtime_record():
         if duration_minutes:
             shift_production = ShiftProduction.query.get(data['shift_production_id'])
             if shift_production:
-                shift_production.downtime_minutes += duration_minutes
+                # Convert to float to avoid Decimal + float conflict
+                current_downtime = float(shift_production.downtime_minutes or 0)
+                shift_production.downtime_minutes = current_downtime + duration_minutes
                 
-                # Recalculate OEE
-                availability_rate = ((shift_production.planned_runtime - shift_production.downtime_minutes) / shift_production.planned_runtime * 100) if shift_production.planned_runtime > 0 else 0
-                shift_production.oee_score = (availability_rate * shift_production.efficiency_rate * shift_production.quality_rate) / 10000
+                # Recalculate OEE - convert to float to avoid Decimal conflicts
+                planned_rt = float(shift_production.planned_runtime or 0)
+                downtime_rt = float(shift_production.downtime_minutes or 0)
+                efficiency_rt = float(shift_production.efficiency_rate or 0)
+                quality_rt = float(shift_production.quality_rate or 0)
+                
+                availability_rate = ((planned_rt - downtime_rt) / planned_rt * 100) if planned_rt > 0 else 0
+                shift_production.oee_score = (availability_rate * efficiency_rt * quality_rt) / 10000
         
         db.session.commit()
         

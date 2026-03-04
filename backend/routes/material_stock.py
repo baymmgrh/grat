@@ -165,6 +165,12 @@ def add_material_stock():
         if quantity <= 0:
             return jsonify({'error': 'Quantity must be greater than 0'}), 400
         
+        # Check opname lock
+        from utils.opname_lock import check_opname_lock
+        lock = check_opname_lock(location_id=location_id, material_id=material_id)
+        if lock['locked']:
+            return jsonify({'error': lock['message']}), 423
+        
         # Verify material exists
         material = Material.query.get(material_id)
         if not material:
@@ -274,6 +280,16 @@ def adjust_material_stock():
         inventory = Inventory.query.get(inventory_id)
         if not inventory:
             return jsonify({'error': 'Inventory record not found'}), 404
+        
+        # Check opname lock
+        from utils.opname_lock import check_opname_lock
+        lock = check_opname_lock(
+            location_id=inventory.location_id,
+            material_id=inventory.material_id,
+            product_id=inventory.product_id
+        )
+        if lock['locked']:
+            return jsonify({'error': lock['message']}), 423
         
         old_quantity = float(inventory.quantity_on_hand)
         

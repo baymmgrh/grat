@@ -1,0 +1,412 @@
+═══════════════════════════════════════════════════════════
+           INTERVIEW Q&A PREPARATION GUIDE
+═══════════════════════════════════════════════════════════
+
+CARA PAKAI:
+1. Baca semua Q&A di bawah
+2. Practice jawab dengan suara keras (di depan cermin)
+3. Record diri sendiri (pakai HP)
+4. Improve sampai natural & confident
+
+═══════════════════════════════════════════════════════════
+
+SECTION 1: TENTANG DIRI ANDA
+═══════════════════════════════════════════════════════════
+
+Q1: "Tell me about yourself"
+
+JAWABAN:
+"Saya adalah product builder yang specialize dalam AI-assisted development. 
+Background saya unik - saya self-taught developer yang fokus pada delivering 
+working solutions efficiently.
+
+Recently, saya build enterprise ERP system dengan 325,000+ baris kode dalam 
+7 bulan untuk manufacturing company. Sistem ini integrate 20+ modules dari 
+production, quality, finance, sampai HR.
+
+Approach saya adalah leverage modern AI tools seperti Windsurf dan GitHub 
+Copilot untuk rapid prototyping, sambil maintain focus pada system architecture 
+dan business logic. Saya believe ini adalah future of development - work smarter, 
+not harder.
+
+Saya looking for opportunity dimana saya bisa apply skill ini untuk deliver 
+value quickly, especially di environment yang appreciate modern tools dan 
+rapid iteration."
+
+TIPS: Keep it 60-90 detik, fokus pada achievement, end dengan why you're here
+
+═══════════════════════════════════════════════════════════
+
+Q2: "Why are you looking for a new job?"
+
+JAWABAN:
+"Saya looking for opportunity untuk grow dan contribute di scale yang lebih 
+besar. Current company saya appreciate my work, tapi saya ready untuk new 
+challenges dan environment yang bisa leverage my skills lebih optimal.
+
+Saya particularly interested di [Company Name] karena [specific reason - 
+research dulu!], dan saya excited untuk contribute dengan experience saya 
+dalam rapid development dan system architecture."
+
+JANGAN BILANG: "Company saya mau collapse" atau "Gaji saya terlalu kecil"
+
+═══════════════════════════════════════════════════════════
+
+Q3: "What are your strengths?"
+
+JAWABAN:
+"Tiga strengths utama saya:
+
+1. RAPID EXECUTION - Saya proven bisa deliver complex systems quickly. 
+   ERP system 325k lines dalam 7 bulan adalah concrete proof.
+
+2. SYSTEM THINKING - Saya tidak hanya code, tapi understand big picture. 
+   Saya bisa design architecture yang scalable dan maintainable.
+
+3. ADAPTABILITY - Saya self-taught, yang means saya punya strong learning 
+   ability. Saya bisa quickly pick up new technologies dan adapt to changes.
+
+Plus, saya comfortable dengan modern tools dan always looking untuk ways 
+to improve efficiency."
+
+═══════════════════════════════════════════════════════════
+
+Q4: "What are your weaknesses?"
+
+JAWABAN:
+"Saya masih developing my skills di traditional coding without AI assistance. 
+Saya optimize workflow dengan AI tools, dan saya aware ini bukan standard 
+approach untuk semua teams.
+
+Tapi saya actively working on this - saya study code patterns, practice 
+reading dan understanding code, dan improve my fundamentals. Saya see this 
+as growth opportunity, bukan limitation.
+
+Another area adalah public speaking - saya lebih comfortable dengan technical 
+work daripada presentations. Tapi saya working on this dengan practice dan 
+taking opportunities untuk present my work."
+
+TIPS: Pilih weakness yang real tapi tidak critical, dan show how you're improving
+
+═══════════════════════════════════════════════════════════
+
+SECTION 2: TECHNICAL QUESTIONS
+═══════════════════════════════════════════════════════════
+
+Q5: "Explain your ERP project"
+
+JAWABAN:
+"Saya build comprehensive ERP system untuk manufacturing company dalam 7 bulan.
+
+SCOPE:
+- 325,000+ lines of code
+- 20+ integrated modules
+- 80+ API endpoints
+- 30+ database tables
+- Currently serving 10+ users in production
+
+KEY MODULES:
+- Production: Work orders, scheduling, OEE tracking
+- Quality: Inspections, downtime analysis
+- Finance: WIP accounting, general ledger
+- HR: Payroll, attendance with face recognition
+- Warehouse, Sales, Purchasing, dan lainnya
+
+TECHNICAL STACK:
+- Frontend: React, TypeScript, Redux
+- Backend: Python, Flask, SQLAlchemy
+- Database: PostgreSQL
+- Deployment: Docker, Nginx
+
+APPROACH:
+Saya use AI-assisted development untuk speed up implementation, tapi saya 
+yang design architecture, define requirements, dan ensure quality.
+
+IMPACT:
+System ini automate 15+ manual processes dan improve operational visibility 
+significantly."
+
+═══════════════════════════════════════════════════════════
+
+Q6: "What's your development process?"
+
+JAWABAN:
+"Saya follow modern AI-assisted development workflow:
+
+1. REQUIREMENTS GATHERING
+   Deep dive ke business needs. Understand the problem first.
+
+2. SYSTEM DESIGN
+   Design architecture, database schema, API structure. This is foundation.
+
+3. AI-ASSISTED IMPLEMENTATION
+   Use tools like Windsurf AI untuk generate code based on my specifications. 
+   Ini dramatically speed up development.
+
+4. REVIEW & REFINEMENT
+   Review generated code, test functionality, refine as needed. AI is tool, 
+   not replacement for thinking.
+
+5. INTEGRATION & TESTING
+   Ensure everything works together, handle edge cases.
+
+6. DEPLOYMENT & ITERATION
+   Deploy to production, gather feedback, iterate.
+
+This approach let me deliver 80% faster while maintaining quality."
+
+═══════════════════════════════════════════════════════════
+
+Q7: "Can you code without AI?"
+
+JAWABAN:
+"Honest answer: Saya optimize my workflow dengan AI tools, sama seperti 
+modern developers use Stack Overflow, GitHub, dan frameworks.
+
+Saya bisa understand code, modify existing code, dan debug issues. Tapi 
+untuk writing from scratch, saya leverage AI untuk efficiency.
+
+Analogy: Apakah carpenter yang pakai power drill less skilled dari yang 
+pakai manual drill? No - they're just more efficient.
+
+Yang penting adalah: Apakah saya bisa deliver working solutions? Yes - 
+proven dengan 325k line ERP system yang running in production.
+
+Apakah saya bisa collaborate dengan traditional developers? Yes - saya 
+understand architecture, patterns, dan best practices.
+
+Jadi while my process is different, my output dan value contribution is real."
+
+═══════════════════════════════════════════════════════════
+
+Q8: "Describe a technical challenge you faced"
+
+JAWABAN:
+"One significant challenge adalah designing database schema untuk complex 
+manufacturing workflows.
+
+PROBLEM:
+Need to track production per shift, dengan multiple machines, products, 
+operators, plus handle downtime, quality issues, dan material consumption. 
+Semua harus integrated dengan finance untuk WIP accounting.
+
+SOLUTION:
+Saya design normalized schema dengan 30+ tables:
+- shift_productions untuk tracking per shift
+- downtime_records untuk detailed downtime analysis
+- wip_ledger untuk financial tracking
+- Complex relationships untuk data integrity
+
+APPROACH:
+Saya research manufacturing best practices, study existing ERP systems, 
+design schema iteratively, dan test dengan real scenarios.
+
+RESULT:
+Schema yang scalable, maintainable, dan support all business requirements. 
+System bisa handle complex queries efficiently.
+
+LEARNING:
+Importance of upfront design. Good architecture saves time later."
+
+═══════════════════════════════════════════════════════════
+
+SECTION 3: BEHAVIORAL QUESTIONS
+═══════════════════════════════════════════════════════════
+
+Q9: "Tell me about a time you failed"
+
+JAWABAN:
+"Early in ERP project, saya underestimate complexity dari WIP accounting module.
+
+SITUATION:
+Saya think it's straightforward - just track costs. Ternyata ada banyak 
+nuances: material variance, labor allocation, overhead distribution, dll.
+
+ACTION:
+First attempt saya terlalu simple dan tidak accurate. Saya harus redesign 
+completely. Saya research accounting principles, consult dengan finance team, 
+dan rebuild dengan proper understanding.
+
+RESULT:
+Second version jauh lebih robust dan accurate. Tapi ini delay project 2 minggu.
+
+LEARNING:
+Don't assume complexity. Research thoroughly before implementing. Consult 
+domain experts early. Better to spend time upfront than rebuild later."
+
+═══════════════════════════════════════════════════════════
+
+Q10: "How do you handle pressure/deadlines?"
+
+JAWABAN:
+"Saya handle pressure dengan prioritization dan realistic planning.
+
+EXAMPLE dari ERP project:
+Dengan 7 bulan timeline untuk 20+ modules, pressure sangat tinggi.
+
+MY APPROACH:
+1. Break down ke milestones - focus on MVP first
+2. Prioritize critical features - production & quality first
+3. Iterate quickly - get feedback early
+4. Manage expectations - communicate progress regularly
+5. Use tools efficiently - AI untuk speed up development
+
+RESULT:
+Deliver working system on time, dengan core features solid. Nice-to-have 
+features added iteratively based on user feedback.
+
+KEY:
+Stay calm, focus on what matters, communicate clearly."
+
+═══════════════════════════════════════════════════════════
+
+SECTION 4: COMPANY-SPECIFIC QUESTIONS
+═══════════════════════════════════════════════════════════
+
+Q11: "Why do you want to work here?"
+
+JAWABAN TEMPLATE (CUSTOMIZE!):
+"Saya tertarik dengan [Company Name] karena beberapa reasons:
+
+1. [Specific product/mission yang resonate dengan Anda]
+   Example: "Saya impressed dengan how Gojek transform daily life di Indonesia"
+
+2. [Technical aspect yang menarik]
+   Example: "Scale dan complexity dari [Company] tech stack exciting untuk saya"
+
+3. [Culture/values alignment]
+   Example: "Saya appreciate [Company]'s focus on innovation dan modern tools"
+
+4. [Growth opportunity]
+   Example: "Saya see opportunity untuk grow dan contribute di scale yang lebih besar"
+
+Plus, saya believe my experience dengan rapid development dan system architecture 
+bisa contribute significantly untuk [specific team/project]."
+
+TIPS: RESEARCH COMPANY DULU! Jangan generic answer.
+
+═══════════════════════════════════════════════════════════
+
+Q12: "What do you know about our company?"
+
+JAWABAN TEMPLATE (RESEARCH DULU!):
+"Dari research saya, [Company Name] adalah [brief description].
+
+Beberapa hal yang saya note:
+- [Recent news/achievement]
+- [Product/service yang Anda familiar]
+- [Tech stack atau approach yang mereka pakai]
+- [Company culture atau values]
+
+Saya particularly interested di [specific aspect], dan saya excited untuk 
+potentially contribute dengan experience saya di [relevant skill]."
+
+TIPS: Spend 30 menit research company sebelum interview!
+
+═══════════════════════════════════════════════════════════
+
+SECTION 5: QUESTIONS UNTUK INTERVIEWER
+═══════════════════════════════════════════════════════════
+
+ALWAYS PREPARE QUESTIONS! Shows interest & engagement.
+
+GOOD QUESTIONS:
+
+1. "What does success look like for this role in first 3-6 months?"
+
+2. "What's the team structure? Who would I be working with?"
+
+3. "What's the tech stack dan development process di team ini?"
+
+4. "How does the team approach AI tools dan modern development practices?"
+
+5. "What are the biggest challenges facing the team right now?"
+
+6. "What opportunities for learning dan growth ada di role ini?"
+
+7. "How does [Company] support professional development?"
+
+8. "What's the typical project lifecycle di sini?"
+
+9. "How does the team handle code review dan quality assurance?"
+
+10. "What's next step dalam interview process?"
+
+JANGAN TANYA (di first interview):
+- Salary (tunggu sampai offer stage)
+- Vacation days (tunggu later stage)
+- "What does your company do?" (research dulu!)
+
+═══════════════════════════════════════════════════════════
+
+SECTION 6: SALARY NEGOTIATION
+═══════════════════════════════════════════════════════════
+
+Q13: "What's your expected salary?"
+
+JAWABAN:
+"Based on my research dan considering my experience delivering enterprise 
+systems, saya looking for range Rp [target-stretch] per bulan.
+
+Tapi saya flexible dan open untuk discuss based on total compensation package, 
+growth opportunities, dan other benefits.
+
+What's the budget range untuk position ini?"
+
+TIPS:
+- Jangan sebut angka pertama jika bisa
+- Jika dipaksa, kasih range (bukan single number)
+- Minimum Anda: Rp 15 juta
+- Target: Rp 20-25 juta
+- Stretch: Rp 30-40 juta
+
+═══════════════════════════════════════════════════════════
+
+Q14: "What's your current salary?"
+
+JAWABAN:
+"Saya prefer untuk focus on value saya bisa bring untuk [Company] dan 
+market rate untuk this role, rather than my current compensation.
+
+Based on my research, range untuk similar positions adalah Rp [range]. 
+Apakah ini align dengan budget untuk role ini?"
+
+ATAU jika dipaksa:
+"Current compensation saya adalah Rp 3,9 juta, tapi ini tidak reflect 
+market rate untuk my skill level. Saya looking for opportunity yang 
+compensate fairly based on value dan market standards."
+
+═══════════════════════════════════════════════════════════
+
+PRACTICE CHECKLIST:
+═══════════════════════════════════════════════════════════
+
+[ ] Read semua Q&A di atas
+[ ] Practice jawab dengan suara keras (10x each)
+[ ] Record diri sendiri (video/audio)
+[ ] Watch recording & improve
+[ ] Practice dengan teman/keluarga (mock interview)
+[ ] Prepare 5 questions untuk interviewer
+[ ] Research target company (30 menit minimum)
+[ ] Prepare specific examples dari ERP project
+[ ] Practice salary negotiation
+[ ] Confident & ready!
+
+═══════════════════════════════════════════════════════════
+
+FINAL TIPS:
+═══════════════════════════════════════════════════════════
+
+✅ BE HONEST - Jangan bohong tentang AI usage
+✅ BE CONFIDENT - You delivered 325k lines system!
+✅ BE SPECIFIC - Use numbers & concrete examples
+✅ BE POSITIVE - Focus on what you CAN do
+✅ BE CURIOUS - Ask good questions
+✅ BE PROFESSIONAL - Dress appropriately, on time
+✅ BE YOURSELF - Authentic > Perfect
+
+REMEMBER: You're interviewing them too! Find right fit.
+
+GOOD LUCK! 🚀
+
+═══════════════════════════════════════════════════════════

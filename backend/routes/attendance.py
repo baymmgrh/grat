@@ -1,14 +1,53 @@
 from flask import Blueprint, request, jsonify, make_response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db
-from models.hr import Attendance
+from models.hr import Attendance, OfficeLocation
 from models.user import User
 from datetime import datetime, date, timedelta
 from utils.timezone import get_local_now, get_local_today
 import hashlib
 import base64
+import math
 
 attendance_bp = Blueprint('attendance', __name__)
+
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    """Calculate distance between two coordinates using Haversine formula (in meters)"""
+    R = 6371000  # Earth's radius in meters
+    
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    
+    a = math.sin(delta_phi / 2) ** 2 + \
+        math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    return R * c  # Distance in meters
+
+
+def validate_location(latitude, longitude):
+    """Validate if location is within allowed radius of office"""
+    # Get default office location
+    office = OfficeLocation.query.filter(
+        OfficeLocation.is_active == True,
+        OfficeLocation.is_default == True
+    ).first()
+    
+    if not office:
+        # Fallback to first active location
+        office = OfficeLocation.query.filter(OfficeLocation.is_active == True).first()
+    
+    if not office:
+        # No office configured, skip validation
+        return True, None, None
+    
+    distance = calculate_distance(latitude, longitude, office.latitude, office.longitude)
+    is_valid = distance <= office.radius_meters
+    
+    return is_valid, distance, office
 
 
 def cors_preflight_response():
@@ -36,7 +75,7 @@ def to_proper_case(name):
     return ' '.join(word.capitalize() for word in name.strip().split())
 
 
-@attendance_bp.route('/public/check', methods=['POST', 'OPTIONS'])
+@attendance_bp.route('/public/check', methods=['GET', 'POST', 'OPTIONS'])
 def public_check_attendance():
     # Handle preflight request
     if request.method == 'OPTIONS':
@@ -44,8 +83,12 @@ def public_check_attendance():
     
     """Check today's attendance by name"""
     try:
-        data = request.get_json()
-        name = data.get('name', '').strip()
+        # Support both GET and POST
+        if request.method == 'GET':
+            name = request.args.get('name', '').strip()
+        else:
+            data = request.get_json()
+            name = data.get('name', '').strip()
         
         if not name:
             return jsonify({'error': 'Nama wajib diisi'}), 400
@@ -53,23 +96,16 @@ def public_check_attendance():
         # Format name to proper case
         formatted_name = to_proper_case(name)
         
-        # Get today's attendance for this name
+        # Get today's attendance for this name (check notes field with [NAME:xxx] pattern)
         today = get_local_today()
         attendance = Attendance.query.filter(
-            db.func.lower(Attendance.notes) == f'name:{formatted_name.lower()}',
-            Attendance.attendance_date == today
+            Attendance.attendance_date == today,
+            Attendance.notes.ilike(f'%[NAME:{formatted_name}]%')
         ).first()
-        
-        # Alternative: check by exact match on a name field we'll add
-        if not attendance:
-            attendance = Attendance.query.filter(
-                Attendance.attendance_date == today,
-                Attendance.device_info.like(f'%NAME:{formatted_name}%')
-            ).first()
         
         return jsonify({
             'name': formatted_name,
-            'today_attendance': attendance.to_dict() if attendance else None
+            'attendance': attendance.to_dict() if attendance else None
         }), 200
         
     except Exception as e:
@@ -87,6 +123,8 @@ def public_clock_in():
         
         data = request.get_json()
         name = data.get('name', '').strip()
+        jabatan = data.get('jabatan', '').strip()
+        departemen = data.get('departemen', '').strip()
         
         if not name:
             return jsonify({'error': 'Nama wajib diisi'}), 400
@@ -148,6 +186,25 @@ def public_clock_in():
         if face_count > 1:
             return jsonify({'error': 'Terdeteksi lebih dari satu wajah.'}), 400
         
+        # GPS/Location validation
+        latitude = data.get('latitude')
+        longitude = data.get('longitude')
+        gps_accuracy = data.get('gps_accuracy')
+        location_valid = None
+        distance_from_office = None
+        
+        if latitude is not None and longitude is not None:
+            is_valid, distance, office = validate_location(float(latitude), float(longitude))
+            location_valid = is_valid
+            distance_from_office = round(distance, 2) if distance else None
+            
+            if office and not is_valid:
+                return jsonify({
+                    'error': f'Lokasi Anda terlalu jauh dari kantor. Jarak: {int(distance)} meter (maksimal {office.radius_meters} meter)',
+                    'distance': int(distance),
+                    'allowed_radius': office.radius_meters
+                }), 400
+        
         # Build notes with name tag
         notes_parts = [f'[NAME:{formatted_name}]']
         
@@ -170,6 +227,13 @@ def public_clock_in():
             face_detected=face_detected,
             face_confidence=face_confidence,
             face_count=face_count,
+            clock_in_latitude=float(latitude) if latitude else None,
+            clock_in_longitude=float(longitude) if longitude else None,
+            clock_in_accuracy=float(gps_accuracy) if gps_accuracy else None,
+            clock_in_distance=distance_from_office,
+            clock_in_location_valid=location_valid,
+            staff_jabatan=jabatan if jabatan else None,
+            staff_departemen=departemen if departemen else None,
             device_info=request.headers.get('User-Agent', '')[:500],
             ip_address=get_client_ip(),
             verification_status='verified',
@@ -853,6 +917,137 @@ def get_attendance_dashboard_stats():
                 'late_percentage': round((month_late / month_total * 100), 1) if month_total > 0 else 0
             }
         }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@attendance_bp.route('/dashboard/not-clocked-out', methods=['GET'])
+@jwt_required()
+def get_not_clocked_out():
+    """Get list of people who clocked in but haven't clocked out today"""
+    try:
+        import re
+        today = get_local_today()
+        
+        # Get all attendance records for today where clock_in exists but clock_out is null
+        not_clocked_out = Attendance.query.filter(
+            Attendance.attendance_date == today,
+            Attendance.clock_in.isnot(None),
+            Attendance.clock_out.is_(None)
+        ).order_by(Attendance.clock_in.asc()).all()
+        
+        result = []
+        for att in not_clocked_out:
+            # Extract name from notes [NAME:xxx]
+            name = 'Unknown'
+            if att.notes:
+                match = re.search(r'\[NAME:([^\]]+)\]', att.notes)
+                if match:
+                    name = match.group(1)
+            
+            result.append({
+                'id': att.id,
+                'name': name,
+                'jabatan': att.staff_jabatan,
+                'departemen': att.staff_departemen,
+                'clock_in': att.clock_in.strftime('%H:%M:%S') if att.clock_in else None,
+                'clock_in_time': att.clock_in.isoformat() if att.clock_in else None,
+                'status': att.status,
+                'hours_since_clock_in': round((get_local_now() - att.clock_in).total_seconds() / 3600, 1) if att.clock_in else 0
+            })
+        
+        return jsonify({
+            'date': today.isoformat(),
+            'count': len(result),
+            'records': result
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@attendance_bp.route('/admin/delete/<int:id>', methods=['DELETE', 'OPTIONS'])
+@jwt_required()
+def admin_delete_attendance(id):
+    """Delete attendance record (super admin only)"""
+    if request.method == 'OPTIONS':
+        return cors_preflight_response()
+    
+    try:
+        # Check if user is super admin
+        current_user_id = get_jwt_identity()
+        from models.auth import User
+        user = User.query.get(current_user_id)
+        
+        if not user or user.role not in ['super_admin', 'admin']:
+            return jsonify({'error': 'Tidak memiliki akses'}), 403
+        
+        attendance = Attendance.query.get(id)
+        
+        if not attendance:
+            return jsonify({'error': 'Data absensi tidak ditemukan'}), 404
+        
+        # Get name for response
+        name = 'Unknown'
+        if attendance.notes:
+            import re
+            name_match = re.search(r'\[NAME:([^\]]+)\]', attendance.notes)
+            if name_match:
+                name = name_match.group(1)
+        
+        db.session.delete(attendance)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Data absensi {name} berhasil dihapus'
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@attendance_bp.route('/admin/search', methods=['GET', 'OPTIONS'])
+@jwt_required()
+def admin_search_attendance():
+    """Search attendance records by name for deletion"""
+    if request.method == 'OPTIONS':
+        return cors_preflight_response()
+    
+    try:
+        query = request.args.get('q', '').strip()
+        
+        if not query:
+            return jsonify({'records': []}), 200
+        
+        # Search in notes field
+        records = Attendance.query.filter(
+            Attendance.notes.ilike(f'%{query}%')
+        ).order_by(Attendance.attendance_date.desc()).limit(50).all()
+        
+        result = []
+        for att in records:
+            name = 'Unknown'
+            if att.notes:
+                import re
+                name_match = re.search(r'\[NAME:([^\]]+)\]', att.notes)
+                if name_match:
+                    name = name_match.group(1)
+            
+            result.append({
+                'id': att.id,
+                'name': name,
+                'jabatan': att.staff_jabatan,
+                'departemen': att.staff_departemen,
+                'date': att.attendance_date.isoformat() if att.attendance_date else None,
+                'clock_in': att.clock_in.strftime('%H:%M') if att.clock_in else None,
+                'clock_out': att.clock_out.strftime('%H:%M') if att.clock_out else None,
+                'status': att.status
+            })
+        
+        return jsonify({'records': result}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

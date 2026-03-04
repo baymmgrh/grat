@@ -56,17 +56,34 @@ def create_employee():
         
         employee = Employee(
             employee_number=data['employee_number'],
+            nik=data.get('nik'),
             first_name=data['first_name'],
             last_name=data['last_name'],
             full_name=f"{data['first_name']} {data['last_name']}",
             email=data.get('email'),
             phone=data.get('phone'),
+            mobile=data.get('mobile'),
             date_of_birth=datetime.fromisoformat(data['date_of_birth']) if data.get('date_of_birth') else None,
             gender=data.get('gender'),
+            marital_status=data.get('marital_status'),
+            address=data.get('address'),
+            city=data.get('city'),
+            postal_code=data.get('postal_code'),
             department_id=data.get('department_id'),
             position=data.get('position'),
             employment_type=data.get('employment_type'),
-            hire_date=datetime.fromisoformat(data['hire_date']) if data.get('hire_date') else None
+            pay_type=data.get('pay_type', 'monthly'),
+            pay_rate=data.get('pay_rate'),
+            outsourcing_vendor_id=data.get('outsourcing_vendor_id'),
+            hire_date=datetime.fromisoformat(data['hire_date']) if data.get('hire_date') else None,
+            salary=data.get('salary'),
+            ptkp_status=data.get('ptkp_status', 'TK/0'),
+            dependents=data.get('dependents', 0),
+            has_allowance=bool(data.get('has_allowance', False)),
+            position_allowance_amount=data.get('position_allowance_amount', 0),
+            transport_allowance_amount=data.get('transport_allowance_amount', 0),
+            emergency_contact_name=data.get('emergency_contact_name'),
+            emergency_contact_phone=data.get('emergency_contact_phone')
         )
         
         db.session.add(employee)

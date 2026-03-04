@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ERP Backend
+Comment=Start ERP Backend Server
+Exec=gnome-terminal -- bash -c 'cd /home/superadmin/Documents/ERP && ./start_backend.sh; exec bash'
+Terminal=false
+Icon=utilities-terminal

@@ -1,0 +1,157 @@
+═══════════════════════════════════════════════════════════
+              JOB APPLICATION TRACKER
+═══════════════════════════════════════════════════════════
+
+CARA PAKAI:
+1. Copy template di bawah ke Excel/Google Sheets
+2. Update setiap kali apply
+3. Set reminder untuk follow up
+4. Track progress sampai dapat offer
+
+═══════════════════════════════════════════════════════════
+
+COLUMNS (Copy ke Excel Row 1):
+No | Company | Position | Applied Date | Status | Salary Range | Contact Person | Follow Up Date | Notes
+
+═══════════════════════════════════════════════════════════
+
+CONTOH DATA (Copy ke Excel Row 2 dst):
+
+1 | Gojek | Product Engineer | 2026-02-25 | Applied | Rp 25-35 juta | HR Team | 2026-03-04 | Applied via LinkedIn
+2 | Tokopedia | Full-Stack Developer | 2026-02-25 | Applied | Rp 20-30 juta | recruiter@tokopedia.com | 2026-03-04 | Referral dari [nama]
+3 | Grab | Software Engineer | 2026-02-26 | Screening Call | Rp 22-32 juta | Jane Doe | 2026-03-05 | Technical interview next week
+4 | Shopee | Backend Developer | 2026-02-26 | Applied | Rp 18-28 juta | HR Team | 2026-03-05 | 
+5 | Traveloka | Product Engineer | 2026-02-27 | Applied | Rp 25-35 juta | careers@traveloka.com | 2026-03-06 |
+
+═══════════════════════════════════════════════════════════
+
+STATUS OPTIONS:
+- Applied (baru apply)
+- Screening Call (HR call)
+- Technical Interview (interview teknis)
+- Final Interview (interview akhir)
+- Offer Received (dapat offer)
+- Negotiating (nego salary)
+- Accepted (terima offer)
+- Rejected (ditolak)
+- Withdrawn (Anda yang mundur)
+
+═══════════════════════════════════════════════════════════
+
+WEEKLY GOALS:
+
+Week 1 (Feb 24-28):
+[ ] Apply 10 companies
+[ ] Update LinkedIn profile
+[ ] Create portfolio page
+[ ] Prepare demo materials
+
+Week 2 (Mar 3-7):
+[ ] Apply 10 companies
+[ ] Follow up Week 1 applications
+[ ] Practice interview questions
+[ ] Prepare salary negotiation
+
+Week 3 (Mar 10-14):
+[ ] Apply 5-10 companies
+[ ] Attend interviews
+[ ] Continue follow ups
+[ ] Network on LinkedIn
+
+Week 4 (Mar 17-21):
+[ ] Final interviews
+[ ] Negotiate offers
+[ ] Make decision
+[ ] Resign (if accepted)
+
+═══════════════════════════════════════════════════════════
+
+TARGET COMPANIES LIST:
+
+TIER 1 - STARTUPS (Best Fit):
+[ ] Gojek - gojek.com/careers
+[ ] Tokopedia - tokopedia.com/careers
+[ ] Bukalapak - careers.bukalapak.com
+[ ] Traveloka - traveloka.com/careers
+[ ] Grab - grab.careers
+[ ] Shopee - careers.shopee.co.id
+[ ] Blibli - blibli.com/careers
+[ ] OVO - ovo.id/careers
+
+TIER 2 - SOFTWARE HOUSES:
+[ ] Mitrais - mitrais.com/careers
+[ ] Suitmedia - suitmedia.com/careers
+[ ] GDP Labs - gdplabs.id/careers
+[ ] Refactory - refactory.id
+[ ] Warung Pintar - warungpintar.co.id/careers
+
+TIER 3 - REMOTE INTERNATIONAL:
+[ ] Toptal - toptal.com
+[ ] Turing - turing.com
+[ ] Remote.co - remote.co/jobs
+[ ] We Work Remotely - weworkremotely.com
+[ ] Arc.dev - arc.dev
+
+TIER 4 - CONSULTING:
+[ ] Deloitte Digital
+[ ] Accenture
+[ ] ThoughtWorks
+[ ] McKinsey Digital
+
+═══════════════════════════════════════════════════════════
+
+FOLLOW UP TEMPLATE:
+
+Subject: Following Up - [Job Title] Application
+
+Dear [Hiring Manager],
+
+Saya ingin follow up application saya untuk posisi [Job Title] 
+yang saya submit pada [tanggal].
+
+Saya tetap sangat tertarik dengan opportunity ini dan yakin 
+dapat contribute significantly dengan experience saya dalam 
+AI-assisted development dan enterprise system delivery.
+
+Apakah ada update mengenai application saya? Saya available 
+untuk interview kapan saja.
+
+Thank you for your consideration.
+
+Best regards,
+[Nama Anda]
+[Phone]
+[Email]
+
+═══════════════════════════════════════════════════════════
+
+REJECTION RESPONSE TEMPLATE:
+
+Subject: Thank You - [Job Title] Application
+
+Dear [Hiring Manager],
+
+Thank you for considering my application dan untuk update-nya.
+
+Meskipun saya disappointed dengan hasil ini, saya appreciate 
+waktu dan consideration dari tim Anda.
+
+Jika ada opportunity lain di future yang sesuai dengan profile 
+saya, saya akan sangat tertarik untuk apply kembali.
+
+Wish you all the best.
+
+Best regards,
+[Nama Anda]
+
+═══════════════════════════════════════════════════════════
+
+TIPS:
+1. Apply pagi hari (8-10 AM) - higher response rate
+2. Customize setiap application - jangan copy paste
+3. Follow up setelah 1 minggu jika no response
+4. Track semua di spreadsheet ini
+5. Set realistic goals: 10 applications per week
+6. Quality > Quantity - better 5 good applications than 20 bad ones
+
+═══════════════════════════════════════════════════════════

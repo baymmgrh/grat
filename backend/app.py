@@ -128,8 +128,12 @@ def create_app(config_class=Config):
     from routes.executive_dashboard import executive_dashboard_bp
     from routes.attendance import attendance_bp
     from routes.logs import logs_bp
+    from routes.converting import converting_bp
+    from routes.staff_leave import staff_leave_bp
+    from routes.face_recognition import face_bp
     
     app.register_blueprint(health_bp, url_prefix='/api')
+    app.register_blueprint(face_bp)  # Face Recognition - /api/face
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     
     # Import and register OAuth blueprint
@@ -162,6 +166,8 @@ def create_app(config_class=Config):
     app.register_blueprint(hr_extended_bp, url_prefix='/api/hr')
     app.register_blueprint(attendance_bp, url_prefix='/api/attendance')
     app.register_blueprint(logs_bp, url_prefix='/api/logs')
+    app.register_blueprint(converting_bp)  # Converting module - routes have /api/converting prefix
+    app.register_blueprint(staff_leave_bp, url_prefix='/api/staff-leave')  # Staff Leave Request
     app.register_blueprint(work_roster_bp, url_prefix='/api/hr/work-roster')
     app.register_blueprint(settings_bp, url_prefix='/api/settings')
     app.register_blueprint(mrp_bp, url_prefix='/api/mrp')
@@ -181,6 +187,10 @@ def create_app(config_class=Config):
     app.register_blueprint(returns_bp, url_prefix='/api/returns')
     app.register_blueprint(warehouse_enhanced_bp, url_prefix='/api/warehouse-enhanced')
     app.register_blueprint(stock_opname_bp, url_prefix='/api/stock-opname')
+    
+    # UoM (Unit of Measure) module
+    from routes.uom import uom_bp
+    app.register_blueprint(uom_bp, url_prefix='/api/uom')
     app.register_blueprint(settings_extended_bp, url_prefix='/api/settings')
     app.register_blueprint(integration_bp, url_prefix='/api/integration')
     app.register_blueprint(tv_display_bp, url_prefix='/api/tv-display')
@@ -287,6 +297,10 @@ def create_app(config_class=Config):
     # Import and register Packing List blueprint (new separate module)
     from routes.packing_list import packing_list_bp
     app.register_blueprint(packing_list_bp, url_prefix='/api/packing-list')
+    
+    # Import and register Live Monitoring blueprint
+    from routes.live_monitoring import live_monitoring_bp
+    app.register_blueprint(live_monitoring_bp, url_prefix='/api/live-monitoring')
     
     # Serve uploaded files
     from flask import send_from_directory

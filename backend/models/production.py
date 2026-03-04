@@ -279,6 +279,7 @@ class WorkOrder(db.Model):
     # Quantity & UOM
     quantity = db.Column(db.Numeric(15, 2), nullable=False)
     uom = db.Column(db.String(20), nullable=False)
+    pack_per_carton = db.Column(db.Integer, nullable=True)  # User-set pack per carton for this WO
     required_date = db.Column(db.Date, nullable=True)
     quantity_produced = db.Column(db.Numeric(15, 2), default=0)
     quantity_good = db.Column(db.Numeric(15, 2), default=0)
@@ -322,6 +323,7 @@ class ProductionRecord(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id', ondelete='CASCADE'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)  # Override product from WO
     machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
     operator_id = db.Column(db.Integer, db.ForeignKey('employees.id'), nullable=True)
     production_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -340,6 +342,7 @@ class ProductionRecord(db.Model):
     
     # Relationships
     work_order = db.relationship('WorkOrder', back_populates='production_records')
+    product = db.relationship('Product')
     machine = db.relationship('Machine', back_populates='production_records')
     operator = db.relationship('Employee')
     
@@ -376,6 +379,7 @@ class ShiftProduction(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     production_date = db.Column(db.Date, nullable=False, index=True)
     shift = db.Column(db.String(20), nullable=False)  # shift_1, shift_2, shift_3
+    sub_shift = db.Column(db.String(5), nullable=True)  # a, b, c, etc. for multi-product shifts (NULL = legacy/auto-detect)
     shift_start = db.Column(db.Time, nullable=False)
     shift_end = db.Column(db.Time, nullable=False)
     machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=True)
@@ -406,6 +410,7 @@ class ShiftProduction(db.Model):
     downtime_design = db.Column(db.Integer, default=0)  # Design change - max 8%
     downtime_others = db.Column(db.Integer, default=0)  # Others - max 10%
     idle_time = db.Column(db.Integer, default=0)  # Idle time
+    waktu_tidak_tercatat = db.Column(db.Integer, default=0)  # Unaccounted time
     
     # Efficiency Loss by Category (percentage)
     loss_mesin = db.Column(db.Numeric(5, 2), default=0)  # Machine loss %
@@ -413,6 +418,9 @@ class ShiftProduction(db.Model):
     loss_material = db.Column(db.Numeric(5, 2), default=0)  # Material loss %
     loss_design = db.Column(db.Numeric(5, 2), default=0)  # Design change loss %
     loss_others = db.Column(db.Numeric(5, 2), default=0)  # Others loss %
+    
+    # Pack per carton (per shift record, may differ from WO if product changes)
+    pack_per_carton = db.Column(db.Integer, default=0)
     
     # Quality Data
     quality_rate = db.Column(db.Numeric(5, 2), default=100)  # percentage
@@ -1074,12 +1082,19 @@ class PackingListNew(db.Model):
     # Current batch mixing
     current_batch_mixing = db.Column(db.String(100), nullable=True)
     
-    # Status: draft, in_progress, completed, cancelled
+    # Status: draft, in_progress, completed, quarantine, released, rejected, cancelled
     status = db.Column(db.String(50), default='draft')
     
     # Dates
     packing_date = db.Column(db.Date, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
+    
+    # QC fields
+    qc_status = db.Column(db.String(50), nullable=True)  # quarantine, released, rejected
+    qc_date = db.Column(db.DateTime, nullable=True)
+    qc_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    qc_notes = db.Column(db.Text, nullable=True)
+    released_at = db.Column(db.DateTime, nullable=True)
     
     notes = db.Column(db.Text, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -1092,6 +1107,7 @@ class PackingListNew(db.Model):
     customer = db.relationship('Customer', backref='packing_lists')
     items = db.relationship('PackingListNewItem', backref='packing_list', lazy='dynamic', cascade='all, delete-orphan')
     creator = db.relationship('User', foreign_keys=[created_by])
+    qc_reviewer = db.relationship('User', foreign_keys=[qc_by])
     
     def to_dict(self, include_items=False):
         result = {
@@ -1113,6 +1129,11 @@ class PackingListNew(db.Model):
             'status': self.status,
             'packing_date': self.packing_date.isoformat() if self.packing_date else None,
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'qc_status': self.qc_status,
+            'qc_date': self.qc_date.isoformat() if self.qc_date else None,
+            'qc_by': self.qc_reviewer.username if self.qc_reviewer else None,
+            'qc_notes': self.qc_notes,
+            'released_at': self.released_at.isoformat() if self.released_at else None,
             'notes': self.notes,
             'created_by': self.creator.username if self.creator else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -1175,4 +1196,83 @@ class PackingListNewItem(db.Model):
             'qc_notes': self.qc_notes,
             'weighed_by': self.weigher.username if self.weigher else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class LiveMonitoringCheck(db.Model):
+    """Live Monitoring - Supervisor patrol check setiap 2 jam untuk mesin yg terjadwal"""
+    __tablename__ = 'live_monitoring_checks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    check_date = db.Column(db.Date, nullable=False, index=True)
+    shift = db.Column(db.String(20), nullable=False)  # shift_1, shift_2, shift_3
+    time_slot = db.Column(db.Integer, nullable=False)  # 1,2,3,4
+    slot_label = db.Column(db.String(20), nullable=True)  # "07:30", "09:30", "11:30", "13:30"
+    
+    machine_id = db.Column(db.Integer, db.ForeignKey('machines.id'), nullable=False)
+    
+    # Status: running, stopped
+    machine_status = db.Column(db.String(30), nullable=False, default='running')
+    
+    # Linked WO/Product (auto-filled from schedule)
+    product_id = db.Column(db.Integer, db.ForeignKey('products.id'), nullable=True)
+    work_order_id = db.Column(db.Integer, db.ForeignKey('work_orders.id'), nullable=True)
+    wo_number = db.Column(db.String(100), nullable=True)
+    product_name = db.Column(db.String(200), nullable=True)
+    
+    # If stopped: reason + time range + auto-calc duration
+    stop_from = db.Column(db.String(5), nullable=True)  # "08:45"
+    stop_to = db.Column(db.String(5), nullable=True)  # "09:30"
+    stop_duration_minutes = db.Column(db.Integer, default=0)  # auto-calculated
+    stop_reason = db.Column(db.String(300), nullable=True)
+    stop_category = db.Column(db.String(50), nullable=True)  # mesin, operator, material, design, others, istirahat
+    
+    # Machine start time tracking (expected 07:30 for shift_1)
+    actual_start_time = db.Column(db.String(5), nullable=True)  # "07:35" - kapan mesin benar2 jalan
+    start_delayed = db.Column(db.Boolean, default=False)  # True if started late
+    
+    notes = db.Column(db.Text, nullable=True)
+    
+    # Checked by
+    checked_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    checked_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    machine = db.relationship('Machine')
+    product = db.relationship('Product')
+    work_order = db.relationship('WorkOrder')
+    checker = db.relationship('User', foreign_keys=[checked_by])
+    
+    __table_args__ = (
+        db.UniqueConstraint('check_date', 'shift', 'time_slot', 'machine_id', name='unique_live_check'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'check_date': self.check_date.isoformat(),
+            'shift': self.shift,
+            'time_slot': self.time_slot,
+            'slot_label': self.slot_label,
+            'machine_id': self.machine_id,
+            'machine_name': self.machine.name if self.machine else None,
+            'machine_code': self.machine.code if self.machine else None,
+            'machine_status': self.machine_status,
+            'product_id': self.product_id,
+            'product_name': self.product_name,
+            'work_order_id': self.work_order_id,
+            'wo_number': self.wo_number,
+            'stop_from': self.stop_from,
+            'stop_to': self.stop_to,
+            'stop_duration_minutes': self.stop_duration_minutes,
+            'stop_reason': self.stop_reason,
+            'stop_category': self.stop_category,
+            'actual_start_time': self.actual_start_time,
+            'start_delayed': self.start_delayed,
+            'notes': self.notes,
+            'checked_by': self.checker.username if self.checker else None,
+            'checked_at': self.checked_at.isoformat() if self.checked_at else None,
         }

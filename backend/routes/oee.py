@@ -5,6 +5,7 @@ from utils.i18n import success_response, error_response, get_message
 from models.oee import OEERecord, OEEDowntimeRecord, OEETarget, OEEAlert, MaintenanceImpact, OEEAnalytics, QualityDefect, MachineMonthlyTarget, DowntimeRootCause
 from models.product_excel_schema import ProductNew
 from utils import generate_number
+from utils.helpers import detect_downtime_category
 from datetime import datetime, date, timedelta
 from sqlalchemy import func, and_, or_, desc
 import json
@@ -72,7 +73,7 @@ def get_records():
                     # Remove "WIP " prefix for matching
                     search_name = product_name.replace('WIP ', '').strip()
                     product_new = ProductNew.query.filter(
-                        ProductNew.nama_produk.ilike(f'%{search_name}%')
+                        ProductNew.name.ilike(f'%{search_name}%')
                     ).first()
                     if product_new and product_new.pack_per_karton:
                         pack_per_karton = int(product_new.pack_per_karton)
@@ -90,14 +91,40 @@ def get_records():
             total_downtime_minutes = 0  # Sum of NON-IDLE downtime entries only
             idle_time_minutes = 0  # Separate from downtime
             
-            # IDLE TIME keywords - waiting for materials/resources
+            # IDLE TIME keywords - sinkron dengan daily controller
             idle_keywords = [
-                'tunggu kain', 'tunggu stiker', 'tunggu packaging', 'tunggu mixing',
-                'tunggu bahan', 'tunggu material', 'tunggu label', 'tunggu box',
-                'tunggu karton', 'tunggu lem', 'tunggu tinta', 'tunggu order',
-                'menunggu kain', 'menunggu stiker', 'menunggu packaging', 'menunggu mixing',
-                'nunggu kain', 'nunggu stiker', 'nunggu packaging', 'nunggu mixing',
-                'waiting for', 'standby'
+                # Tunggu kain
+                'tunggu kain', 'ambil kain', 'menunggu kain', 'nunggu kain', 'kain belum datang',
+                # Tunggu obat/tinta
+                'tunggu obat', 'menunggu obat', 'nunggu obat', 'obat belum datang',
+                'tunggu tinta', 'menunggu tinta', 'nunggu tinta',
+                # Tunggu ingredient
+                'tunggu ingredient', 'ingredient habis', 'tunggu bahan kimia',
+                # Tunggu stiker
+                'tunggu stiker', 'menunggu stiker', 'nunggu stiker', 'stiker belum datang',
+                # Tunggu packing/packaging
+                'tunggu packing', 'tunggu packaging', 'menunggu packing', 'nunggu packing',
+                'packaging belum datang', 'box belum datang',
+                # Tunggu mixing
+                'tunggu mixing', 'menunggu mixing', 'nunggu mixing', 'mixing belum siap',
+                # Tunggu label/karton/box
+                'tunggu label', 'tunggu box', 'tunggu karton', 'tunggu lem',
+                # Tunggu produk (dari mesin lain)
+                'tunggu produk',
+                # Tunggu temperatur
+                'tunggu temperatur stabil', 'tunggu temperatur',
+                'tunggu temperature stabil', 'tunggu temperature',
+                # General tunggu
+                'tunggu bahan', 'tunggu material', 'tunggu order', 'tunggu instruksi',
+                'tunggu approval', 'tunggu qc', 'tunggu hasil qc',
+                # xxx habis (idle karena kehabisan)
+                'kain habis', 'stiker habis', 'packing habis', 'packaging habis',
+                'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
+                'bahan habis', 'material habis',
+                # English
+                'waiting for', 'standby material', 'waiting material', 'no material',
+                # Idle lainnya
+                'idle', 'standby', 'menganggur', 'tidak ada order', 'no order', 'menhabiskan order'
             ]
             
             if sp.issues:
@@ -112,13 +139,17 @@ def get_records():
                     match = re.match(r'(\d+)\s*menit\s*-\s*(.+)', part, re.IGNORECASE)
                     if match:
                         duration = int(match.group(1))
-                        reason = match.group(2).strip()
+                        reason_with_tag = match.group(2).strip()
+                        
+                        # Check for [idle] category tag BEFORE removing it
+                        has_idle_tag = bool(re.search(r'\[idle\]', reason_with_tag, re.IGNORECASE))
+                        
                         # Remove trailing category bracket if present [category]
-                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason).strip()
+                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason_with_tag).strip()
                         reason_lower = reason.lower()
                         
-                        # Check if this is idle time (tunggu keywords)
-                        is_idle = any(kw in reason_lower for kw in idle_keywords)
+                        # Check if idle: either has [idle] tag OR matches idle keywords
+                        is_idle = has_idle_tag or any(kw in reason_lower for kw in idle_keywords)
                         if is_idle:
                             # Idle time is SEPARATE from downtime
                             idle_time_minutes += duration
@@ -160,11 +191,13 @@ def get_records():
                 if shift_match:
                     shift_num = int(shift_match.group(1))
             
-            # Get planned runtime per shift (Shift 1=510, Shift 2=480, Shift 3=450 minutes)
+            # Get planned runtime per shift (Shift 1 & 2 = 510, Shift 1 Friday = 540, Shift 3 = 450 minutes)
+            # Friday (weekday() == 4) has longer shift due to Jumatan prayer
+            is_friday = sp.production_date and sp.production_date.weekday() == 4
             if shift_num == 1:
-                default_planned = 510  # 06:30-15:00 = 8.5 hours
+                default_planned = 540 if is_friday else 510  # 06:30-15:00 = 8.5 hours (9 hours on Friday)
             elif shift_num == 2:
-                default_planned = 480  # 15:00-23:00 = 8 hours
+                default_planned = 510  # 15:00-23:00 = 8.5 hours
             else:
                 default_planned = 450  # 23:00-06:30 = 7.5 hours
             
@@ -279,7 +312,9 @@ def export_controller_excel():
         HUMAN_DOWNTIME_KEYWORDS = [
             'istirahat', 'makan', 'sholat', 'toilet', 'wc', 'break',
             'pulang', 'datang', 'terlambat', 'absen', 'cuti', 'sakit',
-            'meeting', 'rapat', 'briefing', 'training', 'pelatihan'
+            'meeting', 'rapat', 'briefing', 'training', 'pelatihan',
+            'sanitasi', 'persiapan & sanitasi', 'sterilisasi',
+            'setting packaging', 'setting kemasan', 'setting mesin', 'setting mc'
         ]
         
         def is_human_downtime(reason):
@@ -364,7 +399,7 @@ def export_controller_excel():
                 try:
                     search_name = product_name.replace('WIP ', '').strip()
                     product_new = ProductNew.query.filter(
-                        ProductNew.nama_produk.ilike(f'%{search_name}%')
+                        ProductNew.name.ilike(f'%{search_name}%')
                     ).first()
                     if product_new and product_new.pack_per_karton:
                         pack_per_karton = int(product_new.pack_per_karton)
@@ -724,7 +759,7 @@ def update_shift_production_downtime(id):
                               (sp.downtime_others or 0)
         
         # Recalculate loss percentages
-        planned_runtime = sp.planned_runtime or 480
+        planned_runtime = sp.planned_runtime or 510
         sp.loss_mesin = round((sp.downtime_mesin or 0) / planned_runtime * 100, 2) if planned_runtime > 0 else 0
         sp.loss_operator = round((sp.downtime_operator or 0) / planned_runtime * 100, 2) if planned_runtime > 0 else 0
         sp.loss_material = round((sp.downtime_material or 0) / planned_runtime * 100, 2) if planned_runtime > 0 else 0
@@ -854,12 +889,23 @@ def get_oee_dashboard():
             all_performance_values.append(float(r.performance) if r.performance else 0)
             all_quality_values.append(float(r.quality) if r.quality else 0)
         
-        # From ShiftProduction
+        # From ShiftProduction - group by unique machine+date+shift to avoid multi-product over-counting
+        sp_by_shift = {}
         for sp in shift_records:
-            all_oee_values.append(float(sp.oee_score) if sp.oee_score else 0)
-            all_availability_values.append(float(sp.efficiency_rate) if sp.efficiency_rate else 0)  # efficiency as availability proxy
+            shift_key = f"{sp.machine_id}_{sp.production_date}_{sp.shift}"
+            if shift_key not in sp_by_shift:
+                sp_by_shift[shift_key] = []
+            sp_by_shift[shift_key].append(sp)
+        
+        for shift_key, sp_group in sp_by_shift.items():
+            # Average OEE values within the same shift (multi-product)
+            oee_vals = [float(sp.oee_score) for sp in sp_group if sp.oee_score]
+            eff_vals = [float(sp.efficiency_rate) for sp in sp_group if sp.efficiency_rate]
+            qual_vals = [float(sp.quality_rate) for sp in sp_group if sp.quality_rate]
+            all_oee_values.append(sum(oee_vals) / len(oee_vals) if oee_vals else 0)
+            all_availability_values.append(sum(eff_vals) / len(eff_vals) if eff_vals else 0)
             all_performance_values.append(100.0)  # Default performance
-            all_quality_values.append(float(sp.quality_rate) if sp.quality_rate else 0)
+            all_quality_values.append(sum(qual_vals) / len(qual_vals) if qual_vals else 0)
         
         if all_oee_values:
             avg_oee = sum(all_oee_values) / len(all_oee_values)
@@ -883,7 +929,7 @@ def get_oee_dashboard():
         for machine in machines:
             # From OEERecord
             machine_oee_records = [r for r in oee_records if r.machine_id == machine.id]
-            # From ShiftProduction
+            # From ShiftProduction - group by unique shift
             machine_shift_records = [sp for sp in shift_records if sp.machine_id == machine.id]
             
             # Combine OEE values
@@ -896,10 +942,20 @@ def get_oee_dashboard():
                 machine_downtime += r.downtime or 0
                 machine_production += r.total_pieces_produced or 0
             
+            # Group SP by unique shift to avoid multi-product over-counting OEE
+            m_sp_by_shift = {}
             for sp in machine_shift_records:
-                machine_oee_values.append(float(sp.oee_score) if sp.oee_score else 0)
+                sk = f"{sp.production_date}_{sp.shift}"
+                if sk not in m_sp_by_shift:
+                    m_sp_by_shift[sk] = []
+                m_sp_by_shift[sk].append(sp)
+                # Production and downtime: sum across all records (each record is unique output)
                 machine_downtime += sp.downtime_minutes or 0
                 machine_production += float(sp.actual_quantity) if sp.actual_quantity else 0
+            
+            for sk, sp_grp in m_sp_by_shift.items():
+                oee_vals = [float(sp.oee_score) for sp in sp_grp if sp.oee_score]
+                machine_oee_values.append(sum(oee_vals) / len(oee_vals) if oee_vals else 0)
             
             if machine_oee_values:
                 machine_avg_oee = sum(machine_oee_values) / len(machine_oee_values)
@@ -944,10 +1000,17 @@ def get_oee_dashboard():
                 if r.record_date == trend_date:
                     day_oee_values.append(float(r.oee) if r.oee else 0)
             
-            # From ShiftProduction
+            # From ShiftProduction - group by unique shift per day
+            day_sp_by_shift = {}
             for sp in shift_records:
                 if sp.production_date == trend_date:
-                    day_oee_values.append(float(sp.oee_score) if sp.oee_score else 0)
+                    sk = f"{sp.machine_id}_{sp.shift}"
+                    if sk not in day_sp_by_shift:
+                        day_sp_by_shift[sk] = []
+                    day_sp_by_shift[sk].append(sp)
+            for sk, sp_grp in day_sp_by_shift.items():
+                oee_vals = [float(sp.oee_score) for sp in sp_grp if sp.oee_score]
+                day_oee_values.append(sum(oee_vals) / len(oee_vals) if oee_vals else 0)
             
             if day_oee_values:
                 day_avg_oee = sum(day_oee_values) / len(day_oee_values)
@@ -1005,7 +1068,15 @@ def get_oee_dashboard():
                 'avg_quality': round(avg_quality, 2),
                 'best_oee': round(best_oee, 2),
                 'worst_oee': round(worst_oee, 2),
-                'total_records': len(oee_records) + len(shift_records),
+                'total_records': len(oee_records) + len(sp_by_shift),
+                'total_production_days': len(set(
+                    [r.record_date for r in oee_records if r.record_date] +
+                    [sp.production_date for sp in shift_records if sp.production_date]
+                )),
+                'total_machine_days': len(set(
+                    [(r.machine_id, r.record_date) for r in oee_records if r.record_date] +
+                    [(sp.machine_id, sp.production_date) for sp in shift_records if sp.production_date]
+                )),
                 'date_range': {
                     'start': start_date.isoformat(),
                     'end': end_date.isoformat()
@@ -1272,8 +1343,13 @@ def get_daily_controller():
         else:
             target_date = get_local_today()
         
-        # Get all shift productions for this date
-        shift_records = ShiftProduction.query.filter(
+        # Get all shift productions for this date with eager loading
+        from sqlalchemy.orm import joinedload
+        shift_records = ShiftProduction.query.options(
+            joinedload(ShiftProduction.work_order),
+            joinedload(ShiftProduction.machine),
+            joinedload(ShiftProduction.product)
+        ).filter(
             ShiftProduction.production_date == target_date
         ).order_by(ShiftProduction.machine_id, ShiftProduction.shift).all()
         
@@ -1283,7 +1359,7 @@ def get_daily_controller():
         # IDLE TIME keywords - sinkron dengan frontend
         idle_keywords = [
             # Tunggu kain
-            'tunggu kain', 'menunggu kain', 'nunggu kain', 'kain belum datang',
+            'tunggu kain', 'ambil kain', 'menunggu kain', 'nunggu kain', 'kain belum datang',
             # Tunggu obat/tinta
             'tunggu obat', 'menunggu obat', 'nunggu obat', 'obat belum datang',
             'tunggu tinta', 'menunggu tinta', 'nunggu tinta',
@@ -1298,6 +1374,11 @@ def get_daily_controller():
             'tunggu mixing', 'menunggu mixing', 'nunggu mixing', 'mixing belum siap',
             # Tunggu label/karton/box
             'tunggu label', 'tunggu box', 'tunggu karton', 'tunggu lem',
+            # Tunggu produk (dari mesin lain)
+            'tunggu produk',
+            # Tunggu temperatur
+            'tunggu temperatur stabil', 'tunggu temperatur',
+            'tunggu temperature stabil', 'tunggu temperature',
             # General tunggu
             'tunggu bahan', 'tunggu material', 'tunggu order', 'tunggu instruksi',
             'tunggu approval', 'tunggu qc', 'tunggu hasil qc',
@@ -1308,7 +1389,9 @@ def get_daily_controller():
             # English
             'waiting for', 'standby material', 'waiting material', 'no material',
             # Idle lainnya
-            'idle', 'standby', 'menganggur', 'tidak ada order', 'no order'
+            'idle', 'standby', 'menganggur', 'tidak ada order', 'no order', 'menhabiskan order',
+            # Susun produk
+            'susun produk'
         ]
         
         for sp in shift_records:
@@ -1334,7 +1417,10 @@ def get_daily_controller():
                     'total_target': 0,
                     'total_average_time': 0,
                     'products': [],
+                    'shifts_seen': {},
+                    'idle_breakdown': [],
                     'top_3_downtime': [],
+                    'per_shift_downtime': {},  # {shift_num: [downtime_items]}
                     'efficiency': 0,
                     'machine_efficiency': 0,
                     'quality': 0,
@@ -1358,17 +1444,23 @@ def get_daily_controller():
                     match = re.match(r'(\d+)\s*menit\s*-\s*(.+)', part, re.IGNORECASE)
                     if match:
                         duration = int(match.group(1))
-                        reason = match.group(2).strip()
-                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason).strip()
+                        reason_with_tag = match.group(2).strip()
+                        
+                        # Check for [idle] category tag BEFORE removing it
+                        has_idle_tag = bool(re.search(r'\[idle\]', reason_with_tag, re.IGNORECASE))
+                        
+                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason_with_tag).strip()
                         reason_lower = reason.lower()
                         
-                        is_idle = any(kw in reason_lower for kw in idle_keywords)
+                        # Check if idle: either has [idle] tag OR matches idle keywords
+                        is_idle = has_idle_tag or any(kw in reason_lower for kw in idle_keywords)
                         if is_idle:
                             shift_idle += duration
                         else:
                             shift_downtime += duration
                         
-                        downtime_breakdown.append({'reason': reason, 'duration_minutes': duration})
+                        # Track is_idle status for filtering later
+                        downtime_breakdown.append({'reason': reason, 'duration_minutes': duration, 'is_idle': is_idle})
             
             # Fallback for downtime (only if parsing yielded 0)
             if shift_downtime == 0:
@@ -1395,11 +1487,13 @@ def get_daily_controller():
                 if shift_match:
                     shift_num = int(shift_match.group(1))
             
-            # Get planned runtime per shift
+            # Get planned runtime per shift (540 on Friday for Shift 1)
+            # Friday (weekday() == 4) has longer shift due to Jumatan prayer
+            is_friday = sp.production_date and sp.production_date.weekday() == 4
             if shift_num == 1:
-                default_planned = 510  # 06:30-15:00 = 8.5 hours
+                default_planned = 540 if is_friday else 510  # 06:30-15:00 = 8.5 hours (9 hours on Friday)
             elif shift_num == 2:
-                default_planned = 480  # 15:00-23:00 = 8 hours
+                default_planned = 510  # 15:00-23:00 = 8.5 hours
             else:
                 default_planned = 450  # 23:00-06:30 = 7.5 hours
             
@@ -1410,23 +1504,61 @@ def get_daily_controller():
             
             # Get product name and packs_per_karton
             product_name = None
+            product_code = None
             pack_per_carton = 0
             if sp.product:
                 product_name = sp.product.name
-                if sp.product.packaging:
-                    pack_per_carton = sp.product.packaging.packs_per_karton or 0
+                product_code = sp.product.code
             elif sp.work_order and sp.work_order.product:
                 product_name = sp.work_order.product.name
-                if sp.work_order.product.packaging:
-                    pack_per_carton = sp.work_order.product.packaging.packs_per_karton or 0
+                product_code = sp.work_order.product.code
+            
+            # PRIORITY 1: Use pack_per_carton from ShiftProduction record (per shift input)
+            if hasattr(sp, 'pack_per_carton') and sp.pack_per_carton and int(sp.pack_per_carton) > 0:
+                pack_per_carton = int(sp.pack_per_carton)
+            
+            # PRIORITY 2: Use pack_per_carton from Work Order
+            if pack_per_carton == 0 and sp.work_order and hasattr(sp.work_order, 'pack_per_carton') and sp.work_order.pack_per_carton:
+                pack_per_carton = int(sp.work_order.pack_per_carton)
+            
+            # PRIORITY 3: Use pack_per_carton from BOM
+            if pack_per_carton == 0 and sp.work_order and sp.work_order.bom:
+                bom_ppc = sp.work_order.bom.pack_per_carton
+                if bom_ppc and bom_ppc > 1:
+                    pack_per_carton = int(bom_ppc)
+            
+            # PRIORITY 3: Fallback to products_new table
+            if pack_per_carton == 0 and product_code:
+                product_new_data = db.session.execute(
+                    db.text('SELECT pack_per_karton FROM products WHERE code = :code'),
+                    {'code': product_code}
+                ).fetchone()
+                if product_new_data and product_new_data[0]:
+                    pack_per_carton = int(product_new_data[0])
+            
+            # PRIORITY 4: Fallback by product name
+            if pack_per_carton == 0 and product_name:
+                search_name = product_name
+                if search_name.upper().startswith('WIP '):
+                    search_name = search_name[4:]
+                product_new_data = db.session.execute(
+                    db.text("SELECT pack_per_karton FROM products WHERE name LIKE :name ORDER BY CASE WHEN name LIKE '%@24' THEN 0 WHEN name LIKE '%@24%' THEN 1 ELSE 2 END, pack_per_karton DESC LIMIT 1"),
+                    {'name': f'%{search_name}%'}
+                ).fetchone()
+                if product_new_data and product_new_data[0]:
+                    pack_per_carton = int(product_new_data[0])
             
             grade_a = int(sp.good_quantity) if sp.good_quantity else 0
             import math
             shift_data = {
                 'shift': shift_num,
+                'sub_shift': sp.sub_shift,  # 'a', 'b', 'c' or None for legacy
+                'shift_production_id': sp.id,  # For ordering legacy data
+                'planned_runtime': planned_runtime,  # User input average time
                 'runtime_minutes': shift_runtime,
                 'downtime_minutes': shift_downtime,
                 'idle_time_minutes': shift_idle,
+                'waktu_tidak_tercatat': int(sp.waktu_tidak_tercatat) if hasattr(sp, 'waktu_tidak_tercatat') and sp.waktu_tidak_tercatat is not None else 0,
                 'grade_a': grade_a,
                 'grade_a_carton': math.floor(grade_a / pack_per_carton) if pack_per_carton > 0 else 0,
                 'grade_b': int(sp.rework_quantity) if sp.rework_quantity else 0,
@@ -1449,12 +1581,33 @@ def get_daily_controller():
             # Get machine_speed from ShiftProduction
             shift_machine_speed = int(sp.machine_speed) if sp.machine_speed else 0
             
-            # Get target quantity from ShiftProduction or WorkOrder
-            shift_target = int(sp.target_quantity) if sp.target_quantity else 0
-            if shift_target == 0 and sp.work_order:
-                shift_target = int(sp.work_order.quantity) if sp.work_order.quantity else 0
+            # Calculate per sub-shift efficiency: runtime_subshift / planned_runtime * 100
+            subshift_runtime = 0
+            if shift_machine_speed > 0:
+                subshift_runtime = int(math.floor(grade_a / shift_machine_speed + 0.5))
+            subshift_efficiency = round((subshift_runtime / planned_runtime) * 100, 1) if planned_runtime > 0 else 0
+            
+            shift_data['machine_speed'] = shift_machine_speed
+            shift_data['runtime'] = subshift_runtime
+            shift_data['efficiency'] = subshift_efficiency
             
             machines_data[machine_id]['shifts'].append(shift_data)
+            
+            # Track unique shifts: use default shift duration for average_time
+            # and track machine_speed per unique shift for proper averaging
+            if shift_num not in machines_data[machine_id]['shifts_seen']:
+                machines_data[machine_id]['shifts_seen'][shift_num] = {
+                    'default_planned': planned_runtime if planned_runtime > 0 else default_planned,
+                    'machine_speed': shift_machine_speed
+                }
+            else:
+                # For multi-product in same shift, keep the larger planned_runtime
+                # (the first record usually has the full shift duration)
+                existing = machines_data[machine_id]['shifts_seen'][shift_num]
+                # Update machine_speed if this record has a higher speed
+                if shift_machine_speed > existing['machine_speed']:
+                    existing['machine_speed'] = shift_machine_speed
+            
             machines_data[machine_id]['total_planned'] += planned_runtime
             machines_data[machine_id]['total_runtime'] += shift_runtime
             machines_data[machine_id]['total_downtime'] += shift_downtime
@@ -1464,13 +1617,27 @@ def get_daily_controller():
             machines_data[machine_id]['total_grade_b'] += shift_data['grade_b']
             machines_data[machine_id]['total_grade_c'] += shift_data['grade_c']
             machines_data[machine_id]['total_machine_speed'] += shift_machine_speed
-            machines_data[machine_id]['total_target'] += shift_target
+            # Note: total_target is now calculated at machine level using formula:
+            # Target = Machine Speed × Average Time × Target Efficiency (60%)
             
             if product_name and product_name not in machines_data[machine_id]['products']:
                 machines_data[machine_id]['products'].append(product_name)
             
             # Accumulate downtime breakdown with frequency
+            # Also track per-shift downtime breakdown
+            if shift_num not in machines_data[machine_id]['per_shift_downtime']:
+                machines_data[machine_id]['per_shift_downtime'][shift_num] = []
+            
             for dt in downtime_breakdown:
+                if dt.get('is_idle'):
+                    # Track idle breakdown separately
+                    existing_idle = next((d for d in machines_data[machine_id]['idle_breakdown'] if d['reason'] == dt['reason']), None)
+                    if existing_idle:
+                        existing_idle['duration_minutes'] += dt['duration_minutes']
+                    else:
+                        machines_data[machine_id]['idle_breakdown'].append({'reason': dt['reason'], 'duration_minutes': dt['duration_minutes']})
+                
+                # Machine-level accumulation
                 existing = next((d for d in machines_data[machine_id]['top_3_downtime'] if d['reason'] == dt['reason']), None)
                 if existing:
                     existing['duration_minutes'] += dt['duration_minutes']
@@ -1479,6 +1646,17 @@ def get_daily_controller():
                     dt_copy = dt.copy()
                     dt_copy['frequency'] = dt.get('frequency', 1)
                     machines_data[machine_id]['top_3_downtime'].append(dt_copy)
+                
+                # Per-shift accumulation
+                shift_dt_list = machines_data[machine_id]['per_shift_downtime'][shift_num]
+                existing_shift = next((d for d in shift_dt_list if d['reason'] == dt['reason']), None)
+                if existing_shift:
+                    existing_shift['duration_minutes'] += dt['duration_minutes']
+                    existing_shift['frequency'] = existing_shift.get('frequency', 1) + dt.get('frequency', 1)
+                else:
+                    dt_copy2 = dt.copy()
+                    dt_copy2['frequency'] = dt.get('frequency', 1)
+                    shift_dt_list.append(dt_copy2)
         
         # Keywords to exclude from Top 3 Downtime (biological/personal breaks + idle time + design change + operator setting)
         excluded_keywords = [
@@ -1487,7 +1665,7 @@ def get_daily_controller():
             'wc', 'buang air', 'pipis', 'bab', 'break', 'rest', 'pray',
             'ibadah', 'jumatan', 'jumat', 'dhuhur', 'ashar', 'maghrib',
             # IDLE TIME - exclude from Top 3 downtime (tracked separately)
-            'tunggu kain', 'tunggu obat', 'tunggu tinta', 'tunggu ingredient',
+            'tunggu kain', 'ambil kain', 'tunggu obat', 'tunggu tinta', 'tunggu ingredient',
             'tunggu stiker', 'tunggu packing', 'tunggu packaging', 'tunggu mixing',
             'tunggu label', 'tunggu box', 'tunggu karton', 'tunggu lem',
             'tunggu bahan', 'tunggu material', 'tunggu order', 'tunggu instruksi',
@@ -1496,14 +1674,16 @@ def get_daily_controller():
             'kain habis', 'stiker habis', 'packing habis', 'packaging habis',
             'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
             'bahan habis', 'material habis', 'ingredient habis', 'obat habis',
-            'waiting for', 'standby', 'idle', 'menganggur', 'no order',
+            'waiting for', 'standby', 'idle', 'menganggur', 'no order', 'menghabiskan order',
             # DESIGN CHANGE - exclude from Top 3 (treated as separate category)
             'design change', 'design baru', 'ganti design', 'ubah design',
             'repack', 'repacking', 're-pack', 're packing',
+            'sanitasi', 'persiapan & sanitasi', 'sterilisasi',
+            'setting packaging', 'setting kemasan', 'setting mesin', 'setting mc', 'sanitasi dan setting',
             # OPERATOR SETTING - exclude from Top 3 (not actual repair)
             'setting', 'seting', 'setel', 'adjust', 'adjustment', 'kalibrasi',
             'calibration', 'setup', 'set up', 'konfigurasi', 'konfigurasi ulang',
-            'setting mesin', 'setting parameter', 'setting awal'
+            'setting parameter', 'setting awal'
         ]
         
         # Only include MACHINE and OPERATOR REPAIR in Top 3
@@ -1514,12 +1694,20 @@ def get_daily_controller():
             'hydraulic', 'electrical', 'mekanik', 'tooling', 'mould', 'die',
             # Common machine issues
             'conveyor', 'vanbelt', 'belt', 'inkjet', 'printer', 'nozzle',
-            'putus', 'patah', 'bocor', 'macet', 'mampet', 'stuck',
+            'infeeding', 'putus', 'patah', 'bocor', 'macet', 'mampet', 'stuck',
             'tidak keluar', 'tidak jalan', 'tidak nyala', 'mati',
-            'kain', 'roll', 'roller', 'bearing', 'gear', 'rantai', 'chain',
+            'kain keluar', 'kain putus', 'kain sobek', 'roll', 'roller', 'bearing', 'gear', 'rantai', 'chain',
             'pompa', 'pump', 'valve', 'seal', 'packing', 'gasket',
             'cutter', 'blade', 'pisau', 'heater', 'pemanas', 'cooler',
-            'menggulung', 'slip', 'geser', 'longgar', 'kendor', 'aus'
+            'menggulung', 'slip', 'geser', 'longgar', 'kendor', 'aus',
+            # Pressure/air issues
+            'tekanan', 'angin', 'drop', 'pressure', 'compressor', 'kompresor',
+            'vacuum', 'vakum', 'hisap', 'tiup', 'blower',
+            # Temperature issues
+            'suhu', 'temperatur', 'panas', 'dingin', 'overheat',
+            # Quality/output issues  
+            'tidak maksimal', 'kurang', 'lemah', 'jelek', 'cacat', 'defect',
+            'lipatan', 'folding', 'lipat', 'tidak rata', 'miring', 'bengkok'
         ]
         
         operator_repair_keywords = [
@@ -1532,11 +1720,27 @@ def get_daily_controller():
             # Filter to only include MACHINE and OPERATOR REPAIR issues
             filtered_downtime = []
             for dt in machines_data[machine_id]['top_3_downtime']:
+                # Skip items marked as idle time
+                if dt.get('is_idle', False):
+                    continue
                 reason_lower = dt['reason'].lower()
-                # First check if it's in excluded list
+                category = dt.get('category', '').lower()
+                
+                # PRIORITY 1: Use category from user input if available
+                # If category is 'mesin' or 'operator', include in Top 3
+                if category in ['mesin', 'machine', 'operator']:
+                    # Still exclude biological breaks even if categorized as mesin/operator
+                    biological_breaks = ['istirahat', 'sholat', 'solat', 'makan', 'minum', 
+                                        'toilet', 'wc', 'buang air', 'jumatan', 'jumat']
+                    if not any(kw in reason_lower for kw in biological_breaks):
+                        filtered_downtime.append(dt)
+                    continue
+                
+                # PRIORITY 2: Check excluded keywords (skip if matched)
                 if any(kw in reason_lower for kw in excluded_keywords):
                     continue
-                # Then check if it's machine or operator repair
+                    
+                # PRIORITY 3: Check machine or operator repair keywords
                 if (any(kw in reason_lower for kw in machine_keywords) or
                     any(kw in reason_lower for kw in operator_repair_keywords)):
                     filtered_downtime.append(dt)
@@ -1546,43 +1750,106 @@ def get_daily_controller():
             # Sort shifts by shift number
             machines_data[machine_id]['shifts'].sort(key=lambda x: x['shift'])
             
+            # Consolidate early_stop to LAST sub-shift per shift number
+            # e.g., if shift 1a has early_stop, move it to shift 1c (last entry)
+            shifts_list = machines_data[machine_id]['shifts']
+            shift_groups = {}
+            for idx, s in enumerate(shifts_list):
+                sn = s['shift']
+                if sn not in shift_groups:
+                    shift_groups[sn] = []
+                shift_groups[sn].append(idx)
+            
+            for sn, indices in shift_groups.items():
+                if len(indices) > 1:
+                    # Collect early_stop from all entries in this shift group
+                    early_stop_data = None
+                    for idx in indices:
+                        if shifts_list[idx].get('early_stop'):
+                            early_stop_data = {
+                                'early_stop': True,
+                                'early_stop_time': shifts_list[idx].get('early_stop_time'),
+                                'early_stop_reason': shifts_list[idx].get('early_stop_reason'),
+                                'early_stop_notes': shifts_list[idx].get('early_stop_notes'),
+                                'operator_reassigned': shifts_list[idx].get('operator_reassigned'),
+                                'reassignment_task': shifts_list[idx].get('reassignment_task'),
+                            }
+                            # Clear from this entry
+                            shifts_list[idx]['early_stop'] = False
+                            shifts_list[idx]['early_stop_time'] = None
+                            shifts_list[idx]['early_stop_reason'] = None
+                            shifts_list[idx]['early_stop_notes'] = None
+                    
+                    # Assign to last entry
+                    if early_stop_data:
+                        last_idx = indices[-1]
+                        shifts_list[last_idx].update(early_stop_data)
+            
             # Calculate Runtime = Grade A / machine speed
             total_grade_a = machines_data[machine_id]['total_grade_a']
             total_downtime = machines_data[machine_id]['total_downtime']
             total_idle = machines_data[machine_id]['total_idle']
             
-            # Get machine speed from ShiftProduction (sum of all shifts, take average if multiple)
-            # Speed is already in pcs/menit, no conversion needed
-            machine_speed_total = machines_data[machine_id].get('total_machine_speed', 0)
-            shift_count = len(machines_data[machine_id]['shifts'])
+            # Get machine speed: average by UNIQUE shifts (not total records)
+            # e.g., 3 records in shift_1 all with speed=25 → average = 25, not 25*3/3
+            shifts_seen = machines_data[machine_id].get('shifts_seen', {})
+            unique_shift_count = len(shifts_seen)
+            shift_count = unique_shift_count if unique_shift_count > 0 else 1
+            
+            # Sum machine_speed per unique shift for averaging
+            machine_speed_total = sum(s['machine_speed'] for s in shifts_seen.values())
             machine_speed_per_minute = machine_speed_total / shift_count if shift_count > 0 else 0
             
             # Runtime = Grade A / Speed (in minutes)
+            # Use math.floor(x + 0.5) for standard rounding (Python's round uses banker's rounding)
+            import math
             runtime = 0
             if machine_speed_per_minute > 0:
-                runtime = int(round(total_grade_a / machine_speed_per_minute))
+                runtime = int(math.floor(total_grade_a / machine_speed_per_minute + 0.5))
             
-            # Average Time = default 510 minutes (can be overridden from shift data)
-            # For daily controller, use 510 as default per shift
-            average_time = 510 * shift_count if shift_count > 0 else 510
+            # Average Time = total available time based on UNIQUE shifts
+            # For multi-product in same shift, use default shift duration (not sum of per-record planned_runtime)
+            is_friday = target_date.weekday() == 4
+            average_time = 0
+            for sn, sdata in shifts_seen.items():
+                if sn == 1:
+                    average_time += 540 if is_friday else 510
+                elif sn == 2:
+                    average_time += 510
+                else:
+                    average_time += 450
+            
+            # Fallback
+            if average_time == 0:
+                default_minutes_per_shift = 540 if is_friday else 510
+                average_time = default_minutes_per_shift
+            
+            # Get user-input waktu_tidak_tercatat from shift data (sum of all shifts)
+            user_waktu_tidak_tercatat = sum(shift.get('waktu_tidak_tercatat', 0) for shift in machines_data[machine_id]['shifts'])
             
             # Waktu Tercatat = Runtime + Downtime + Idle (Idle IS recorded time, just different category)
             waktu_tercatat = runtime + total_downtime + total_idle
             
-            # Waktu Tidak Tercatat = Average Time - Waktu Tercatat (truly unaccounted time)
+            # Waktu Tidak Tercatat = Always calculate dynamically from average_time
+            # (stored DB value is stale because runtime is recalculated dynamically)
             waktu_tidak_tercatat = max(0, average_time - waktu_tercatat)
             
             # Store calculated values
             machines_data[machine_id]['runtime'] = runtime
             machines_data[machine_id]['average_time'] = average_time
+            # IMPORTANT: Override total_planned with capped average_time
+            # This prevents inflation when multiple sub-shifts exist in same shift number
+            # e.g., Shift 1a (300m) + Shift 1b (210m) should still total 510m, not 510+510
+            machines_data[machine_id]['total_planned'] = average_time
             machines_data[machine_id]['waktu_tercatat'] = waktu_tercatat
             machines_data[machine_id]['waktu_tidak_tercatat'] = waktu_tidak_tercatat
             machines_data[machine_id]['mrt'] = runtime  # For backward compatibility
             machines_data[machine_id]['total_time'] = average_time
             
-            # Efficiency = Runtime / Average Time * 100
+            # Efficiency = Runtime / Average Time * 100 (this IS the machine efficiency now)
             if average_time > 0:
                 machines_data[machine_id]['efficiency'] = round((runtime / average_time) * 100, 1)
+                machines_data[machine_id]['machine_efficiency'] = machines_data[machine_id]['efficiency']
             machines_data[machine_id]['machine_speed'] = int(round(machine_speed_per_minute))  # pcs/menit
             
             # Calculate Quality = (Grade A / Total Output) * 100
@@ -1590,10 +1857,98 @@ def get_daily_controller():
             if total_output > 0:
                 machines_data[machine_id]['quality'] = round((total_grade_a / total_output) * 100, 1)
             
-            # Calculate Machine Efficiency = (Grade A / Target) * 100
-            total_target = machines_data[machine_id]['total_target']
-            if total_target > 0:
-                machines_data[machine_id]['machine_efficiency'] = round((total_grade_a / total_target) * 100, 1)
+            # Calculate Target = Machine Speed × Average Time × Target Efficiency (60%)
+            target_efficiency_pct = machines_data[machine_id].get('target_efficiency', 60) / 100
+            calculated_target = int(machine_speed_per_minute * average_time * target_efficiency_pct)
+            machines_data[machine_id]['total_target'] = calculated_target
+            
+            # ========== PER-SHIFT EFFICIENCY ==========
+            # Group shift entries by shift number and calculate efficiency per shift
+            shift_summaries = {}
+            for s in machines_data[machine_id]['shifts']:
+                sn = s['shift']
+                if sn not in shift_summaries:
+                    shift_summaries[sn] = {
+                        'shift': sn,
+                        'grade_a': 0,
+                        'grade_b': 0,
+                        'grade_c': 0,
+                        'total_output': 0,
+                        'downtime': 0,
+                        'idle': 0,
+                        'products': [],
+                    }
+                shift_summaries[sn]['grade_a'] += s['grade_a']
+                shift_summaries[sn]['grade_b'] += s['grade_b']
+                shift_summaries[sn]['grade_c'] += s['grade_c']
+                shift_summaries[sn]['total_output'] += s['total']
+                shift_summaries[sn]['downtime'] += s['downtime_minutes']
+                shift_summaries[sn]['idle'] += s['idle_time_minutes']
+                if s.get('product_name') and s['product_name'] not in shift_summaries[sn]['products']:
+                    shift_summaries[sn]['products'].append(s['product_name'])
+            
+            for sn, ss in shift_summaries.items():
+                # Get machine speed for this shift from shifts_seen
+                shift_speed = shifts_seen.get(sn, {}).get('machine_speed', 0)
+                
+                # Available time for this shift number
+                if sn == 1:
+                    ss['average_time'] = 540 if is_friday else 510
+                elif sn == 2:
+                    ss['average_time'] = 510
+                else:
+                    ss['average_time'] = 450
+                
+                # Runtime = Grade A / Speed
+                ss['machine_speed'] = shift_speed
+                ss['runtime'] = 0
+                if shift_speed > 0:
+                    ss['runtime'] = int(math.floor(ss['grade_a'] / shift_speed + 0.5))
+                
+                # Waktu tercatat & tidak tercatat
+                ss['waktu_tercatat'] = ss['runtime'] + ss['downtime'] + ss['idle']
+                ss['waktu_tidak_tercatat'] = max(0, ss['average_time'] - ss['waktu_tercatat'])
+                
+                # Efficiency = Runtime / Available Time * 100 (this IS the machine efficiency)
+                ss['efficiency'] = 0
+                if ss['average_time'] > 0:
+                    ss['efficiency'] = round((ss['runtime'] / ss['average_time']) * 100, 1)
+                ss['machine_efficiency'] = ss['efficiency']
+                
+                # Quality = Grade A / Total Output * 100
+                ss['quality'] = 0
+                if ss['total_output'] > 0:
+                    ss['quality'] = round((ss['grade_a'] / ss['total_output']) * 100, 1)
+                
+                # Target = Speed * Available Time * Target Efficiency%
+                ss['target'] = int(shift_speed * ss['average_time'] * target_efficiency_pct)
+                
+                # Per-shift Top 3 Downtime (same filter logic as machine-level)
+                per_shift_dt = machines_data[machine_id].get('per_shift_downtime', {}).get(sn, [])
+                filtered_shift_dt = []
+                for dt in per_shift_dt:
+                    if dt.get('is_idle', False):
+                        continue
+                    reason_lower = dt['reason'].lower()
+                    category = dt.get('category', '').lower()
+                    if category in ['mesin', 'machine', 'operator']:
+                        biological_breaks = ['istirahat', 'sholat', 'solat', 'makan', 'minum',
+                                            'toilet', 'wc', 'buang air', 'jumatan', 'jumat']
+                        if not any(kw in reason_lower for kw in biological_breaks):
+                            filtered_shift_dt.append(dt)
+                        continue
+                    if any(kw in reason_lower for kw in excluded_keywords):
+                        continue
+                    if (any(kw in reason_lower for kw in machine_keywords) or
+                        any(kw in reason_lower for kw in operator_repair_keywords)):
+                        filtered_shift_dt.append(dt)
+                filtered_shift_dt.sort(key=lambda x: x['duration_minutes'], reverse=True)
+                ss['top_3_downtime'] = [{'reason': d['reason'], 'duration_minutes': d['duration_minutes'], 'frequency': d.get('frequency', 1)} for d in filtered_shift_dt[:3]]
+            
+            # Store as list sorted by shift number
+            machines_data[machine_id]['shift_summaries'] = [
+                shift_summaries[sn] for sn in sorted(shift_summaries.keys())
+            ]
         
         # Convert to list and sort by machine name
         result = list(machines_data.values())
@@ -1606,6 +1961,354 @@ def get_daily_controller():
         }), 200
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@oee_bp.route('/daily-controller-detail', methods=['GET'])
+@jwt_required()
+def get_daily_controller_detail():
+    """Get detailed production data for a specific date - includes all downtime, timeline, and WO details"""
+    try:
+        from models.production import ShiftProduction, WorkOrder
+        
+        selected_date = request.args.get('date')
+        if selected_date:
+            target_date = datetime.strptime(selected_date, '%Y-%m-%d').date()
+        else:
+            target_date = get_local_today()
+        
+        # Get all shift productions for this date with eager loading
+        from sqlalchemy.orm import joinedload
+        shift_records = ShiftProduction.query.options(
+            joinedload(ShiftProduction.work_order),
+            joinedload(ShiftProduction.machine),
+            joinedload(ShiftProduction.product),
+            joinedload(ShiftProduction.operator),
+            joinedload(ShiftProduction.supervisor)
+        ).filter(
+            ShiftProduction.production_date == target_date
+        ).order_by(ShiftProduction.machine_id, ShiftProduction.shift).all()
+        
+        # IDLE TIME keywords
+        idle_keywords = [
+            'tunggu kain', 'ambil kain', 'menunggu kain', 'nunggu kain', 'kain belum datang',
+            'tunggu obat', 'menunggu obat', 'nunggu obat', 'obat belum datang',
+            'tunggu tinta', 'menunggu tinta', 'nunggu tinta',
+            'tunggu ingredient', 'ingredient habis', 'tunggu bahan kimia',
+            'tunggu stiker', 'menunggu stiker', 'nunggu stiker', 'stiker belum datang',
+            'tunggu packing', 'tunggu packaging', 'menunggu packing', 'nunggu packing',
+            'packaging belum datang', 'box belum datang',
+            'tunggu mixing', 'menunggu mixing', 'nunggu mixing', 'mixing belum siap',
+            'tunggu label', 'tunggu box', 'tunggu karton', 'tunggu lem',
+            'tunggu produk', 'tunggu temperatur stabil', 'tunggu temperatur',
+            'tunggu temperature stabil', 'tunggu temperature',
+            'tunggu bahan', 'tunggu material', 'tunggu order', 'tunggu instruksi',
+            'tunggu approval', 'tunggu qc', 'tunggu hasil qc',
+            'kain habis', 'stiker habis', 'packing habis', 'packaging habis',
+            'label habis', 'karton habis', 'box habis', 'lem habis', 'tinta habis',
+            'bahan habis', 'material habis',
+            'waiting for', 'standby material', 'waiting material', 'no material',
+            'idle', 'standby', 'menganggur', 'tidak ada order', 'no order', 'menhabiskan order',
+            'susun produk'
+        ]
+        
+        # Downtime category mapping - use unified function from helpers
+        def get_downtime_category(reason_lower):
+            return detect_downtime_category(reason_lower)
+        
+        # PIC mapping berdasarkan kategori downtime
+        PIC_BY_CATEGORY = {
+            'mesin': 'MTC',
+            'operator': 'Supervisor',
+            'material': 'Warehouse',
+            'design': 'Supervisor',
+            'idle': 'Supervisor',
+            'istirahat': 'Supervisor',
+            'others': 'Supervisor',
+            'lainnya': 'Supervisor'
+        }
+        
+        # Group data by machine
+        machines_data = {}
+        all_work_orders = {}
+        timeline_data = []
+        
+        for sp in shift_records:
+            machine_id = sp.machine_id
+            
+            if machine_id not in machines_data:
+                machines_data[machine_id] = {
+                    'machine_id': machine_id,
+                    'machine_name': sp.machine.name if sp.machine else f'Machine {machine_id}',
+                    'machine_code': sp.machine.code if sp.machine else None,
+                    'target_efficiency': int(sp.machine.target_efficiency) if sp.machine and sp.machine.target_efficiency else 60,
+                    'date': target_date.isoformat(),
+                    'all_downtime': [],
+                    'work_orders': [],
+                    'timeline': [],
+                    'operators': [],
+                    'supervisors': [],
+                    'total_output': 0,
+                    'total_grade_a': 0,
+                    'total_grade_b': 0,
+                    'total_grade_c': 0,
+                    'total_downtime': 0,
+                    'total_idle': 0,
+                    'total_runtime': 0
+                }
+            
+            # Get operator and supervisor info (PIC)
+            operator_name = None
+            supervisor_name = None
+            if sp.operator:
+                operator_name = sp.operator.full_name if hasattr(sp.operator, 'full_name') else f"Employee {sp.operator_id}"
+                if operator_name not in machines_data[machine_id]['operators']:
+                    machines_data[machine_id]['operators'].append(operator_name)
+            if sp.supervisor:
+                supervisor_name = sp.supervisor.full_name if hasattr(sp.supervisor, 'full_name') else f"Employee {sp.supervisor_id}"
+                if supervisor_name not in machines_data[machine_id]['supervisors']:
+                    machines_data[machine_id]['supervisors'].append(supervisor_name)
+            
+            # Extract shift number
+            shift_num = 1
+            if sp.shift:
+                shift_match = re.search(r'(\d+)', str(sp.shift))
+                if shift_match:
+                    shift_num = int(shift_match.group(1))
+            
+            # Parse ALL downtime from issues field
+            if sp.issues:
+                issue_parts = sp.issues.split(';')
+                for part in issue_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+)', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason_with_tag = match.group(2).strip()
+                        
+                        # Check for category tag
+                        category_match = re.search(r'\[(\w+)\]', reason_with_tag, re.IGNORECASE)
+                        explicit_category = category_match.group(1).lower() if category_match else None
+                        
+                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason_with_tag).strip()
+                        reason_lower = reason.lower()
+                        
+                        # Determine category
+                        if explicit_category == 'idle':
+                            category = 'idle'
+                        elif explicit_category:
+                            category = explicit_category
+                        else:
+                            category = get_downtime_category(reason_lower)
+                        
+                        # Always re-check: if auto-detect says 'idle', override explicit tag
+                        auto_cat = get_downtime_category(reason_lower)
+                        if auto_cat == 'idle':
+                            category = 'idle'
+                        
+                        is_idle = category == 'idle'
+                        
+                        downtime_entry = {
+                            'reason': reason,
+                            'duration_minutes': duration,
+                            'category': category,
+                            'is_idle': is_idle,
+                            'shift': shift_num,
+                            'pic': PIC_BY_CATEGORY.get(category, '-'),
+                            'product_name': sp.product.name if sp.product else None,
+                            'wo_number': sp.work_order.wo_number if sp.work_order else None
+                        }
+                        machines_data[machine_id]['all_downtime'].append(downtime_entry)
+                        
+                        if is_idle:
+                            machines_data[machine_id]['total_idle'] += duration
+                        else:
+                            machines_data[machine_id]['total_downtime'] += duration
+            
+            # Also include downtime_records from database (if available)
+            try:
+                for dr in sp.downtime_records:
+                    resolved_by_name = None
+                    try:
+                        if dr.resolved_by_employee:
+                            resolved_by_name = getattr(dr.resolved_by_employee, 'full_name', None)
+                    except:
+                        pass
+                    
+                    dr_category = dr.downtime_category or 'others'
+                    # Override: if auto-detect says 'idle', use that
+                    dr_reason = (dr.downtime_reason or '').lower()
+                    if get_downtime_category(dr_reason) == 'idle':
+                        dr_category = 'idle'
+                    downtime_entry = {
+                        'reason': dr.downtime_reason or 'Unknown',
+                        'duration_minutes': dr.duration_minutes or 0,
+                        'category': dr_category,
+                        'is_idle': dr_category in ['idle', 'material_shortage'],
+                        'shift': shift_num,
+                        'pic': PIC_BY_CATEGORY.get(dr_category, '-'),
+                        'root_cause': dr.root_cause,
+                        'action_taken': dr.action_taken,
+                        'status': dr.status,
+                        'product_name': sp.product.name if sp.product else None,
+                        'wo_number': sp.work_order.wo_number if sp.work_order else None
+                    }
+                    # Avoid duplicates
+                    existing = next((d for d in machines_data[machine_id]['all_downtime'] 
+                                   if d['reason'] == dr.downtime_reason and d['shift'] == shift_num), None)
+                    if not existing:
+                        machines_data[machine_id]['all_downtime'].append(downtime_entry)
+            except Exception as dr_error:
+                pass  # Skip downtime_records if there's an error
+            
+            # Work Order details
+            if sp.work_order:
+                try:
+                    wo = sp.work_order
+                    wo_key = f"{machine_id}_{wo.id}"
+                    
+                    # Get product info safely
+                    wo_product_name = 'Unknown'
+                    wo_product_code = None
+                    try:
+                        if wo.product:
+                            wo_product_name = wo.product.name
+                            wo_product_code = wo.product.code
+                        elif sp.product:
+                            wo_product_name = sp.product.name
+                            wo_product_code = sp.product.code
+                    except:
+                        pass
+                    
+                    if wo_key not in all_work_orders:
+                        all_work_orders[wo_key] = {
+                            'wo_id': wo.id,
+                            'wo_number': wo.wo_number,
+                            'machine_id': machine_id,
+                            'machine_name': machines_data[machine_id]['machine_name'],
+                            'product_name': wo_product_name,
+                            'product_code': wo_product_code,
+                            'target_quantity': float(wo.target_quantity) if wo.target_quantity else 0,
+                            'actual_quantity': 0,
+                            'good_quantity': 0,
+                            'reject_quantity': 0,
+                            'rework_quantity': 0,
+                            'efficiency': 0,
+                            'quality_rate': 0,
+                            'shifts_worked': [],
+                            'operators': [],
+                            'supervisors': [],
+                            'status': wo.status,
+                            'start_date': wo.start_date.isoformat() if wo.start_date else None,
+                            'due_date': wo.due_date.isoformat() if wo.due_date else None
+                        }
+                    
+                    # Accumulate quantities
+                    all_work_orders[wo_key]['actual_quantity'] += float(sp.actual_quantity) if sp.actual_quantity else 0
+                    all_work_orders[wo_key]['good_quantity'] += float(sp.good_quantity) if sp.good_quantity else 0
+                    all_work_orders[wo_key]['reject_quantity'] += float(sp.reject_quantity) if sp.reject_quantity else 0
+                    all_work_orders[wo_key]['rework_quantity'] += float(sp.rework_quantity) if sp.rework_quantity else 0
+                    
+                    if shift_num not in all_work_orders[wo_key]['shifts_worked']:
+                        all_work_orders[wo_key]['shifts_worked'].append(shift_num)
+                    if operator_name and operator_name not in all_work_orders[wo_key]['operators']:
+                        all_work_orders[wo_key]['operators'].append(operator_name)
+                    if supervisor_name and supervisor_name not in all_work_orders[wo_key]['supervisors']:
+                        all_work_orders[wo_key]['supervisors'].append(supervisor_name)
+                except Exception as wo_error:
+                    pass  # Skip work order if there's an error
+            
+            # Timeline entry
+            shift_times = {1: ('06:30', '15:00'), 2: ('15:00', '23:00'), 3: ('23:00', '06:30')}
+            start_time, end_time = shift_times.get(shift_num, ('00:00', '00:00'))
+            
+            timeline_entry = {
+                'machine_id': machine_id,
+                'machine_name': machines_data[machine_id]['machine_name'],
+                'shift': shift_num,
+                'start_time': start_time,
+                'end_time': end_time,
+                'product_name': sp.product.name if sp.product else 'Unknown',
+                'wo_number': sp.work_order.wo_number if sp.work_order else None,
+                'output': float(sp.actual_quantity) if sp.actual_quantity else 0,
+                'grade_a': float(sp.good_quantity) if sp.good_quantity else 0,
+                'downtime': int(sp.downtime_mesin or 0) + int(sp.downtime_operator or 0) + int(sp.downtime_material or 0) + int(sp.downtime_design or 0) + int(sp.downtime_others or 0),
+                'idle': int(sp.idle_time) if sp.idle_time else 0,
+                'operator': operator_name,
+                'supervisor': supervisor_name,
+                'efficiency_rate': float(sp.efficiency_rate) if sp.efficiency_rate else 0,
+                'quality_rate': float(sp.quality_rate) if sp.quality_rate else 0
+            }
+            machines_data[machine_id]['timeline'].append(timeline_entry)
+            
+            # Accumulate totals
+            machines_data[machine_id]['total_output'] += float(sp.actual_quantity) if sp.actual_quantity else 0
+            machines_data[machine_id]['total_grade_a'] += float(sp.good_quantity) if sp.good_quantity else 0
+            machines_data[machine_id]['total_grade_b'] += float(sp.rework_quantity) if sp.rework_quantity else 0
+            machines_data[machine_id]['total_grade_c'] += float(sp.reject_quantity) if sp.reject_quantity else 0
+        
+        # Calculate WO efficiency and quality
+        for wo_key, wo_data in all_work_orders.items():
+            if wo_data['target_quantity'] > 0:
+                wo_data['efficiency'] = round((wo_data['good_quantity'] / wo_data['target_quantity']) * 100, 1)
+            if wo_data['actual_quantity'] > 0:
+                wo_data['quality_rate'] = round((wo_data['good_quantity'] / wo_data['actual_quantity']) * 100, 1)
+        
+        # Attach WO data to machines
+        for wo_key, wo_data in all_work_orders.items():
+            machine_id = wo_data['machine_id']
+            if machine_id in machines_data:
+                machines_data[machine_id]['work_orders'].append(wo_data)
+        
+        # Sort downtime by duration (descending)
+        for machine_id in machines_data:
+            machines_data[machine_id]['all_downtime'].sort(key=lambda x: x['duration_minutes'], reverse=True)
+            machines_data[machine_id]['timeline'].sort(key=lambda x: x['shift'])
+        
+        # Convert to list
+        result = list(machines_data.values())
+        result.sort(key=lambda x: x['machine_name'])
+        
+        # Calculate summary
+        wo_list = list(all_work_orders.values())
+        total_downtime = sum(m['total_downtime'] for m in result)
+        total_idle = sum(m['total_idle'] for m in result)
+        total_output = sum(m['total_output'] for m in result)
+        total_grade_a = sum(m['total_grade_a'] for m in result)
+        
+        # Calculate average efficiency from work orders
+        avg_efficiency = 0
+        if wo_list:
+            valid_efficiencies = [wo['efficiency'] for wo in wo_list if wo['efficiency'] > 0]
+            if valid_efficiencies:
+                avg_efficiency = round(sum(valid_efficiencies) / len(valid_efficiencies), 1)
+        
+        # If no WO efficiency, calculate from output
+        if avg_efficiency == 0 and total_output > 0:
+            total_target = sum(wo['target_quantity'] for wo in wo_list) if wo_list else 0
+            if total_target > 0:
+                avg_efficiency = round((total_grade_a / total_target) * 100, 1)
+        
+        return jsonify({
+            'date': target_date.isoformat(),
+            'machines': result,
+            'work_orders': wo_list,
+            'total_machines': len(result),
+            'summary': {
+                'total_downtime': total_downtime,
+                'total_idle': total_idle,
+                'total_output': total_output,
+                'total_grade_a': total_grade_a,
+                'total_work_orders': len(wo_list),
+                'avg_efficiency': avg_efficiency
+            }
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -1747,7 +2450,8 @@ def get_weekly_controller():
                     'downtime': 0,
                     'idle': 0,
                     'machine_speed': 0,
-                    'shift_count': 0
+                    'shift_count': 0,
+                    'shifts_seen': {}
                 }
             
             grade_a = int(sp.good_quantity) if sp.good_quantity else 0
@@ -1760,7 +2464,18 @@ def get_weekly_controller():
             machines_data[machine_id]['daily_data'][date_key]['output'] += output
             machines_data[machine_id]['daily_data'][date_key]['downtime'] += downtime
             machines_data[machine_id]['daily_data'][date_key]['idle'] += idle
-            machines_data[machine_id]['daily_data'][date_key]['machine_speed'] += speed
+            # Track unique shifts per day for proper speed averaging
+            import re as _re
+            shift_num = 1
+            if sp.shift:
+                _m = _re.search(r'(\d+)', str(sp.shift))
+                if _m:
+                    shift_num = int(_m.group(1))
+            day_shifts_seen = machines_data[machine_id]['daily_data'][date_key]['shifts_seen']
+            if shift_num not in day_shifts_seen:
+                day_shifts_seen[shift_num] = speed
+            elif speed > day_shifts_seen[shift_num]:
+                day_shifts_seen[shift_num] = speed
             machines_data[machine_id]['daily_data'][date_key]['shift_count'] += 1
             
             machines_data[machine_id]['total_grade_a'] += grade_a
@@ -1777,14 +2492,21 @@ def get_weekly_controller():
             # Calculate daily efficiencies
             for date_key in data['daily_data']:
                 day_data = data['daily_data'][date_key]
-                speed_per_min = day_data['machine_speed'] / day_data['shift_count'] if day_data['shift_count'] > 0 else 0
+                # Average speed by unique shifts, not total records
+                day_shifts = day_data.get('shifts_seen', {})
+                speed_per_min = sum(day_shifts.values()) / len(day_shifts) if day_shifts else 0
                 mrt = day_data['grade_a'] / speed_per_min if speed_per_min > 0 else 0
                 total_time = mrt + day_data['downtime'] + day_data['idle']
                 day_data['efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
                 day_data['mrt'] = round(mrt, 1)
             
-            # Calculate weekly average efficiency
-            speed_per_min = data['total_machine_speed'] / data['shift_count'] if data['shift_count'] > 0 else 0
+            # Calculate weekly average efficiency - use unique shifts across all days
+            all_shifts = {}
+            for dk in data['daily_data']:
+                for sn, spd in data['daily_data'][dk].get('shifts_seen', {}).items():
+                    day_shift_key = f"{dk}_{sn}"
+                    all_shifts[day_shift_key] = spd
+            speed_per_min = sum(all_shifts.values()) / len(all_shifts) if all_shifts else 0
             mrt = data['total_grade_a'] / speed_per_min if speed_per_min > 0 else 0
             total_time = mrt + data['total_downtime'] + data['total_idle']
             data['avg_efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
@@ -1795,11 +2517,110 @@ def get_weekly_controller():
         result = list(machines_data.values())
         result.sort(key=lambda x: x['machine_name'])
         
+        # === NEW: Collect products produced and downtime data ===
+        products_produced = {}  # {product_name: {'quantity': X, 'grade_a': Y, 'machines': set()}}
+        all_downtime = {}  # {reason: {'duration': X, 'frequency': Y}}
+        daily_summary = {}  # {date: {'output': X, 'downtime': Y, 'efficiency': Z}}
+        
+        for sp in shift_records:
+            # Products produced
+            product_name = None
+            if sp.product:
+                product_name = sp.product.name
+            elif sp.work_order and sp.work_order.product:
+                product_name = sp.work_order.product.name
+            
+            if product_name:
+                if product_name not in products_produced:
+                    products_produced[product_name] = {
+                        'product_name': product_name,
+                        'quantity': 0,
+                        'grade_a': 0,
+                        'grade_b': 0,
+                        'grade_c': 0,
+                        'machines': set()
+                    }
+                products_produced[product_name]['quantity'] += int(sp.actual_quantity) if sp.actual_quantity else 0
+                products_produced[product_name]['grade_a'] += int(sp.good_quantity) if sp.good_quantity else 0
+                products_produced[product_name]['grade_b'] += int(sp.rework_quantity) if sp.rework_quantity else 0
+                products_produced[product_name]['grade_c'] += int(sp.reject_quantity) if sp.reject_quantity else 0
+                if sp.machine:
+                    products_produced[product_name]['machines'].add(sp.machine.name)
+            
+            # Parse downtime from issues field
+            if sp.issues:
+                issue_parts = sp.issues.split(';')
+                for part in issue_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+)', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason = match.group(2).strip()
+                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason).strip()
+                        
+                        if reason not in all_downtime:
+                            all_downtime[reason] = {'reason': reason, 'duration': 0, 'frequency': 0, 'category': detect_downtime_category(reason.lower())}
+                        all_downtime[reason]['duration'] += duration
+                        all_downtime[reason]['frequency'] += 1
+            
+            # Daily summary for chart
+            date_key = sp.production_date.isoformat()
+            if date_key not in daily_summary:
+                daily_summary[date_key] = {
+                    'date': date_key,
+                    'output': 0,
+                    'grade_a': 0,
+                    'downtime': 0,
+                    'idle': 0,
+                    'machine_speed': 0,
+                    'shift_count': 0
+                }
+            daily_summary[date_key]['output'] += int(sp.actual_quantity) if sp.actual_quantity else 0
+            daily_summary[date_key]['grade_a'] += int(sp.good_quantity) if sp.good_quantity else 0
+            daily_summary[date_key]['downtime'] += int(sp.downtime_mesin or 0) + int(sp.downtime_operator or 0) + int(sp.downtime_material or 0) + int(sp.downtime_design or 0) + int(sp.downtime_others or 0)
+            daily_summary[date_key]['idle'] += int(sp.idle_time) if sp.idle_time else 0
+            daily_summary[date_key]['machine_speed'] += int(sp.machine_speed) if sp.machine_speed else 0
+            daily_summary[date_key]['shift_count'] += 1
+        
+        # Calculate efficiency for daily summary
+        for date_key in daily_summary:
+            day = daily_summary[date_key]
+            speed_per_min = day['machine_speed'] / day['shift_count'] if day['shift_count'] > 0 else 0
+            mrt = day['grade_a'] / speed_per_min if speed_per_min > 0 else 0
+            total_time = mrt + day['downtime'] + day['idle']
+            day['efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
+        
+        # Convert products to list and sort
+        products_list = []
+        for p in products_produced.values():
+            p['machines'] = list(p['machines'])
+            products_list.append(p)
+        products_list.sort(key=lambda x: x['quantity'], reverse=True)
+        
+        # Sort downtime by duration and get top 10
+        downtime_list = list(all_downtime.values())
+        downtime_list.sort(key=lambda x: x['duration'], reverse=True)
+        top_10_downtime = downtime_list[:10]
+        
+        # Daily chart data sorted by date
+        chart_data = list(daily_summary.values())
+        chart_data.sort(key=lambda x: x['date'])
+        
+        # Pie chart data - downtime distribution
+        pie_chart_data = [{'name': d['reason'][:20], 'value': d['duration']} for d in top_10_downtime]
+        
         return jsonify({
             'week_start': week_start.isoformat(),
             'week_end': week_end.isoformat(),
             'machines': result,
-            'total_machines': len(result)
+            'total_machines': len(result),
+            'products_produced': products_list,
+            'all_downtime': downtime_list,
+            'top_10_downtime': top_10_downtime,
+            'chart_data': chart_data,
+            'pie_chart_data': pie_chart_data
         }), 200
         
     except Exception as e:
@@ -1863,7 +2684,8 @@ def get_monthly_controller():
                     'downtime': 0,
                     'idle': 0,
                     'machine_speed': 0,
-                    'shift_count': 0
+                    'shift_count': 0,
+                    'shifts_seen': {}
                 }
             
             grade_a = int(sp.good_quantity) if sp.good_quantity else 0
@@ -1876,7 +2698,19 @@ def get_monthly_controller():
             machines_data[machine_id]['weekly_data'][week_key]['output'] += output
             machines_data[machine_id]['weekly_data'][week_key]['downtime'] += downtime
             machines_data[machine_id]['weekly_data'][week_key]['idle'] += idle
-            machines_data[machine_id]['weekly_data'][week_key]['machine_speed'] += speed
+            # Track unique shifts per date for proper speed averaging
+            import re as _re
+            _shift_num = 1
+            if sp.shift:
+                _sm = _re.search(r'(\d+)', str(sp.shift))
+                if _sm:
+                    _shift_num = int(_sm.group(1))
+            _date_shift_key = f"{sp.production_date.isoformat()}_{_shift_num}"
+            wk_shifts = machines_data[machine_id]['weekly_data'][week_key]['shifts_seen']
+            if _date_shift_key not in wk_shifts:
+                wk_shifts[_date_shift_key] = speed
+            elif speed > wk_shifts[_date_shift_key]:
+                wk_shifts[_date_shift_key] = speed
             machines_data[machine_id]['weekly_data'][week_key]['shift_count'] += 1
             
             machines_data[machine_id]['total_grade_a'] += grade_a
@@ -1893,13 +2727,19 @@ def get_monthly_controller():
             # Calculate weekly efficiencies
             for week_key in data['weekly_data']:
                 week_data = data['weekly_data'][week_key]
-                speed_per_min = week_data['machine_speed'] / week_data['shift_count'] if week_data['shift_count'] > 0 else 0
+                # Average speed by unique shifts, not total records
+                wk_shifts = week_data.get('shifts_seen', {})
+                speed_per_min = sum(wk_shifts.values()) / len(wk_shifts) if wk_shifts else 0
                 mrt = week_data['grade_a'] / speed_per_min if speed_per_min > 0 else 0
                 total_time = mrt + week_data['downtime'] + week_data['idle']
                 week_data['efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
             
-            # Calculate monthly average efficiency
-            speed_per_min = data['total_machine_speed'] / data['shift_count'] if data['shift_count'] > 0 else 0
+            # Calculate monthly average efficiency - use unique shifts across all weeks
+            all_shifts = {}
+            for wk in data['weekly_data']:
+                for sk, spd in data['weekly_data'][wk].get('shifts_seen', {}).items():
+                    all_shifts[sk] = spd
+            speed_per_min = sum(all_shifts.values()) / len(all_shifts) if all_shifts else 0
             mrt = data['total_grade_a'] / speed_per_min if speed_per_min > 0 else 0
             total_time = mrt + data['total_downtime'] + data['total_idle']
             data['avg_efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
@@ -1909,6 +2749,133 @@ def get_monthly_controller():
         
         result = list(machines_data.values())
         result.sort(key=lambda x: x['machine_name'])
+        
+        # === NEW: Collect products produced and downtime data ===
+        products_produced = {}
+        products_per_machine = {}  # {machine_name: {product_name: {quantity, grade_a, ...}}}
+        all_downtime = {}
+        weekly_summary = {}  # {week: {'output': X, 'downtime': Y, 'efficiency': Z}}
+        
+        for sp in shift_records:
+            # Products produced
+            product_name = None
+            if sp.product:
+                product_name = sp.product.name
+            elif sp.work_order and sp.work_order.product:
+                product_name = sp.work_order.product.name
+            
+            if product_name:
+                if product_name not in products_produced:
+                    products_produced[product_name] = {
+                        'product_name': product_name,
+                        'quantity': 0,
+                        'grade_a': 0,
+                        'grade_b': 0,
+                        'grade_c': 0,
+                        'machines': set()
+                    }
+                products_produced[product_name]['quantity'] += int(sp.actual_quantity) if sp.actual_quantity else 0
+                products_produced[product_name]['grade_a'] += int(sp.good_quantity) if sp.good_quantity else 0
+                products_produced[product_name]['grade_b'] += int(sp.rework_quantity) if sp.rework_quantity else 0
+                products_produced[product_name]['grade_c'] += int(sp.reject_quantity) if sp.reject_quantity else 0
+                if sp.machine:
+                    products_produced[product_name]['machines'].add(sp.machine.name)
+            
+            # Parse downtime from issues field
+            if sp.issues:
+                issue_parts = sp.issues.split(';')
+                for part in issue_parts:
+                    part = part.strip()
+                    if not part:
+                        continue
+                    match = re.match(r'(\d+)\s*menit\s*-\s*(.+)', part, re.IGNORECASE)
+                    if match:
+                        duration = int(match.group(1))
+                        reason = match.group(2).strip()
+                        reason = re.sub(r'\s*\[\w+\]\s*$', '', reason).strip()
+                        
+                        if reason not in all_downtime:
+                            all_downtime[reason] = {'reason': reason, 'duration': 0, 'frequency': 0, 'category': detect_downtime_category(reason.lower())}
+                        all_downtime[reason]['duration'] += duration
+                        all_downtime[reason]['frequency'] += 1
+                        
+                # Track products per machine
+                if sp.machine and product_name:
+                    machine_name = sp.machine.name
+                    if machine_name not in products_per_machine:
+                        products_per_machine[machine_name] = {}
+                    if product_name not in products_per_machine[machine_name]:
+                        products_per_machine[machine_name][product_name] = {
+                            'product_name': product_name,
+                            'quantity': 0,
+                            'grade_a': 0,
+                            'grade_b': 0,
+                            'grade_c': 0
+                        }
+                    products_per_machine[machine_name][product_name]['quantity'] += int(sp.actual_quantity) if sp.actual_quantity else 0
+                    products_per_machine[machine_name][product_name]['grade_a'] += int(sp.good_quantity) if sp.good_quantity else 0
+                    products_per_machine[machine_name][product_name]['grade_b'] += int(sp.rework_quantity) if sp.rework_quantity else 0
+                    products_per_machine[machine_name][product_name]['grade_c'] += int(sp.reject_quantity) if sp.reject_quantity else 0
+            
+            # Weekly summary for chart
+            week_num = sp.production_date.isocalendar()[1]
+            week_key = f'W{week_num}'
+            if week_key not in weekly_summary:
+                weekly_summary[week_key] = {
+                    'week': week_key,
+                    'output': 0,
+                    'grade_a': 0,
+                    'downtime': 0,
+                    'idle': 0,
+                    'machine_speed': 0,
+                    'shift_count': 0
+                }
+            weekly_summary[week_key]['output'] += int(sp.actual_quantity) if sp.actual_quantity else 0
+            weekly_summary[week_key]['grade_a'] += int(sp.good_quantity) if sp.good_quantity else 0
+            weekly_summary[week_key]['downtime'] += int(sp.downtime_mesin or 0) + int(sp.downtime_operator or 0) + int(sp.downtime_material or 0) + int(sp.downtime_design or 0) + int(sp.downtime_others or 0)
+            weekly_summary[week_key]['idle'] += int(sp.idle_time) if sp.idle_time else 0
+            weekly_summary[week_key]['machine_speed'] += int(sp.machine_speed) if sp.machine_speed else 0
+            weekly_summary[week_key]['shift_count'] += 1
+        
+        # Calculate efficiency for weekly summary
+        for week_key in weekly_summary:
+            week = weekly_summary[week_key]
+            speed_per_min = week['machine_speed'] / week['shift_count'] if week['shift_count'] > 0 else 0
+            mrt = week['grade_a'] / speed_per_min if speed_per_min > 0 else 0
+            total_time = mrt + week['downtime'] + week['idle']
+            week['efficiency'] = round((mrt / total_time) * 100, 1) if total_time > 0 else 0
+        
+        # Convert products to list and sort
+        products_list = []
+        for p in products_produced.values():
+            p['machines'] = list(p['machines'])
+            products_list.append(p)
+        products_list.sort(key=lambda x: x['quantity'], reverse=True)
+        
+        # Sort downtime by duration and get top 10
+        downtime_list = list(all_downtime.values())
+        downtime_list.sort(key=lambda x: x['duration'], reverse=True)
+        top_10_downtime = downtime_list[:10]
+        
+        # Weekly chart data sorted by week
+        chart_data = list(weekly_summary.values())
+        chart_data.sort(key=lambda x: x['week'])
+        
+        # Pie chart data - downtime distribution
+        pie_chart_data = [{'name': d['reason'][:20], 'value': d['duration']} for d in top_10_downtime]
+        
+        # Convert products_per_machine to list format
+        products_per_machine_list = []
+        for machine_name, products in products_per_machine.items():
+            machine_products = list(products.values())
+            machine_products.sort(key=lambda x: x['quantity'], reverse=True)
+            products_per_machine_list.append({
+                'machine_name': machine_name,
+                'products': machine_products,
+                'total_output': sum(p['quantity'] for p in machine_products),
+                'total_grade_a': sum(p['grade_a'] for p in machine_products)
+            })
+        products_per_machine_list.sort(key=lambda x: x['machine_name'])
         
         # Month names in Indonesian
         month_names = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
@@ -1921,7 +2888,13 @@ def get_monthly_controller():
             'month_start': month_start.isoformat(),
             'month_end': month_end.isoformat(),
             'machines': result,
-            'total_machines': len(result)
+            'total_machines': len(result),
+            'products_produced': products_list,
+            'products_per_machine': products_per_machine_list,
+            'all_downtime': downtime_list,
+            'top_10_downtime': top_10_downtime,
+            'chart_data': chart_data,
+            'pie_chart_data': pie_chart_data
         }), 200
         
     except Exception as e:
@@ -2281,7 +3254,7 @@ def get_machine_downtime_analysis():
             # Design change - not real downtime
             'ganti stiker', 'ganti packaging', 'ganti label', 'ganti karton',
             'repack', 'repacking', 'ganti kemasan', 'change over', 'changeover',
-            'ganti produk', 'ganti order', 'setting mc', 'setting mesin',
+            'ganti produk', 'ganti order', 'setting mc', 'setting mesin', 'sanitasi dan setting',
             # Idle time - tracked separately
             'tunggu', 'menunggu', 'nunggu', 'habis', 'waiting', 'standby', 'idle',
             # Biological breaks

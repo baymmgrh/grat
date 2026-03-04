@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   ArrowLeftIcon,
   BuildingOfficeIcon,
@@ -45,19 +46,8 @@ const MaterialView: React.FC = () => {
   const fetchMaterial = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:5000/api/materials/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch material');
-      }
-
-      const data = await response.json();
-      setMaterial(data.material);
+      const response = await axiosInstance.get(`/api/materials/${id}`);
+      setMaterial(response.data.material);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       console.error('Error fetching material:', err);
@@ -86,22 +76,9 @@ const MaterialView: React.FC = () => {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/materials/${id}/force-delete`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('Material deleted successfully');
-        navigate('/app/warehouse/materials/list');
-      } else {
-        alert(`Cannot delete material: ${data.error}`);
-      }
+      await axiosInstance.delete(`/api/materials/${id}/force-delete`);
+      alert('Material deleted successfully');
+      navigate('/app/warehouse/materials/list');
     } catch (err) {
       console.error('Error deleting material:', err);
       alert('Failed to delete material');

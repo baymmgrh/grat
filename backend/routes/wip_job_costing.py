@@ -71,7 +71,7 @@ def get_wip_batches():
                 'overhead_cost': float(batch.overhead_cost),
                 'total_wip_value': float(batch.total_wip_value),
                 'status': batch.status,
-                'operator_name': batch.operator.name if batch.operator else None,
+                'operator_name': batch.operator.full_name if batch.operator else None,
                 'shift': batch.shift,
                 'started_at': batch.started_at.isoformat() if batch.started_at else None,
                 'completed_at': batch.completed_at.isoformat() if batch.completed_at else None,
@@ -135,7 +135,7 @@ def get_wip_batch_detail(wip_batch_id):
             'status': wip_batch.status,
             'operator': {
                 'id': wip_batch.operator.id,
-                'name': wip_batch.operator.name
+                'name': wip_batch.operator.full_name
             } if wip_batch.operator else None,
             'shift': wip_batch.shift,
             'timing': {
@@ -154,7 +154,7 @@ def get_wip_batch_detail(wip_batch_id):
                 'stage_cost': float(mov.stage_cost),
                 'movement_date': mov.movement_date.isoformat(),
                 'machine_name': mov.machine.name if mov.machine else None,
-                'operator_name': mov.operator.name if mov.operator else None,
+                'operator_name': mov.operator.full_name if mov.operator else None,
                 'shift': mov.shift,
                 'rejection_reason': mov.rejection_reason,
                 'notes': mov.notes

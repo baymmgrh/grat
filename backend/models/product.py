@@ -75,6 +75,54 @@ class Product(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # ===== Merged from products_new =====
+    # Physical Properties
+    gramasi = db.Column(db.Float, nullable=True)  # GSM
+    cd = db.Column(db.Float, nullable=True)
+    md = db.Column(db.Float, nullable=True)
+    # Packaging
+    sheet_per_pack = db.Column(db.String(20), nullable=True)
+    pack_per_karton = db.Column(db.String(20), nullable=True)
+    berat_kering = db.Column(db.String(20), nullable=True)
+    # Batch
+    ratio = db.Column(db.Float, nullable=True)
+    ingredient = db.Column(db.Float, nullable=True)
+    ukuran_batch_vol = db.Column(db.Float, nullable=True)
+    ukuran_batch_ctn = db.Column(db.Float, nullable=True)
+    # Material
+    spunlace = db.Column(db.String(50), nullable=True)
+    rayon = db.Column(db.Float, nullable=True)
+    polyester = db.Column(db.Float, nullable=True)
+    es = db.Column(db.Float, nullable=True)
+    # Slitting
+    slitting_cm = db.Column(db.Float, nullable=True)
+    lebar_mr_net_cm = db.Column(db.Float, nullable=True)
+    lebar_mr_gross_cm = db.Column(db.Float, nullable=True)
+    keterangan_slitting = db.Column(db.String(100), nullable=True)
+    # EPD Machine
+    no_mesin_epd = db.Column(db.String(50), nullable=True)
+    speed_epd_pack_menit = db.Column(db.String(20), nullable=True)
+    # Fabric
+    meter_kain = db.Column(db.Float, nullable=True)
+    kg_kain = db.Column(db.Float, nullable=True)
+    # Material Requirements
+    kebutuhan_rayon_kg = db.Column(db.Float, nullable=True)
+    kebutuhan_polyester_kg = db.Column(db.Float, nullable=True)
+    kebutuhan_es_kg = db.Column(db.Float, nullable=True)
+    # Production Process
+    process_produksi = db.Column(db.String(200), nullable=True)
+    kode_jumbo_roll = db.Column(db.String(50), nullable=True)
+    nama_jumbo_roll = db.Column(db.String(200), nullable=True)
+    kode_main_roll = db.Column(db.String(50), nullable=True)
+    nama_main_roll = db.Column(db.String(200), nullable=True)
+    # Mixing
+    kapasitas_mixing_kg = db.Column(db.String(20), nullable=True)
+    actual_mixing_kg = db.Column(db.String(20), nullable=True)
+    dosing_kg = db.Column(db.String(20), nullable=True)
+    # System
+    version = db.Column(db.Integer, default=0)
+    notes = db.Column(db.Text, nullable=True)
+
     # Relationships
     category = db.relationship('ProductCategory', back_populates='products')
     specification = db.relationship('ProductSpecification', back_populates='product', uselist=False, cascade='all, delete-orphan')
@@ -91,6 +139,52 @@ class Product(db.Model):
 
     def __repr__(self):
         return f'<Product {self.code} - {self.name}>'
+
+    def to_dict(self):
+        """Convert to dictionary for API responses (compatible with ProductNew format)"""
+        return {
+            'id': self.id,
+            'kode_produk': self.code,
+            'nama_produk': self.name,
+            'gramasi': self.gramasi,
+            'cd': self.cd,
+            'md': self.md,
+            'sheet_per_pack': self.sheet_per_pack,
+            'pack_per_karton': self.pack_per_karton,
+            'berat_kering': self.berat_kering,
+            'ratio': self.ratio,
+            'ingredient': self.ingredient,
+            'ukuran_batch_vol': self.ukuran_batch_vol,
+            'ukuran_batch_ctn': self.ukuran_batch_ctn,
+            'spunlace': self.spunlace,
+            'rayon': self.rayon,
+            'polyester': self.polyester,
+            'es': self.es,
+            'slitting_cm': self.slitting_cm,
+            'lebar_mr_net_cm': self.lebar_mr_net_cm,
+            'lebar_mr_gross_cm': self.lebar_mr_gross_cm,
+            'keterangan_slitting': self.keterangan_slitting,
+            'no_mesin_epd': self.no_mesin_epd,
+            'speed_epd_pack_menit': self.speed_epd_pack_menit,
+            'meter_kain': self.meter_kain,
+            'kg_kain': self.kg_kain,
+            'kebutuhan_rayon_kg': self.kebutuhan_rayon_kg,
+            'kebutuhan_polyester_kg': self.kebutuhan_polyester_kg,
+            'kebutuhan_es_kg': self.kebutuhan_es_kg,
+            'process_produksi': self.process_produksi,
+            'kode_jumbo_roll': self.kode_jumbo_roll,
+            'nama_jumbo_roll': self.nama_jumbo_roll,
+            'kode_main_roll': self.kode_main_roll,
+            'nama_main_roll': self.nama_main_roll,
+            'kapasitas_mixing_kg': self.kapasitas_mixing_kg,
+            'actual_mixing_kg': self.actual_mixing_kg,
+            'dosing_kg': self.dosing_kg,
+            'is_active': self.is_active,
+            'version': self.version,
+            'notes': self.notes,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
 
 class ProductSpecification(db.Model):
     __tablename__ = 'product_specifications'

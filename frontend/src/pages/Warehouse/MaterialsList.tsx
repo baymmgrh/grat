@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../../contexts/LanguageContext';
+import axiosInstance from '../../utils/axiosConfig';
 import {
   ArrowDownTrayIcon,
   CubeIcon,
@@ -66,20 +67,9 @@ const MaterialsList: React.FC = () => {
         ...(selectedType && { type: selectedType })
       });
 
-      const response = await fetch(`http://localhost:5000/api/materials?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch materials');
-      }
-
-      const data: MaterialsResponse = await response.json();
-      setMaterials(data.materials);
-      setPagination(data.pagination);
+      const response = await axiosInstance.get(`/api/materials?${params}`);
+      setMaterials(response.data.materials);
+      setPagination(response.data.pagination);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       console.error('Error fetching materials:', err);
@@ -111,23 +101,9 @@ const MaterialsList: React.FC = () => {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(`http://localhost:5000/api/materials/${materialId}/force-delete`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        alert('Material deleted successfully');
-        // Refresh the materials list
-        fetchMaterials();
-      } else {
-        alert(`Cannot delete material: ${data.error}`);
-      }
+      const response = await axiosInstance.delete(`/api/materials/${materialId}/force-delete`);
+      alert('Material deleted successfully');
+      fetchMaterials();
     } catch (err) {
       console.error('Error deleting material:', err);
       alert('Failed to delete material');

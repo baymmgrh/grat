@@ -230,16 +230,22 @@ def create_material_issue_from_wo(work_order_id):
         db.session.flush()
         
         # Add items from BOM
+        # NOTE: Do NOT assign warehouse_location_id or batch_number here.
+        # This is just a pending request. The actual batch allocation happens
+        # at approve time (fifo_reserve_stock) and issue time (fifo_deduct_stock).
+        # Hardcoding a single batch here would be the "Single Batch Trap" —
+        # if required_qty > batch.quantity, it would fail at issue time.
+        insufficient_warnings = []
         for idx, bom_item in enumerate(bom.items, 1):
-            # Calculate required quantity based on WO quantity
             required_qty = float(bom_item.quantity) * float(wo.quantity)
             
-            # Find available inventory location
-            inventory = Inventory.query.filter(
+            # Check total available across ALL batches (read-only, no lock)
+            total_available = db.session.query(
+                func.coalesce(func.sum(Inventory.quantity_available), 0)
+            ).filter(
                 Inventory.material_id == bom_item.material_id,
-                Inventory.quantity_available > 0,
                 Inventory.is_active == True
-            ).order_by(Inventory.expiry_date.asc().nullslast()).first()
+            ).scalar()
             
             item = MaterialIssueItem(
                 material_issue_id=mi.id,
@@ -248,18 +254,25 @@ def create_material_issue_from_wo(work_order_id):
                 description=bom_item.material.name if bom_item.material else '',
                 required_quantity=required_qty,
                 uom=bom_item.uom,
-                warehouse_location_id=inventory.location_id if inventory else None,
-                batch_number=inventory.batch_number if inventory else None,
                 status='pending'
             )
             db.session.add(item)
+            
+            if float(total_available) < required_qty:
+                insufficient_warnings.append({
+                    'material': bom_item.material.name if bom_item.material else f'ID {bom_item.material_id}',
+                    'required': required_qty,
+                    'available': float(total_available),
+                    'short': round(required_qty - float(total_available), 4)
+                })
         
         db.session.commit()
         
         return success_response('Material issue created from BOM', {
             'id': mi.id,
             'issue_number': mi.issue_number,
-            'total_items': len(bom.items)
+            'total_items': len(bom.items),
+            'insufficient_warnings': insufficient_warnings
         }), 201
         
     except Exception as e:
@@ -269,8 +282,10 @@ def create_material_issue_from_wo(work_order_id):
 @material_issue_bp.route('/material-issues/<int:id>/approve', methods=['PUT'])
 @jwt_required()
 def approve_material_issue(id):
-    """Approve material issue"""
+    """Approve material issue — reserves materials using FIFO with row-level locking."""
     try:
+        from utils.fifo_helper import fifo_reserve_stock
+        
         user_id = int(get_jwt_identity())
         
         mi = MaterialIssue.query.get(id)
@@ -280,33 +295,49 @@ def approve_material_issue(id):
         if mi.status != 'pending':
             return error_response(f'Cannot approve issue with status: {mi.status}'), 400
         
+        # Reserve materials using FIFO (oldest batch first) with locking
+        reservation_details = []
+        for item in mi.items:
+            if not item.material_id:
+                continue
+            
+            reserve_qty = float(item.required_quantity) - float(item.issued_quantity or 0)
+            if reserve_qty <= 0:
+                continue
+            
+            result = fifo_reserve_stock(
+                material_id=item.material_id,
+                quantity_needed=reserve_qty
+            )
+            
+            if not result['success']:
+                db.session.rollback()
+                return error_response(
+                    f'Insufficient stock for {item.material.name if item.material else "material"}. '
+                    f'{result["error"]}'
+                ), 400
+            
+            # Update item with reservation info (first batch location/batch_number)
+            if result['reservations']:
+                item.warehouse_location_id = result['reservations'][0]['location_id']
+                item.batch_number = result['reservations'][0]['batch_number']
+            
+            reservation_details.append({
+                'material_id': item.material_id,
+                'material_name': item.material.name if item.material else None,
+                'quantity_reserved': result['reserved'],
+                'batches': len(result['reservations'])
+            })
+        
         mi.status = 'approved'
         mi.approved_by = user_id
         mi.approved_date = get_local_now()
         
-        # Reserve materials in inventory
-        for item in mi.items:
-            if item.material_id and item.warehouse_location_id:
-                inventory = Inventory.query.filter_by(
-                    material_id=item.material_id,
-                    location_id=item.warehouse_location_id
-                ).first()
-                
-                if inventory:
-                    # Check availability
-                    if inventory.quantity_available < float(item.required_quantity):
-                        return error_response(
-                            f'Insufficient stock for {item.material.name if item.material else "material"}. '
-                            f'Available: {inventory.quantity_available}, Required: {item.required_quantity}'
-                        ), 400
-                    
-                    # Reserve the quantity
-                    inventory.quantity_reserved += float(item.required_quantity)
-                    inventory.quantity_available -= float(item.required_quantity)
-        
         db.session.commit()
         
-        return success_response('Material issue approved and materials reserved'), 200
+        return success_response('Material issue approved and materials reserved (FIFO)', {
+            'reservations': reservation_details
+        }), 200
         
     except Exception as e:
         db.session.rollback()
@@ -315,8 +346,11 @@ def approve_material_issue(id):
 @material_issue_bp.route('/material-issues/<int:id>/issue', methods=['PUT'])
 @jwt_required()
 def issue_materials(id):
-    """Issue materials - deduct from inventory"""
+    """Issue materials — deduct from reserved inventory using FIFO with row-level locking.
+    Materials must be approved (reserved) first. Deducts from quantity_reserved bucket."""
     try:
+        from utils.fifo_helper import fifo_deduct_stock
+        
         user_id = int(get_jwt_identity())
         data = request.get_json() or {}
         
@@ -327,6 +361,14 @@ def issue_materials(id):
         if mi.status not in ['approved', 'partial']:
             return error_response(f'Cannot issue materials with status: {mi.status}'), 400
         
+        # Check opname lock for all materials in this issue
+        from utils.opname_lock import check_opname_lock
+        for item in mi.items:
+            if item.material_id:
+                lock = check_opname_lock(material_id=item.material_id)
+                if lock['locked']:
+                    return error_response(lock['message']), 423
+        
         items_to_issue = data.get('items', [])
         
         # If no specific items, issue all pending items
@@ -335,6 +377,7 @@ def issue_materials(id):
                             for item in mi.items if item.pending_quantity > 0]
         
         issued_count = 0
+        fifo_details = []
         
         for issue_data in items_to_issue:
             item = MaterialIssueItem.query.get(issue_data['item_id'])
@@ -346,62 +389,52 @@ def issue_materials(id):
             if issue_qty <= 0 or issue_qty > float(item.pending_quantity):
                 continue
             
-            # Find inventory record
-            inventory = Inventory.query.filter_by(
+            # FIFO deduction from RESERVED stock (locked rows, race-condition safe)
+            wo_number = mi.work_order.wo_number if mi.work_order else ''
+            result = fifo_deduct_stock(
                 material_id=item.material_id,
-                location_id=item.warehouse_location_id
-            ).first()
+                quantity_needed=issue_qty,
+                reference_number=mi.issue_number,
+                reference_type='material_issue',
+                reference_id=mi.id,
+                notes=f'Issued for Work Order {wo_number}',
+                user_id=user_id,
+                from_reserved=True
+            )
             
-            if not inventory:
-                # Try to find any available inventory for this material
-                inventory = Inventory.query.filter(
-                    Inventory.material_id == item.material_id,
-                    Inventory.quantity_on_hand >= issue_qty,
-                    Inventory.is_active == True
-                ).first()
-            
-            if not inventory:
+            if not result['success']:
+                fifo_details.append({
+                    'material_id': item.material_id,
+                    'material_name': item.material.name if item.material else None,
+                    'error': result['error']
+                })
                 continue
             
-            # Deduct from inventory
-            inventory.quantity_on_hand -= issue_qty
+            # Update item with issued quantity and cost
+            item.issued_quantity = float(item.issued_quantity or 0) + result['deducted']
+            item.unit_cost = result['weighted_avg_cost']
+            item.total_cost = result['total_cost']
             
-            # If was reserved, reduce reserved qty, otherwise reduce available
-            if inventory.quantity_reserved >= issue_qty:
-                inventory.quantity_reserved -= issue_qty
-            else:
-                inventory.quantity_available -= issue_qty
-            
-            inventory.updated_at = get_local_now()
-            
-            # Update item
-            item.issued_quantity = float(item.issued_quantity or 0) + issue_qty
-            item.warehouse_location_id = inventory.location_id
-            item.batch_number = inventory.batch_number
+            # Set batch_number to the first (oldest) batch used
+            if result['movements']:
+                item.batch_number = result['movements'][0]['batch_number']
+                item.warehouse_location_id = result['movements'][0]['location_id']
             
             if item.is_fully_issued:
                 item.status = 'issued'
             else:
                 item.status = 'partial'
             
-            # Create inventory movement
-            movement = InventoryMovement(
-                inventory_id=inventory.id,
-                material_id=item.material_id,
-                location_id=inventory.location_id,
-                movement_type='stock_out',
-                movement_date=get_local_now().date(),
-                quantity=issue_qty,
-                reference_number=mi.issue_number,
-                reference_type='material_issue',
-                reference_id=mi.id,
-                batch_number=inventory.batch_number,
-                notes=f'Issued for Work Order {mi.work_order.wo_number if mi.work_order else ""}',
-                created_by=user_id
-            )
-            db.session.add(movement)
-            
             issued_count += 1
+            fifo_details.append({
+                'material_id': item.material_id,
+                'material_name': item.material.name if item.material else None,
+                'quantity_issued': result['deducted'],
+                'batches_used': len(result['movements']),
+                'weighted_avg_cost': result['weighted_avg_cost'],
+                'total_cost': result['total_cost'],
+                'batch_details': result['movements']
+            })
         
         # Update material issue status
         all_issued = all(item.is_fully_issued for item in mi.items)
@@ -417,9 +450,10 @@ def issue_materials(id):
         
         db.session.commit()
         
-        return success_response('Materials issued successfully', {
+        return success_response('Materials issued successfully (FIFO)', {
             'issued_items': issued_count,
-            'status': mi.status
+            'status': mi.status,
+            'fifo_details': fifo_details
         }), 200
         
     except Exception as e:
@@ -429,8 +463,10 @@ def issue_materials(id):
 @material_issue_bp.route('/material-issues/<int:id>/cancel', methods=['PUT'])
 @jwt_required()
 def cancel_material_issue(id):
-    """Cancel material issue and release reserved materials"""
+    """Cancel material issue and release reserved materials using FIFO helper with locking."""
     try:
+        from utils.fifo_helper import fifo_release_reservation
+        
         mi = MaterialIssue.query.get(id)
         if not mi:
             return error_response('Material issue not found'), 404
@@ -438,21 +474,17 @@ def cancel_material_issue(id):
         if mi.status == 'issued':
             return error_response('Cannot cancel fully issued material issue'), 400
         
-        # Release reserved materials
-        if mi.status == 'approved':
+        # Release reserved materials via FIFO helper (with row locking)
+        if mi.status in ['approved', 'partial']:
             for item in mi.items:
-                if item.material_id and item.warehouse_location_id:
-                    inventory = Inventory.query.filter_by(
+                if not item.material_id:
+                    continue
+                unreserved_qty = float(item.required_quantity) - float(item.issued_quantity or 0)
+                if unreserved_qty > 0:
+                    fifo_release_reservation(
                         material_id=item.material_id,
-                        location_id=item.warehouse_location_id
-                    ).first()
-                    
-                    if inventory:
-                        # Release reserved quantity (only unreserved portion)
-                        unreserved_qty = float(item.required_quantity) - float(item.issued_quantity or 0)
-                        if unreserved_qty > 0:
-                            inventory.quantity_reserved -= unreserved_qty
-                            inventory.quantity_available += unreserved_qty
+                        quantity_to_release=unreserved_qty
+                    )
         
         mi.status = 'cancelled'
         
@@ -530,62 +562,74 @@ def get_wo_material_requirements(work_order_id):
 @material_issue_bp.route('/work-orders/<int:work_order_id>/reserve-materials', methods=['POST'])
 @jwt_required()
 def reserve_materials_for_wo(work_order_id):
-    """Reserve materials for a work order (called when WO is created/confirmed)"""
+    """Reserve materials for a work order using FIFO with row-level locking."""
     try:
+        from utils.fifo_helper import fifo_reserve_stock, fifo_release_reservation
+        
         user_id = int(get_jwt_identity())
         
         wo = WorkOrder.query.get(work_order_id)
         if not wo:
             return error_response('Work order not found'), 404
         
-        # Get BOM
         bom = BillOfMaterials.query.filter_by(product_id=wo.product_id, is_active=True).first()
         if not bom:
             return error_response('No active BOM found'), 404
         
         reserved_items = []
         insufficient_items = []
+        already_reserved = []  # track for rollback if any item fails
         
         for bom_item in bom.items:
             required_qty = float(bom_item.quantity) * float(wo.quantity)
             
-            # Find inventory with available stock
-            inventories = Inventory.query.filter(
-                Inventory.material_id == bom_item.material_id,
-                Inventory.quantity_available > 0,
-                Inventory.is_active == True
-            ).order_by(Inventory.expiry_date.asc().nullslast()).all()
+            result = fifo_reserve_stock(
+                material_id=bom_item.material_id,
+                quantity_needed=required_qty
+            )
             
-            remaining_to_reserve = required_qty
+            mat_name = bom_item.material.name if bom_item.material else 'Unknown'
             
-            for inv in inventories:
-                if remaining_to_reserve <= 0:
-                    break
-                
-                reserve_qty = min(float(inv.quantity_available), remaining_to_reserve)
-                inv.quantity_reserved += reserve_qty
-                inv.quantity_available -= reserve_qty
-                remaining_to_reserve -= reserve_qty
-            
-            if remaining_to_reserve > 0:
+            if not result['success']:
                 insufficient_items.append({
-                    'material_name': bom_item.material.name if bom_item.material else 'Unknown',
+                    'material_name': mat_name,
                     'required': required_qty,
-                    'short': remaining_to_reserve
+                    'short': required_qty,
+                    'error': result['error']
                 })
             else:
                 reserved_items.append({
-                    'material_name': bom_item.material.name if bom_item.material else 'Unknown',
-                    'quantity': required_qty
+                    'material_name': mat_name,
+                    'quantity': required_qty,
+                    'batches': len(result['reservations'])
                 })
+                already_reserved.append({
+                    'material_id': bom_item.material_id,
+                    'quantity': result['reserved']
+                })
+        
+        # If any item is insufficient, rollback ALL reservations made so far
+        if insufficient_items:
+            for res in already_reserved:
+                fifo_release_reservation(
+                    material_id=res['material_id'],
+                    quantity_to_release=res['quantity']
+                )
+            db.session.commit()
+            return jsonify({
+                'success': False,
+                'reserved_items': [],
+                'insufficient_items': insufficient_items,
+                'message': 'Some materials are insufficient. No reservations were made.'
+            }), 200
         
         db.session.commit()
         
         return jsonify({
-            'success': len(insufficient_items) == 0,
+            'success': True,
             'reserved_items': reserved_items,
-            'insufficient_items': insufficient_items,
-            'message': 'Materials reserved' if len(insufficient_items) == 0 else 'Some materials are insufficient'
+            'insufficient_items': [],
+            'message': 'All materials reserved (FIFO)'
         }), 200
         
     except Exception as e:

@@ -54,6 +54,7 @@ class PayrollRecord(db.Model):
     tax_deduction = db.Column(db.Numeric(15, 2), default=0)
     insurance_deduction = db.Column(db.Numeric(15, 2), default=0)
     pension_deduction = db.Column(db.Numeric(15, 2), default=0)
+    absence_deduction = db.Column(db.Numeric(15, 2), default=0)
     loan_deduction = db.Column(db.Numeric(15, 2), default=0)
     other_deductions = db.Column(db.Numeric(15, 2), default=0)
     total_deductions = db.Column(db.Numeric(15, 2), default=0)

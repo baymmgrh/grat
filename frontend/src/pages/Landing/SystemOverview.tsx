@@ -372,10 +372,10 @@ const SystemOverviewEnhanced: React.FC = () => {
         {/* Enhanced Header with Navigation */}
         <nav className="absolute top-0 w-full z-40 bg-white/10 backdrop-blur-md border-b border-white/20">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-6">
-              <div className="flex items-center space-x-4">
-                {/* IP Address Display */}
-                <div className="hidden md:flex items-center space-x-2 bg-white/10 rounded-lg px-3 py-2 border border-white/20">
+            <div className="flex justify-between items-center py-3 md:py-6">
+              <div className="flex items-center space-x-2 md:space-x-4">
+                {/* IP Address Display - Hidden on mobile */}
+                <div className="hidden lg:flex items-center space-x-2 bg-white/10 rounded-lg px-3 py-2 border border-white/20">
                   <SignalIcon className="h-4 w-4 text-green-400 animate-pulse" />
                   <div className="flex flex-col">
                     <span className="text-[9px] text-blue-200 uppercase tracking-wider leading-tight">IP</span>
@@ -384,20 +384,20 @@ const SystemOverviewEnhanced: React.FC = () => {
                 </div>
 
                 {/* Company Logo & Name */}
-                <div className="flex items-center space-x-3">
-                  <div className="h-10 w-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                    <SparklesIcon className="h-6 w-6 text-white" />
+                <div className="flex items-center space-x-2 md:space-x-3">
+                  <div className="h-8 w-8 md:h-10 md:w-10 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
+                    <SparklesIcon className="h-5 w-5 md:h-6 md:w-6 text-white" />
                   </div>
                   <div>
-                    <h1 className="text-xl font-bold text-white">{companyName}</h1>
-                    <p className="text-sm text-blue-200">{t('system.erp_system')}</p>
+                    <h1 className="text-sm md:text-xl font-bold text-white">{companyName}</h1>
+                    <p className="text-xs md:text-sm text-blue-200 hidden sm:block">{t('system.erp_system')}</p>
                   </div>
                 </div>
               </div>
               
-              <div className="flex items-center space-x-6">
-                {/* View Selector */}
-                <div className="hidden md:flex items-center space-x-2 bg-white/10 rounded-lg p-1">
+              <div className="flex items-center space-x-2 md:space-x-6">
+                {/* View Selector - Hidden on mobile */}
+                <div className="hidden lg:flex items-center space-x-2 bg-white/10 rounded-lg p-1">
                   {[
                     {id: 'overview', icon: EyeIcon, label: 'Overview'}, 
                     {id: 'performance', icon: ChartBarIcon, label: 'Performance'}, 
@@ -418,24 +418,27 @@ const SystemOverviewEnhanced: React.FC = () => {
                   ))}
                 </div>
                 
-                {/* Language Switcher */}
-                <LanguageSwitcher showLabel={false} className="text-white" />
+                {/* Language Switcher - Hidden on small mobile */}
+                <div className="hidden sm:block">
+                  <LanguageSwitcher showLabel={false} className="text-white" />
+                </div>
                 
-                {/* Attendance Button */}
+                {/* Attendance Button - Compact on mobile */}
                 <Link
                   to="/absensi"
-                  className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-2"
+                  className="px-3 py-2 md:px-6 md:py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-xl flex items-center gap-1 md:gap-2 text-sm md:text-base"
                 >
-                  <ClockIcon className="w-5 h-5" />
-                  Absensi
+                  <ClockIcon className="w-4 h-4 md:w-5 md:h-5" />
+                  <span className="hidden sm:inline">Absensi</span>
                 </Link>
                 
-                {/* Login Button */}
+                {/* Login Button - Always visible, compact on mobile */}
                 <Link
                   to="/login"
-                  className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl"
+                  className="px-3 py-2 md:px-6 md:py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all duration-300 shadow-lg hover:shadow-xl text-sm md:text-base whitespace-nowrap"
                 >
-                  {t('auth.login_to_access')}
+                  <span className="sm:hidden">Login</span>
+                  <span className="hidden sm:inline">{t('auth.login_to_access')}</span>
                 </Link>
               </div>
             </div>

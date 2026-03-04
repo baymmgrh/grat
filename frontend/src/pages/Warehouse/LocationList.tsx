@@ -16,16 +16,17 @@ import {
 } from '@heroicons/react/24/outline';
 interface WarehouseLocation {
   id: number;
-  code: string;
-  name: string;
-  zone_code: string;
-  zone_name: string;
-  location_type: string;
-  capacity: number;
-  capacity_uom: string;
-  current_utilization: number;
+  code?: string;
+  name?: string;
+  location_code?: string;
+  zone_code?: string;
+  zone_name?: string;
+  location_type?: string;
+  capacity?: number;
+  capacity_uom?: string;
+  current_utilization?: number;
   is_active: boolean;
-  created_at: string;
+  created_at?: string;
 }
 
 const LocationList: React.FC = () => {
@@ -110,8 +111,10 @@ const LocationList: React.FC = () => {
   };
 
   const filteredLocations = locations.filter(location => {
-    const matchesSearch = location.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         location.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const code = (location.code || location.location_code || '').toLowerCase();
+    const name = (location.name || location.zone_name || '').toLowerCase();
+    const search = searchTerm.toLowerCase();
+    const matchesSearch = code.includes(search) || name.includes(search);
     const matchesZone = !filterZone || location.zone_code === filterZone;
     const matchesType = !filterType || location.location_type === filterType;
     
@@ -272,8 +275,8 @@ const LocationList: React.FC = () => {
 
               {/* Type Badge */}
               <div className="mb-4">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(location.location_type)}`}>
-                  {location.location_type.charAt(0).toUpperCase() + location.location_type.slice(1)}
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getTypeColor(location.location_type || '')}`}>
+                  {(location.location_type || 'unknown').charAt(0).toUpperCase() + (location.location_type || 'unknown').slice(1)}
                 </span>
               </div>
 
@@ -282,13 +285,13 @@ const LocationList: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Capacity:</span>
                   <span className="text-sm font-medium">
-                    {location.capacity} {location.capacity_uom}
+                    {location.capacity ?? '-'} {location.capacity_uom || ''}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Utilization:</span>
-                  <span className={`text-sm font-medium ${getUtilizationColor(location.current_utilization)}`}>
-                    {location.current_utilization.toFixed(1)}%
+                  <span className={`text-sm font-medium ${getUtilizationColor(location.current_utilization ?? 0)}`}>
+                    {(location.current_utilization ?? 0).toFixed(1)}%
                   </span>
                 </div>
                 
@@ -296,11 +299,11 @@ const LocationList: React.FC = () => {
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className={`h-2 rounded-full ${
-                      location.current_utilization >= 90 ? 'bg-red-500' :
-                      location.current_utilization >= 75 ? 'bg-orange-500' :
-                      location.current_utilization >= 50 ? 'bg-yellow-500' : 'bg-green-500'
+                      (location.current_utilization ?? 0) >= 90 ? 'bg-red-500' :
+                      (location.current_utilization ?? 0) >= 75 ? 'bg-orange-500' :
+                      (location.current_utilization ?? 0) >= 50 ? 'bg-yellow-500' : 'bg-green-500'
                     }`}
-                    style={{ width: `${Math.min(location.current_utilization, 100)}%` }}
+                    style={{ width: `${Math.min(location.current_utilization ?? 0, 100)}%` }}
                   ></div>
                 </div>
               </div>
@@ -308,7 +311,7 @@ const LocationList: React.FC = () => {
               {/* Actions */}
               <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                 <span className="text-xs text-gray-500">
-                  Created: {new Date(location.created_at).toLocaleDateString()}
+                  Created: {location.created_at ? new Date(location.created_at).toLocaleDateString() : '-'}
                 </span>
                 <div className="flex items-center gap-2">
                   <Link

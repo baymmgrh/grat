@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosConfig';
 import { Calendar, Package, TrendingUp, AlertCircle, CheckCircle, Clock, Play, FileText } from 'lucide-react';
 
 interface ProductionPlan {
@@ -64,9 +64,8 @@ const ProductionPlanningList: React.FC = () => {
       if (filters.plan_type) params.append('plan_type', filters.plan_type);
       if (filters.search) params.append('search', filters.search);
 
-      const response = await axios.get(
-        `http://localhost:5000/api/production-planning/production-plans?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await axiosInstance.get(
+        `/api/production-planning/production-plans?${params.toString()}`
       );
 
       setPlans(response.data.plans || []);
@@ -82,10 +81,9 @@ const ProductionPlanningList: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.post(
-        `http://localhost:5000/api/production-planning/production-plans/${planId}/approve`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
+      await axiosInstance.post(
+        `/api/production-planning/production-plans/${planId}/approve`,
+        {}
       );
 
       alert('Plan approved successfully!');
@@ -100,10 +98,9 @@ const ProductionPlanningList: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(
-        `http://localhost:5000/api/production-planning/production-plans/${generateModal.planId}/generate-work-orders`,
-        woGenerateOptions,
-        { headers: { Authorization: `Bearer ${token}` } }
+      const response = await axiosInstance.post(
+        `/api/production-planning/production-plans/${generateModal.planId}/generate-work-orders`,
+        woGenerateOptions
       );
 
       alert(`${response.data.data.work_orders.length} work orders generated successfully!`);
@@ -119,9 +116,8 @@ const ProductionPlanningList: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(
-        `http://localhost:5000/api/production-planning/production-plans/${planId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+      await axiosInstance.delete(
+        `/api/production-planning/production-plans/${planId}`
       );
 
       alert('Plan deleted successfully!');

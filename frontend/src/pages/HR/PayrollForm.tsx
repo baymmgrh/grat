@@ -10,10 +10,11 @@ import {
   DocumentTextIcon,
   ExclamationCircleIcon,
   MinusIcon as Minus,
-  PaymentIcon,
-  PlusIcon as Plus
-,
-  UserIcon as User
+  BanknotesIcon,
+  PlusIcon as Plus,
+  UserIcon as User,
+  XMarkIcon as X,
+  CreditCardIcon as CreditCard
 } from '@heroicons/react/24/outline';
 interface Employee {
   id: number;
@@ -204,23 +205,44 @@ const PayrollForm: React.FC = () => {
     }
   };
 
+  const calculatePPh21Monthly = (annualTaxable: number): number => {
+    // PPh 21 progressive brackets (UU HPP 2022)
+    let income = annualTaxable;
+    let tax = 0;
+    const brackets = [
+      { size: 60000000, rate: 0.05 },
+      { size: 190000000, rate: 0.15 },
+      { size: 250000000, rate: 0.25 },
+      { size: 4500000000, rate: 0.30 },
+    ];
+    for (const b of brackets) {
+      if (income <= 0) break;
+      const taxable = Math.min(income, b.size);
+      tax += taxable * b.rate;
+      income -= taxable;
+    }
+    if (income > 0) tax += income * 0.35;
+    return Math.round(tax / 12);
+  };
+
   const calculateDeductions = () => {
     const grossSalary = getGrossSalary();
     
-    // Calculate tax deduction (5% of gross salary)
-    const taxDeduction = grossSalary * 0.05;
+    // PPh 21 progressive tax (annualized)
+    const taxDeduction = calculatePPh21Monthly(grossSalary * 12);
     
-    // Calculate insurance deduction (2% of basic salary)
-    const insuranceDeduction = formData.basic_salary * 0.02;
+    // BPJS Kesehatan: 1% employee share (max base 12jt)
+    const bpjsBase = Math.min(formData.basic_salary, 12000000);
+    const insuranceDeduction = Math.round(bpjsBase * 0.01);
     
-    // Calculate pension deduction (1% of basic salary)
-    const pensionDeduction = formData.basic_salary * 0.01;
+    // BPJS Ketenagakerjaan (JHT): 2% employee share
+    const pensionDeduction = Math.round(formData.basic_salary * 0.02);
 
     setFormData(prev => ({
       ...prev,
-      tax_deduction: Math.round(taxDeduction),
-      insurance_deduction: Math.round(insuranceDeduction),
-      pension_deduction: Math.round(pensionDeduction)
+      tax_deduction: taxDeduction,
+      insurance_deduction: insuranceDeduction,
+      pension_deduction: pensionDeduction
     }));
   };
 
@@ -558,12 +580,13 @@ const PayrollForm: React.FC = () => {
           <div className="space-y-6">
             <h3 className="text-lg font-medium text-gray-900 border-b border-gray-200 pb-2">
               <Minus className="inline h-4 w-4 mr-1" />
+              Potongan
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tax Deduction (5%)
+                  PPh 21 (Progresif)
                 </label>
                 <input
                   type="number"
@@ -578,7 +601,7 @@ const PayrollForm: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Insurance Deduction (2%)
+                  BPJS Kesehatan (1%)
                 </label>
                 <input
                   type="number"
@@ -595,7 +618,7 @@ const PayrollForm: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pension Deduction (1%)
+                  BPJS Ketenagakerjaan (2%)
                 </label>
                 <input
                   type="number"

@@ -8,24 +8,52 @@ import {
   BuildingOffice2Icon as Factory,
   WrenchIcon as Wrench
 } from '@heroicons/react/24/outline';
-import axios from 'axios';
+import axiosInstance from '../../utils/axiosConfig';
 
-// Create axios instance
-const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+// Simple UI Components (replacing shadcn/ui)
+const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <div className={`bg-white rounded-lg border border-gray-200 shadow-sm ${className}`}>{children}</div>
+);
 
-// Add token to requests
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+const CardHeader: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="px-6 py-4 border-b border-gray-200">{children}</div>
+);
+
+const CardTitle: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <h3 className={`text-lg font-semibold text-gray-900 ${className}`}>{children}</h3>
+);
+
+const CardContent: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <div className={`px-6 py-4 ${className}`}>{children}</div>
+);
+
+const Label: React.FC<{ children: React.ReactNode; htmlFor?: string }> = ({ children, htmlFor }) => (
+  <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1">{children}</label>
+);
+
+const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement>> = (props) => (
+  <input {...props} className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${props.className || ''}`} />
+);
+
+const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement>> = (props) => (
+  <textarea {...props} className={`w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${props.className || ''}`} />
+);
+
+const Button: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, className = '', ...props }) => (
+  <button {...props} className={`px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}>
+    {children}
+  </button>
+);
+
+const Alert: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <div className={`p-4 rounded-md border ${className}`}>{children}</div>
+);
+
+const AlertDescription: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
+  <p className={`text-sm ${className}`}>{children}</p>
+);
+
+
 interface Machine {
   id: number;
   code: string;
@@ -239,18 +267,19 @@ const DowntimeInput: React.FC = () => {
             <CardContent className="space-y-4">
               <div>
                 <Label htmlFor="shift_production_id">Shift Produksi</Label>
-                <Select value={formData.shift_production_id} onValueChange={(value) => handleInputChange('shift_production_id', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih Shift Produksi" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {shiftProductions.map((sp) => (
-                      <SelectItem key={sp.id} value={sp.id.toString()}>
-                        {sp.production_date} - {sp.shift} - {sp.machine.name} ({sp.product.name})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  id="shift_production_id"
+                  value={formData.shift_production_id}
+                  onChange={(e) => handleInputChange('shift_production_id', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Pilih Shift Produksi</option>
+                  {shiftProductions.map((sp) => (
+                    <option key={sp.id} value={sp.id.toString()}>
+                      {sp.production_date} - {sp.shift} - {sp.machine.name} ({sp.product.name})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {selectedShiftProduction && (
@@ -263,50 +292,49 @@ const DowntimeInput: React.FC = () => {
 
               <div>
                 <Label htmlFor="downtime_type">Tipe Downtime</Label>
-                <Select value={formData.downtime_type} onValueChange={(value) => handleInputChange('downtime_type', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih Tipe" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="planned">Planned Downtime</SelectItem>
-                    <SelectItem value="unplanned">Unplanned Downtime</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  id="downtime_type"
+                  value={formData.downtime_type}
+                  onChange={(e) => handleInputChange('downtime_type', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Pilih Tipe</option>
+                  <option value="planned">Planned Downtime</option>
+                  <option value="unplanned">Unplanned Downtime</option>
+                </select>
               </div>
 
               <div>
                 <Label htmlFor="downtime_category">Kategori Downtime</Label>
-                <Select 
-                  value={formData.downtime_category} 
-                  onValueChange={(value) => handleInputChange('downtime_category', value)}
+                <select
+                  id="downtime_category"
+                  value={formData.downtime_category}
+                  onChange={(e) => handleInputChange('downtime_category', e.target.value)}
                   disabled={!formData.downtime_type}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih Kategori" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {formData.downtime_type && downtimeCategories[formData.downtime_type as keyof typeof downtimeCategories]?.map((category) => (
-                      <SelectItem key={category.value} value={category.value}>
-                        {category.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <option value="">Pilih Kategori</option>
+                  {formData.downtime_type && downtimeCategories[formData.downtime_type as keyof typeof downtimeCategories]?.map((category) => (
+                    <option key={category.value} value={category.value}>
+                      {category.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
                 <Label htmlFor="priority">Prioritas</Label>
-                <Select value={formData.priority} onValueChange={(value) => handleInputChange('priority', value)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih Prioritas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  id="priority"
+                  value={formData.priority}
+                  onChange={(e) => handleInputChange('priority', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
               </div>
             </CardContent>
           </Card>

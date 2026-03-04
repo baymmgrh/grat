@@ -14,23 +14,7 @@ import {
   ViewfinderCircleIcon as Target,
   XCircleIcon as XCircle
 } from '@heroicons/react/24/outline';
-import axios from 'axios';
-// Create axios instance with proper API base URL
-const axiosInstance = axios.create({
-  baseURL: 'http://localhost:5000',
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Add token to requests if available
-axiosInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+import axiosInstance from '../../utils/axiosConfig';
 
 interface Machine {
   id: number;

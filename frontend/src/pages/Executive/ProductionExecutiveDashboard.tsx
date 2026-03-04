@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ChartBarIcon, 
+import {
+  ChartBarIcon,
   ExclamationTriangleIcon,
   ArrowTrendingUpIcon,
   ArrowTrendingDownIcon,
@@ -12,7 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 import axiosInstance from '../../utils/axiosConfig';
 import LoadingSpinner from '../../components/Common/LoadingSpinner';
-import { 
+import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell, LineChart, Line, Area, AreaChart
 } from 'recharts';
@@ -44,6 +44,7 @@ interface DashboardData {
     operator: number;
     material: number;
     design: number;
+    idle: number;
     others: number;
   };
   top_downtime_reasons: Array<{
@@ -89,9 +90,10 @@ interface DashboardData {
 const COLORS = ['#EF4444', '#F59E0B', '#3B82F6', '#10B981', '#8B5CF6'];
 const DOWNTIME_COLORS = {
   mesin: '#EF4444',
-  operator: '#F59E0B', 
+  operator: '#F59E0B',
   material: '#3B82F6',
   design: '#8B5CF6',
+  idle: '#F97316',
   others: '#6B7280'
 };
 
@@ -173,7 +175,7 @@ const ProductionExecutiveDashboard: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">📊 Executive Production Dashboard</h1>
           <p className="text-gray-500">Ringkasan Target vs Aktual Produksi Bulanan</p>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <select
             value={month}
@@ -203,11 +205,10 @@ const ProductionExecutiveDashboard: React.FC = () => {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Achievement Card */}
-        <div className={`rounded-xl p-6 shadow-lg ${
-          isCritical ? 'bg-gradient-to-br from-red-500 to-red-600' :
+        <div className={`rounded-xl p-6 shadow-lg ${isCritical ? 'bg-gradient-to-br from-red-500 to-red-600' :
           isOnTrack ? 'bg-gradient-to-br from-green-500 to-green-600' :
-          'bg-gradient-to-br from-yellow-500 to-yellow-600'
-        } text-white`}>
+            'bg-gradient-to-br from-yellow-500 to-yellow-600'
+          } text-white`}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm opacity-80">Achievement</p>
@@ -299,7 +300,7 @@ const ProductionExecutiveDashboard: React.FC = () => {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" tickFormatter={(val) => val.split('-')[2]} />
                 <YAxis />
-                <Tooltip 
+                <Tooltip
                   formatter={(value: number) => value.toLocaleString()}
                   labelFormatter={(label) => `Tanggal: ${label}`}
                 />
@@ -351,74 +352,93 @@ const ProductionExecutiveDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Top Downtime Reasons */}
-      <div className="bg-white rounded-xl p-6 shadow-lg">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          <ExclamationTriangleIcon className="h-5 w-5 inline mr-2 text-red-500" />
-          Top 10 Penyebab Downtime Terlama
-        </h3>
-        {top_downtime_reasons.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">#</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Penyebab</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Kategori</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Frekuensi</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Waktu</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Impact</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {top_downtime_reasons.map((item, index) => {
-                  const maxMinutes = top_downtime_reasons[0]?.total_minutes || 1;
-                  const percentage = (item.total_minutes / maxMinutes) * 100;
-                  const categoryColors: Record<string, string> = {
-                    mesin: 'bg-red-100 text-red-700',
-                    operator: 'bg-yellow-100 text-yellow-700',
-                    material: 'bg-blue-100 text-blue-700',
-                    design: 'bg-purple-100 text-purple-700',
-                    others: 'bg-gray-100 text-gray-700'
-                  };
-                  const categoryLabels: Record<string, string> = {
-                    mesin: 'Mesin',
-                    operator: 'Operator',
-                    material: 'Material',
-                    design: 'Design',
-                    others: 'Lainnya'
-                  };
-                  return (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">{index + 1}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">{item.reason}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryColors[item.category] || categoryColors.others}`}>
-                          {categoryLabels[item.category] || item.category}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right text-gray-600">{item.count}x</td>
-                      <td className="px-4 py-3 text-sm text-right font-medium text-red-600">
-                        {item.total_minutes} menit
-                      </td>
-                      <td className="px-4 py-3 w-48">
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-red-500 h-2 rounded-full" 
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </td>
+      {/* Top Downtime Reasons - Single table with Unplanned/Planned indicator */}
+      {(() => {
+        const unplannedCategories = ['mesin', 'idle'];
+        // Sort: unplanned first, then planned, each group by total_minutes desc
+        const sorted = [...top_downtime_reasons].sort((a, b) => {
+          const aUnplanned = unplannedCategories.includes(a.category) ? 0 : 1;
+          const bUnplanned = unplannedCategories.includes(b.category) ? 0 : 1;
+          if (aUnplanned !== bUnplanned) return aUnplanned - bUnplanned;
+          return b.total_minutes - a.total_minutes;
+        });
+
+        const categoryColors: Record<string, string> = {
+          mesin: 'bg-red-100 text-red-700',
+          operator: 'bg-yellow-100 text-yellow-700',
+          material: 'bg-blue-100 text-blue-700',
+          design: 'bg-purple-100 text-purple-700',
+          idle: 'bg-orange-100 text-orange-700',
+          others: 'bg-gray-100 text-gray-700'
+        };
+        const categoryLabels: Record<string, string> = {
+          mesin: 'Mesin', operator: 'Operator', material: 'Material',
+          design: 'Design', idle: 'Idle', others: 'Lainnya'
+        };
+
+        return (
+          <div className="bg-white rounded-xl p-6 shadow-lg">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              <ExclamationTriangleIcon className="h-5 w-5 inline mr-2 text-red-500" />
+              Top 10 Downtime
+            </h3>
+            {sorted.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">#</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Tipe</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Alasan</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Kategori</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Frekuensi</th>
+                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-600">Total Waktu</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-600">Impact</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y">
+                    {sorted.map((item, index) => {
+                      const maxMinutes = sorted[0]?.total_minutes || 1;
+                      const percentage = (item.total_minutes / maxMinutes) * 100;
+                      const isUnplanned = unplannedCategories.includes(item.category);
+                      return (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{index + 1}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${isUnplanned ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {isUnplanned ? 'Unplanned' : 'Planned'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-700">{item.reason}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryColors[item.category] || categoryColors.others}`}>
+                              {categoryLabels[item.category] || item.category}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-right text-gray-600">{item.count}x</td>
+                          <td className="px-4 py-3 text-sm text-right font-medium text-red-600">
+                            {item.total_minutes} menit
+                          </td>
+                          <td className="px-4 py-3 w-48">
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${isUnplanned ? 'bg-red-500' : 'bg-blue-500'}`}
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-8">Tidak ada data downtime</p>
+            )}
           </div>
-        ) : (
-          <p className="text-center text-gray-500 py-8">Tidak ada data downtime</p>
-        )}
-      </div>
+        );
+      })()}
 
       {/* Products Performance */}
       <div className="bg-white rounded-xl p-6 shadow-lg">
@@ -449,17 +469,15 @@ const ProductionExecutiveDashboard: React.FC = () => {
                     <td className="px-4 py-3 text-sm text-right text-gray-600">
                       {product.actual_ctn.toLocaleString()}
                     </td>
-                    <td className={`px-4 py-3 text-sm text-right font-medium ${
-                      product.gap_ctn > 0 ? 'text-red-600' : 'text-green-600'
-                    }`}>
+                    <td className={`px-4 py-3 text-sm text-right font-medium ${product.gap_ctn > 0 ? 'text-red-600' : 'text-green-600'
+                      }`}>
                       {product.gap_ctn > 0 ? '-' : '+'}{Math.abs(product.gap_ctn).toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-sm text-right">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        product.achievement_pct >= 80 ? 'bg-green-100 text-green-700' :
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${product.achievement_pct >= 80 ? 'bg-green-100 text-green-700' :
                         product.achievement_pct >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
+                          'bg-red-100 text-red-700'
+                        }`}>
                         {product.achievement_pct}%
                       </span>
                     </td>
@@ -485,18 +503,16 @@ const ProductionExecutiveDashboard: React.FC = () => {
         {machines.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {machines.map((machine, index) => (
-              <div key={index} className={`p-4 rounded-lg border-2 ${
-                machine.avg_oee >= 60 ? 'border-green-200 bg-green-50' :
+              <div key={index} className={`p-4 rounded-lg border-2 ${machine.avg_oee >= 60 ? 'border-green-200 bg-green-50' :
                 machine.avg_oee >= 40 ? 'border-yellow-200 bg-yellow-50' :
-                'border-red-200 bg-red-50'
-              }`}>
+                  'border-red-200 bg-red-50'
+                }`}>
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-medium text-gray-900">{machine.machine_name}</h4>
-                  <span className={`text-lg font-bold ${
-                    machine.avg_oee >= 60 ? 'text-green-600' :
+                  <span className={`text-lg font-bold ${machine.avg_oee >= 60 ? 'text-green-600' :
                     machine.avg_oee >= 40 ? 'text-yellow-600' :
-                    'text-red-600'
-                  }`}>
+                      'text-red-600'
+                    }`}>
                     {machine.avg_oee}% OEE
                   </span>
                 </div>

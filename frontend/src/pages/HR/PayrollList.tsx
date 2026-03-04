@@ -7,7 +7,9 @@ import {
   ChartBarIcon as Calculator,
   CheckIcon,
   EyeIcon,
-  PlusIcon
+  PlusIcon,
+  BuildingOffice2Icon,
+  ClipboardDocumentListIcon
 
 } from '@heroicons/react/24/outline';
 export default function PayrollList() {
@@ -22,11 +24,37 @@ const navigate = useNavigate()
 
   const handleCalculatePayroll = async (periodId: number) => {
     try {
-      await calculatePayroll(periodId).unwrap()
+      const result = await calculatePayroll(periodId).unwrap()
       refetch()
-      alert('Payroll calculated successfully!')
+      let msg = result?.message || 'Payroll berhasil dihitung!'
+      if (result?.summary?.skipped?.length > 0) {
+        msg += '\n\nKaryawan dilewati (gaji pokok belum diisi):\n'
+        msg += result.summary.skipped.map((s: any) => `- ${s.name}`).join('\n')
+      }
+      alert(msg)
+    } catch (error: any) {
+      alert(error?.data?.error || 'Error menghitung payroll')
+    }
+  }
+
+  const handleApprovePayroll = async (periodId: number) => {
+    if (!confirm('Approve payroll for this period?')) return
+    try {
+      const response = await fetch(`/api/hr/payroll/periods/${periodId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (response.ok) {
+        refetch()
+        alert('Payroll approved successfully!')
+      } else {
+        alert('Error approving payroll')
+      }
     } catch (error) {
-      alert('Error calculating payroll')
+      alert('Error approving payroll')
     }
   }
 
@@ -44,13 +72,29 @@ const navigate = useNavigate()
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">Payroll Management</h1>
-        <button 
-          onClick={() => navigate('/app/hr/payroll/periods/new')}
-          className="btn-primary inline-flex items-center gap-2"
-        >
-          <PlusIcon className="h-5 w-5" />
-          Create Payroll Period
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => navigate('/app/hr/payroll/outsourcing-vendors')}
+            className="btn-outline inline-flex items-center gap-2 text-sm"
+          >
+            <BuildingOffice2Icon className="h-4 w-4" />
+            Vendor Outsourcing
+          </button>
+          <button 
+            onClick={() => navigate('/app/hr/payroll/piecework-logs')}
+            className="btn-outline inline-flex items-center gap-2 text-sm"
+          >
+            <ClipboardDocumentListIcon className="h-4 w-4" />
+            Log Borongan
+          </button>
+          <button 
+            onClick={() => navigate('/app/hr/payroll/periods/new')}
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <PlusIcon className="h-5 w-5" />
+            Create Payroll Period
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -117,22 +161,24 @@ const navigate = useNavigate()
                     <td>
                       <div className="flex gap-2">
                         <button
+                          onClick={() => navigate(`/app/hr/payroll/periods/${period.id}/records`)}
                           className="btn-sm btn-outline inline-flex items-center gap-1"
                           title="View Records"
                         >
                           <EyeIcon className="h-4 w-4" />
                         </button>
-                        {period.status === 'draft' && (
+                        {(period.status === 'draft' || period.status === 'processing') && (
                           <button
                             onClick={() => handleCalculatePayroll(period.id)}
                             className="btn-sm btn-primary inline-flex items-center gap-1"
-                            title="Calculate Payroll"
+                            title={period.status === 'processing' ? 'Hitung Ulang' : 'Hitung Payroll'}
                           >
                             <CalculatorIcon className="h-4 w-4" />
                           </button>
                         )}
                         {period.status === 'processing' && (
                           <button
+                            onClick={() => handleApprovePayroll(period.id)}
                             className="btn-sm btn-success inline-flex items-center gap-1"
                             title="Approve Payroll"
                           >

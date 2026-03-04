@@ -41,6 +41,11 @@ interface PackingList {
   packing_date: string | null;
   items_count: number;
   weighed_count: number;
+  qc_status: string | null;
+  qc_date: string | null;
+  qc_by: string | null;
+  qc_notes: string | null;
+  released_at: string | null;
   notes: string | null;
   created_by: string | null;
   created_at: string;
@@ -197,10 +202,23 @@ export default function PackingListDetail() {
     const styles: Record<string, string> = {
       draft: 'bg-gray-100 text-gray-800',
       in_progress: 'bg-blue-100 text-blue-800',
-      completed: 'bg-green-100 text-green-800',
-      cancelled: 'bg-red-100 text-red-800'
+      completed: 'bg-yellow-100 text-yellow-800',
+      quarantine: 'bg-orange-100 text-orange-800',
+      released: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      cancelled: 'bg-gray-100 text-gray-500'
     };
     return styles[status] || styles.draft;
+  };
+
+  const statusLabels: Record<string, string> = {
+    draft: 'Draft',
+    in_progress: 'Dalam Proses',
+    completed: 'Selesai Timbang',
+    quarantine: 'Quarantine',
+    released: 'Released',
+    rejected: 'Rejected',
+    cancelled: 'Dibatalkan'
   };
 
   if (loading && !packingList) {
@@ -240,12 +258,43 @@ export default function PackingListDetail() {
           </p>
         </div>
         <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusBadge(packingList.status)}`}>
-          {packingList.status === 'draft' && 'Draft'}
-          {packingList.status === 'in_progress' && 'Dalam Proses'}
-          {packingList.status === 'completed' && 'Selesai'}
-          {packingList.status === 'cancelled' && 'Dibatalkan'}
+          {statusLabels[packingList.status] || packingList.status}
         </span>
       </div>
+
+      {/* QC Status Info Banner */}
+      {(packingList.status === 'completed' || packingList.status === 'quarantine') && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-yellow-800">Menunggu QC Review</p>
+              <p className="text-sm text-yellow-600">Semua karton sudah ditimbang. QC review dilakukan di modul Quality Control.</p>
+            </div>
+            <Link
+              to="/app/quality/packing-list"
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-medium"
+            >
+              Buka QC Packing List
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* QC Info - show when QC has been done */}
+      {packingList.qc_status && (packingList.status === 'released' || packingList.status === 'rejected') && (
+        <div className={`rounded-lg p-4 mb-6 border ${
+          packingList.status === 'released' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+        }`}>
+          <p className={`font-medium ${packingList.status === 'released' ? 'text-green-800' : 'text-red-800'}`}>
+            {packingList.status === 'released' ? 'QC Released - Stok sudah masuk gudang FG' : 'QC Rejected - Stok WIP dikembalikan'}
+          </p>
+          <div className="text-sm mt-1 space-y-0.5">
+            {packingList.qc_by && <p className="text-gray-600">QC oleh: {packingList.qc_by}</p>}
+            {packingList.qc_date && <p className="text-gray-600">Tanggal: {new Date(packingList.qc_date).toLocaleString('id-ID')}</p>}
+            {packingList.qc_notes && <p className="text-gray-600">Catatan: {packingList.qc_notes}</p>}
+          </div>
+        </div>
+      )}
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -275,7 +324,7 @@ export default function PackingListDetail() {
       </div>
 
       {/* Action Bar */}
-      {packingList.status !== 'completed' && packingList.status !== 'cancelled' && (
+      {!['completed', 'quarantine', 'released', 'rejected', 'cancelled'].includes(packingList.status) && (
         <div className="bg-white rounded-lg shadow p-4 mb-6">
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
@@ -365,7 +414,7 @@ export default function PackingListDetail() {
                   {item.batch_mixing || '-'}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  {packingList.status === 'completed' || packingList.status === 'cancelled' ? (
+                  {['completed', 'quarantine', 'released', 'rejected', 'cancelled'].includes(packingList.status) ? (
                     <span className="text-sm">{item.weight_kg ? `${item.weight_kg} kg` : '-'}</span>
                   ) : (
                     <input
@@ -380,7 +429,7 @@ export default function PackingListDetail() {
                   )}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  {packingList.status === 'completed' || packingList.status === 'cancelled' ? (
+                  {['completed', 'quarantine', 'released', 'rejected', 'cancelled'].includes(packingList.status) ? (
                     <span className="text-sm text-gray-600">
                       {item.weigh_date ? new Date(item.weigh_date).toLocaleDateString('id-ID') : '-'}
                     </span>
@@ -397,7 +446,7 @@ export default function PackingListDetail() {
                   {item.weighed_by || '-'}
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-center">
-                  {packingList.status !== 'completed' && packingList.status !== 'cancelled' && (
+                  {!['completed', 'quarantine', 'released', 'rejected', 'cancelled'].includes(packingList.status) && (
                     <button
                       onClick={() => openBatchModal(item.carton_number)}
                       className="text-xs text-blue-600 hover:text-blue-800"

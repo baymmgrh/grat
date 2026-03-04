@@ -1196,6 +1196,13 @@ export const settingsApi = api.injectEndpoints({
       }),
       providesTags: ['Settings'],
     }),
+    getCompanyPublic: builder.query<{ name: string; industry: string }, void>({
+      query: () => ({
+        url: '/settings/company/public',
+        method: 'GET',
+      }),
+      providesTags: ['Settings'],
+    }),
     updateCompanyProfile: builder.mutation({
       query: (data) => ({
         url: '/settings/company',
@@ -1561,6 +1568,7 @@ export const {
   useGetSystemSettingsQuery,
   useUpdateSystemSettingsMutation,
   useGetCompanyProfileQuery,
+  useGetCompanyPublicQuery,
   useUpdateCompanyProfileMutation,
   useGetUsersQuery,
   useCreateUserMutation,

@@ -90,6 +90,14 @@ const CircularProgress = ({ value, size = 70, strokeWidth = 6, color = 'blue' }:
   );
 };
 
+const getApiBase = () => {
+  const hostname = window.location.hostname;
+  if (hostname === 'erp.graterp.my.id' || hostname.endsWith('.graterp.my.id')) {
+    return 'https://api.graterp.my.id/api';
+  }
+  return `http://${hostname}:5000/api`;
+};
+
 export default function OEEDashboardEnhanced() {
   const [selectedMachine, setSelectedMachine] = useState<number | null>(null)
   const [dateRange, setDateRange] = useState(30)
@@ -131,7 +139,7 @@ export default function OEEDashboardEnhanced() {
       const params = new URLSearchParams({ limit: '50' });
       if (selectedMachine) params.append('machine_id', selectedMachine.toString());
       
-      const response = await fetch(`http://${window.location.hostname}:5000/api/oee/downtime?${params}`, {
+      const response = await fetch(`${getApiBase()}/oee/downtime?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -150,7 +158,7 @@ export default function OEEDashboardEnhanced() {
       const params = new URLSearchParams({ limit: '50' });
       if (selectedMachine) params.append('machine_id', selectedMachine.toString());
       
-      const response = await fetch(`http://${window.location.hostname}:5000/api/oee/shift-production?${params}`, {
+      const response = await fetch(`${getApiBase()}/oee/shift-production?${params}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -177,7 +185,7 @@ export default function OEEDashboardEnhanced() {
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://${window.location.hostname}:5000/api/oee/shift-production/${editingRecord.id}/downtime`, {
+      const response = await fetch(`${getApiBase()}/oee/shift-production/${editingRecord.id}/downtime`, {
         method: 'PUT',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -214,8 +222,9 @@ export default function OEEDashboardEnhanced() {
       const categoryKey = categoryMap[item.category] || 'others';
       const config = DOWNTIME_CATEGORIES[categoryKey];
       const percentOfTotal = totalDowntime > 0 ? (item.minutes / totalDowntime) * 100 : 0;
-      const avgPerShift = summary.total_records ? item.minutes / summary.total_records : 0;
-      const percentPerShift = (avgPerShift / 480) * 100;
+      const machineDays = summary.total_machine_days || 1;
+      const avgPerMachineDay = item.minutes / machineDays;
+      const percentPerShift = (avgPerMachineDay / 480) * 100;
       let severity: 'critical' | 'high' | 'medium' | 'low' = 'low';
       if (config?.max > 0) {
         const ratio = percentPerShift / config.max;
@@ -428,7 +437,7 @@ export default function OEEDashboardEnhanced() {
                         <div>
                           <p className="text-xs text-gray-500">{config.label}</p>
                           <p className={`text-lg font-bold ${config.textColor}`}>{formatMinutes(minutes)}</p>
-                          <p className="text-xs text-gray-400">Max: {config.max}%</p>
+                          <p className="text-xs text-gray-400">Limit: {config.max}% /hari</p>
                         </div>
                       </div>
                     </div>
@@ -609,7 +618,8 @@ export default function OEEDashboardEnhanced() {
                     {Object.entries(DOWNTIME_CATEGORIES).map(([key, config]) => {
                       const categoryData = downtimeAnalysis.find((d: any) => d.category?.toLowerCase() === key || d.category === config.label);
                       const minutes = categoryData?.minutes || 0;
-                      const percentOfShift = summary.total_records ? (minutes / summary.total_records / 480 * 100) : 0;
+                      const machineDays = summary.total_machine_days || 1;
+                      const percentOfShift = (minutes / machineDays / 480 * 100);
                       const isOverLimit = config.max > 0 && percentOfShift > config.max;
                       return (
                         <div key={key}>
