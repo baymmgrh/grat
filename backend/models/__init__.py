@@ -15,7 +15,7 @@ from .production import (
     ProductionSchedule, ShiftProduction, DowntimeRecord, WeeklyProductionPlan, 
     WeeklyProductionPlanItem, ProductChangeover, PackingList, PackingListItem,
     WIPStock, WIPStockMovement, PackingListNew, PackingListNewItem,
-    LiveMonitoringCheck
+    LiveMonitoringCheck, LiveMonitoringChecklistAnswer
 )
 from .quality import QualityTest, QualityInspection, CAPA, QualityStandard
 from .shipping import ShippingOrder, ShippingItem, DeliveryTracking, LogisticsProvider
@@ -75,6 +75,18 @@ from .group_chat import (
 from .work_order_bom import WorkOrderBOMItem
 from .converting import ConvertingMachine, ConvertingProduction
 from .uom import UnitOfMeasure, UoMConversion
+from .pre_shift_checklist import (
+    PreShiftChecklistItem, PreShiftChecklistMachineItem,
+    PreShiftChecklistSubmission, PreShiftChecklistAnswer,
+    PreShiftChecklistAuditLog, PreShiftChecklistCorrectiveAction
+)
+from .dcc import (
+    DccDocument, DccDocumentRevision, DccDocumentDistribution,
+    DccDocumentReview, DccChangeNotice, DccQualityRecord,
+    CapaRequest, CapaInvestigation, CapaVerification,
+    CapaMonthlyReport, InternalMemo, InternalMemoDistribution,
+    DccDestructionLog
+)
 
 # Import to ensure models are registered
 from . import product_new_schema
@@ -158,4 +170,14 @@ __all__ = [
     'ConvertingMachine', 'ConvertingProduction',
     # UoM models
     'UnitOfMeasure', 'UoMConversion',
+    # Pre-Shift Checklist models
+    'PreShiftChecklistItem', 'PreShiftChecklistMachineItem',
+    'PreShiftChecklistSubmission', 'PreShiftChecklistAnswer',
+    'PreShiftChecklistAuditLog', 'PreShiftChecklistCorrectiveAction',
+    # DCC & CAPA models (13 tabel sesuai Implementation Plan)
+    'DccDocument', 'DccDocumentRevision', 'DccDocumentDistribution',
+    'DccDocumentReview', 'DccChangeNotice', 'DccQualityRecord',
+    'CapaRequest', 'CapaInvestigation', 'CapaVerification',
+    'CapaMonthlyReport', 'InternalMemo', 'InternalMemoDistribution',
+    'DccDestructionLog',
 ]
