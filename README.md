@@ -4,7 +4,7 @@
 
 [![CI/CD](https://github.com/baymngrh/grat/actions/workflows/ci.yml/badge.svg)](https://github.com/baymngrh/grat/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/baymngrh/grat/branch/main/graph/badge.svg)](https://codecov.io/gh/baymngrh/grat)
-[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0+-green.svg)](https://flask.palletsprojects.com/)
 [![React](https://img.shields.io/badge/React-18.2+-61dafb.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.2+-3178c6.svg)](https://www.typescriptlang.org/)
@@ -116,7 +116,7 @@
 ### Backend
 | Teknologi | Versi | Kegunaan |
 |-----------|-------|----------|
-| Python | 3.10+ | Bahasa utama |
+| Python | 3.12+ | Bahasa utama |
 | Flask | 3.0+ | Web framework |
 | SQLAlchemy | 2.0+ | ORM |
 | Flask-JWT-Extended | 4.6+ | Authentication |
@@ -498,6 +498,42 @@ GET        /api/waste/reports
 
 ---
 
+### 1️⃣4️⃣ **Modul DCC & CAPA (Document Control Center)** 🆕
+
+**Standar:** ISO 9001:2015 (Klausul 7.5)  
+**Referensi:** QP-DCC-01, QP-DCC-02, QP-DCC-03, QP-DCC-04, WI-DCC-01, WI-DCC-02  
+**Database:** 13 tabel di `dcc.py`
+
+**Sub-Modul:**
+- **Pengendalian Dokumen (QP-DCC-01)** — Registry dokumen Level I-IV (QM, QP, WI, Form), riwayat revisi, 3-level approval chain (Originator → Reviewer → Approver), distribusi salinan terkendali, kaji ulang berkala, change notice
+- **Pengendalian Rekaman Mutu (QP-DCC-02)** — Daftar induk rekaman SMM & mutu produk, masa retensi, holder tracking
+- **CAPA (QP-DCC-03)** — CPAR/SCAR/CCHF dengan auto-numbering, RCA 5-Why & Fishbone, tindakan korektif & preventif, verifikasi efektivitas, laporan bulanan
+- **Komunikasi Internal (QP-DCC-04)** — Memo antar departemen, read receipts, kategori komunikasi
+- **Pemusnahan Dokumen (WI-DCC-01)** — Berita acara pemusnahan fisik & digital, saksi & verifikasi
+
+**Models:** `DccDocument`, `DccDocumentRevision`, `DccDocumentDistribution`, `DccDocumentReview`, `DccChangeNotice`, `DccQualityRecord`, `CapaRequest`, `CapaInvestigation`, `CapaVerification`, `CapaMonthlyReport`, `InternalMemo`, `InternalMemoDistribution`, `DccDestructionLog`
+
+**Fitur:**
+- Auto-numbering CPAR (`CP/BB/CC/DD-nnn`) & SCAR (`SC/BB/CC/nnn`), reset per tahun
+- PDF Security: Permission Lock + AES Owner Password + SHA-256 Hash
+- Digital signature auto-generated (nama, role, timestamp, QR code)
+- Workflow: draft → reviewing → pending_approval → active → obsolete
+
+**API Endpoints (Planned):**
+```bash
+POST   /api/dcc/capa                   # Create CPAR/SCAR
+GET    /api/dcc/capa                   # List (filter type/source/status)
+POST   /api/dcc/capa/:id/investigation # Input RCA + Action Plan
+POST   /api/dcc/capa/:id/verify        # Verifikasi efektivitas
+GET    /api/dcc/capa/monthly-report    # Laporan bulanan
+POST   /api/dcc/documents              # Registrasi dokumen
+GET    /api/dcc/documents              # Daftar Induk (FRM-DCC-02)
+POST   /api/dcc/memos                  # Buat memo internal
+POST   /api/dcc/destruction            # Berita acara pemusnahan
+```
+
+---
+
 ### Modul Pendukung
 
 | Modul | Fitur Utama | API Prefix |
@@ -506,7 +542,6 @@ GET        /api/waste/reports
 | **Dashboard & Analytics** | KPI real-time, Executive Dashboard, custom reports | `/api/dashboard`, `/api/executive-dashboard` |
 | **OEE Tracking** | Availability, Performance, Quality metrics | `/api/oee` |
 | **Notifications** | Real-time alerts, email notifications | `/api/notifications` |
-| **Document Management** | File upload, document tracking | `/api/documents` |
 | **Approval Workflow** | Multi-level approval, delegation | `/api/approval-workflow` |
 | **AI Assistant** | Natural language query, smart navigation | `/api/ai-assistant` |
 | **TV Display** | Production monitoring display | `/api/tv-display` |
@@ -515,6 +550,7 @@ GET        /api/waste/reports
 | **Backup & Restore** | Data backup and recovery | `/api/backup` |
 | **System Monitor** | Server health, performance metrics | `/api/system-monitor` |
 | **Group Chat** | Internal team communication | `/api/group-chat` |
+| **Pre-Shift Checklist** | K3 safety checks, machine handover | `/api/pre-shift-checklist` |
 | **User Manual** | In-app documentation | `/api/user-manual` |
 | **OAuth** | Google OAuth integration | `/api/oauth` |
 | **KPI Targets** | Target setting and tracking | `/api/kpi-targets` |
@@ -739,24 +775,29 @@ GET    /api/inventory/warehouses
 ## 🗂️ Struktur Project
 
 ```
-erp-flask/
-├── backend/
+SourceCode/
+├── backend/                    # 339 files, 97,428 lines
 │   ├── app.py
 │   ├── config.py
-│   ├── models/
-│   ├── routes/
-│   ├── utils/
-│   └── tests/
-├── frontend/
+│   ├── models/                 # 48 model files (269 DB tables)
+│   ├── routes/                 # 91 route files
+│   ├── utils/                  # 19 helper files
+│   ├── tests/                  # 44 test files
+│   ├── migrations/             # 26 migration files
+│   ├── seeds/                  # 3 seed files
+│   └── scripts/                # 4 utility scripts
+├── frontend/                   # 428 files, 180,231 lines
 │   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   ├── store/
-│   │   └── tests/
+│   │   ├── pages/              # 32 modules, 397 components
+│   │   ├── components/         # 60 reusable components
+│   │   ├── store/              # Redux store
+│   │   └── hooks/              # Custom hooks
 │   ├── package.json
 │   └── vite.config.ts
+├── docs/                       # 7 documentation files
 └── README.md
+
+Total: 811 files, 304,002 lines of code
 ```
 
 ---
@@ -785,7 +826,7 @@ Support:
 
 **PROPRIETARY SOFTWARE**
 
-Copyright (c) 2024-2025 **Bayu Adhie**. All Rights Reserved.
+Copyright (c) 2024-2026 **Bayu Adhie**. All Rights Reserved.
 
 This software is proprietary and confidential. Unauthorized copying, distribution, modification, public display, or public performance of this software is strictly prohibited.
 
@@ -845,34 +886,25 @@ AI Assistant adalah fitur chatbot terintegrasi yang memungkinkan user untuk quer
 
 ---
 
-## 📈 Recent Updates (v2.1)
+## 📈 Recent Updates (v3.0 — Maret 2026)
 
-### ✨ New Features (January 2026)
-- **WIP Stock Module** 🆕 - Tracking stok Work In Progress per produk
-- **Packing List Terpisah** 🆕 - Packing list independen dari Work Order
-- **Carton Weighing** 🆕 - Input berat dan tanggal timbang per karton
-- **R&D Module Enhanced** - Project tracking, experiments, approvals
-- **Public Attendance** - QR Code based attendance for employees
+### ✨ New Features (Maret 2026)
+- **DCC Module** 🆕 — Document Control Center dengan 13 tabel (ISO 9001:2015)
+- **CAPA Module** 🆕 — CPAR/SCAR/CCHF dengan auto-numbering & RCA 5-Why
+- **Internal Memo** 🆕 — Komunikasi antar departemen dengan read receipts
+- **Document Destruction** 🆕 — Berita acara pemusnahan (FRM-DCC-14)
+- **Quality Records** 🆕 — Daftar induk rekaman mutu (FRM-DCC-03)
+
+### ✨ Previous Features (v2.1 — Januari 2026)
+- **WIP Stock Module** — Tracking stok Work In Progress per produk
+- **Packing List Terpisah** — Packing list independen dari Work Order
+- **R&D Module Enhanced** — Project tracking, experiments, approvals
+- **Public Attendance** — QR Code based attendance
 
 ### ✨ Previous Features (v2.0)
-- **Quality Objective Module** - Target manual per mesin, tracking achievement
-- **Downtime Analysis** - Top 3 downtime, root cause analysis, category charts
-- **Early Stop Tracking** - Monitor shift berakhir lebih awal
-- **Idle Time Management** - Kategori downtime untuk tunggu material
-- **Enhanced QC Workflows** - Incoming, In-Process, Finish Good QC
-
-### 🔧 Improvements
-- Pack per carton sekarang diambil dari products_new table
-- WIP Stock otomatis terupdate saat production input
-- AI Assistant support grafik produksi, sales, OEE
-- Timezone handling untuk attendance
-
-### 📊 New API Endpoints
-- `/api/packing-list/wip-stock` - WIP Stock management
-- `/api/packing-list` - Packing list CRUD
-- `/api/rnd` - R&D projects and experiments
-- `/api/oee/machine-monthly-targets` - CRUD target bulanan
-- `/api/oee/machine-downtime-analysis` - Analisa downtime per mesin
+- **Quality Objective Module** — Target manual per mesin, tracking achievement
+- **Downtime Analysis** — Top 3 downtime, root cause analysis
+- **Enhanced QC Workflows** — Incoming, In-Process, Finish Good QC
 
 ---
 
@@ -908,35 +940,34 @@ For technical support, feature requests, or bug reports, please email us at baym
 
 ---
 
-**© 2024-2025 PT. Gratia Makmur Sentosa. All Rights Reserved.**
+**© 2024-2026 PT. Gratia Makmur Sentosa. All Rights Reserved.**
 
 ---
 
 ## 🎯 Roadmap
 
 ### Selesai ✅
-- Implementasi modul core (20+ modul)
+- 18+ modul utama, 100+ sub-modul
+- **811 files**, **304,002 baris kode**, **269 tabel database**
 - Authentication & authorization (JWT + OAuth)
-- Otomasi workflow (15+ trigger otomatis)
+- 15+ automated workflows end-to-end
 - AI Assistant terintegrasi dengan grafik
 - Executive Dashboard dengan KPI real-time
-- Machine Detail dengan OEE Analytics
-- R&D Module lengkap dengan approval workflow
-- Quality Objective Module - Target manual & downtime analysis
-- **WIP Stock Module** 🆕 - Tracking stok per produk
-- **Packing List Terpisah** 🆕 - Independen dari Work Order
-- **Public Attendance** 🆕 - QR Code based
+- DCC & CAPA Module (ISO 9001:2015) — 13 tabel
+- WIP Stock & Packing List Module
+- Quality Objective & Downtime Analysis
+- R&D Module dengan approval workflow
 
 ### Sedang Dikerjakan 🚧
-- Mobile responsive optimization
+- DCC API Routes (CAPA, Document Control, Internal Memo)
+- DCC Frontend Pages
 - Advanced reporting dengan export
-- Enhanced Analytics - Predictive maintenance
 
 ### Direncanakan 📋
 - AI/ML predictive analytics
 - Integrasi IoT untuk mesin produksi
 - Mobile app (React Native)
-- Multi-plant Support - Manajemen multi lokasi pabrik
+- Multi-plant Support
 
 ---
 
@@ -944,12 +975,12 @@ For technical support, feature requests, or bug reports, please email us at baym
 
 ## 🏆 Achievements
 
-- ✅ **20+ Business Modules** Fully Integrated
+- ✅ **811 Files** | **304,002 Lines of Code** | **269 DB Tables**
+- ✅ **18+ Business Modules** with 100+ Sub-Modules
+- ✅ **DCC & CAPA** ISO 9001:2015 Compliant
 - ✅ **15+ Automated Workflows** End-to-End
 - ✅ **AI Assistant** Natural Language Query + Charts
 - ✅ **Real-time Dashboard** 30+ KPIs
-- ✅ **Quality Objectives** Complete Implementation
-- ✅ **WIP Stock & Packing List** Separated Module
 - ✅ **80+ API Endpoints** RESTful Design
 
 ⭐ Star repository ini kalau bermanfaat!
